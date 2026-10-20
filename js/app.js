@@ -22,8 +22,8 @@ function demo() {
 }
 
 /* ---------- التحميل والدخول ---------- */
-async function load(code) {
-  const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
+$('#gate').showModal();
+const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
   if (!b.ok) { S.locked = b.error === 'locked'; return false; }
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
   const day = n => new Date(Date.now() + n * 864e5 + 2 * 36e5).toISOString();
