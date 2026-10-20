@@ -59,7 +59,10 @@
     <form method="dialog" id="gate-form">
       <h2 id="gate-title">أدخل الرمز</h2>
       <p id="gate-hint">رمز العائلة يفتح الشجرة. رمز المحرر أو المالك يفتح التعديل.</p>
-      <input id="code" type="password" autocomplete="off" placeholder="الرمز">
+      <div style="position: relative; display: flex; align-items: center; width: 100%; margin-bottom: 8px;">
+        <input id="code" type="password" autocomplete="off" placeholder="الرمز" style="width: 100%; padding-left: 38px; box-sizing: border-box;">
+        <button type="button" id="btn-toggle-code" aria-label="إظهار الرمز" style="position: absolute; left: 8px; background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; line-height: 1;">👁️</button>
+      </div>
       <p id="gate-err" class="err" hidden></p>
       <div class="row"><button type="submit">دخول</button><button type="button" id="gate-x" class="ghost">إلغاء</button></div>
     </form>
@@ -73,5 +76,16 @@
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    const btnToggle = document.getElementById('btn-toggle-code');
+    const inputCode = document.getElementById('code');
+    if (btnToggle && inputCode) {
+      btnToggle.addEventListener('click', () => {
+        const isPassword = inputCode.type === 'password';
+        inputCode.type = isPassword ? 'text' : 'password';
+        btnToggle.textContent = isPassword ? '🔒' : '👁️';
+      });
+    }
+  </script>
 </body>
 </html>
