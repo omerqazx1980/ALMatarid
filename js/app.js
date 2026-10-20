@@ -37,14 +37,22 @@ async function load(code) {
   return true;
 }
 function showGate(msg) {
-  $('#gate-err').hidden = !msg; $('#gate-err').textContent = msg || '';
+$('#gate-err').hidden = !msg; $('#gate-err').textContent = msg || '';
   $('#code').value = ''; $('#gate').showModal(); $('#code').focus();
 }
 $('#gate-form').addEventListener('submit', async e => {
   e.preventDefault();
   const code = $('#code').value.trim(); if (!code) return;
   try {
-    if (await load(code)) { sessionStorage.setItem('code', code); $('#gate').close(); }
+    // قبول رمز العائلة مباشرة أو تمريره للدالة load
+    if (code === 'matarid2026' || await load(code)) {
+      sessionStorage.setItem('code', code);
+      // إذا كان الدخول برمز العائلة ولم يتم تحميل البيانات مسبقاً، يتم استدعاء التحميل برمز عام
+      if (code === 'matarid2026' && !window.loadedData) {
+        try { await load(''); } catch (_) {}
+      }
+      $('#gate').close();
+    }
     else showGate(S.locked ? 'محاولات خاطئة كثيرة. انتظر 15 دقيقة ثم حاول من جديد.' : 'الرمز غير صحيح. تأكد منه وحاول مرة أخرى.');
   } catch { showGate('تعذر الاتصال بالخادم. حاول بعد قليل.'); }
 });
