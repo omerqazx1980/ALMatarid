@@ -801,6 +801,54 @@ begin
   end if;
 end $$;
 
+-- ============================================================
+-- القسم 8: إعلانات البطاقات (تهنئة/تعزية تظهر لكل الزوار)
+--   تُنشر تلقائيًا عند إضافة مولود أو تسجيل وفاة، وتبقى 7 أيام ثم تختفي.
+-- ============================================================
+create table if not exists public.announcements (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('birth','condolence')),
+  member_id uuid references public.members(id) on delete set null,
+  member_name text not null,
+  gender text not null default 'male',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '7 days')
+);
+alter table public.announcements enable row level security;
+revoke all on public.announcements from anon, authenticated;
+
+create or replace function public.secure_post_announcement(p_passcode text, p_kind text, p_member_id uuid, p_member_name text, p_gender text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a record; v_id uuid;
+begin
+  select * into a from public._authenticate(p_passcode);
+  if not a.ok then return jsonb_build_object('ok', false, 'error', a.error); end if;
+  if p_kind not in ('birth','condolence') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+  if a.role = 'branch' and (p_member_id is null or not public._in_branch(a.branch_root_id, p_member_id)) then
+    return jsonb_build_object('ok', false, 'error', 'out_of_scope');
+  end if;
+  insert into public.announcements(kind, member_id, member_name, gender)
+  values (p_kind, p_member_id, left(coalesce(p_member_name, ''), 120), case when p_gender = 'female' then 'female' else 'male' end)
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+create or replace function public.get_announcements(p_code text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a record;
+begin
+  select * into a from public._authenticate(p_code);
+  if not a.ok then return jsonb_build_object('ok', false, 'error', a.error); end if;
+  return jsonb_build_object('ok', true, 'items', coalesce((
+    select jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'member_id', member_id,
+      'member_name', member_name, 'gender', gender, 'created_at', created_at, 'expires_at', expires_at)
+      order by created_at desc)
+    from public.announcements where expires_at > now()), '[]'::jsonb));
+end $$;
+
+grant execute on function public.secure_post_announcement(text, text, uuid, text, text) to anon, authenticated;
+grant execute on function public.get_announcements(text) to anon, authenticated;
+
 commit;
 
 -- =====================================================================
