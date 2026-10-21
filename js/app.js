@@ -35,6 +35,7 @@ async function load(code) {
   index(); collapseAll(); render(true); showEvent();
   applyRole();
   checkAnnouncements();
+  inboxBadge();
   return true;
 }
 function showGate(msg) {
@@ -441,6 +442,16 @@ function suggestForm(targetId) {
     alert('شكرًا لك، وصل اقتراحك وسيراجعه المسؤول.');
   });
 }
+async function inboxBadge() {
+  const b = $('#inbox-badge'), d = $('#menu-dot');
+  if (!b) return;
+  if (CFG.DEMO || S.role !== 'owner' || !S.code) { b.hidden = true; if (d) d.hidden = true; return; }
+  try {
+    const r = await rpc('list_suggestions', { p_passcode: S.code });
+    const n = r.success ? (r.items || []).length : 0;
+    b.textContent = n; b.hidden = !n; if (d) d.hidden = !n;
+  } catch (_) { b.hidden = true; if (d) d.hidden = true; }
+}
 async function inbox() {
   $('.more').open = false;
   let items;
@@ -450,7 +461,7 @@ async function inbox() {
     return `<div class="evrow"><div><b>${esc(m ? m.full_name : 'اقتراح عام')}</b><small>${esc(pd.note || JSON.stringify(pd))}${pd.from ? ' — ' + esc(pd.from) : ''}</small></div><span>${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sd="${esc(s.id)}">تم ✓</button></span></div>`; }).join('') || '<p class="sub">لا توجد اقتراحات.</p>'}`);
 }
 async function delSuggestion(id) {
-  try { await op('secure_delete_suggestion', { suggestion_id: id, passcode: S.code }, () => { S.demoSug = S.demoSug.filter(s => s.id !== id); }); await inbox(); }
+  try { await op('secure_delete_suggestion', { suggestion_id: id, passcode: S.code }, () => { S.demoSug = S.demoSug.filter(s => s.id !== id); }); await inbox(); inboxBadge(); }
   catch (err) { alert(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
