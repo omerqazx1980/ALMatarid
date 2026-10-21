@@ -146,6 +146,7 @@ dd{overflow-wrap:anywhere}
 #profile-body summary span{color:var(--green)}
 #profile-body select,#nsrch{width:100%;padding:8px 10px;margin:4px 0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font:inherit}
 .kin{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:6px;line-height:1.9}
+.cardimg{width:100%;border-radius:12px;border:1px solid var(--line);margin:6px 0}
 .kin b{color:var(--gold)}
 button.danger{background:#7f1d1d;color:#fecaca}
 .x{background:transparent;color:#fca5a5;padding:0 6px;font-size:.9rem}

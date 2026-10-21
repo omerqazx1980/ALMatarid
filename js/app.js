@@ -333,6 +333,11 @@ async function saveMember(m, fid, d) {
   await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_passcode: S.code }, () => {});
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
+  // بطاقات تلقائية: إضافة مولود ← تهنئة، وتحويل حي إلى متوفى ← تعزية
+  const by = (v.birth_year_text || '').trim(), yr = String(new Date().getFullYear());
+  const hj = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' }).format(new Date()).replace(/\D/g, '');
+  if (!m && v.is_alive && (!by || by === yr || by === hj)) setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: fid }, 'birth'), 80);
+  else if (m && m.is_alive !== false && !v.is_alive) setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: m.father_id }, 'condolence'), 80);
 }
 function memberForm(m, parentId) {
   const fid = m ? m.father_id : parentId, moms = S.wives.filter(w => w.husband_id === fid);
@@ -586,6 +591,52 @@ $('#m-snap').onclick = async () => {
     alert(r.success ? `تم حفظ لقطة رقم ${r.id} داخل القاعدة (تُحفظ آخر 20). وهي لا تغني عن تصدير نسخة JSON وحفظها خارج Supabase.` : r.message);
   } catch (err) { alert(err.message); }
 };
+
+/* ---------- بطاقات التهنئة والتعزية: تُنشأ تلقائيًا عند الإضافة/الوفاة، أو يدويًا من القائمة ---------- */
+async function drawCard(data, kind) {
+  const birth = kind === 'birth', gram = data.gender === 'female';
+  const cv = document.createElement('canvas'); cv.width = cv.height = 1080;
+  const x = cv.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 1080);
+  g.addColorStop(0, birth ? '#162033' : '#111827'); g.addColorStop(1, birth ? '#0b1120' : '#030712');
+  x.fillStyle = g; x.fillRect(0, 0, 1080, 1080);
+  const accent = birth ? '#f59e0b' : '#9ca3af';
+  x.strokeStyle = accent; x.lineWidth = 6; x.strokeRect(36, 36, 1008, 1008);
+  x.lineWidth = 2; x.strokeRect(56, 56, 968, 968);
+  x.textAlign = 'center';
+  try { await document.fonts.ready; } catch (_) {}
+  const F = (s, w = 800) => `${w} ${s}px Cairo, Tahoma, sans-serif`;
+  const fit = (t, s) => { x.font = F(s); while (x.measureText(t).width > 920 && s > 28) { s -= 4; x.font = F(s); } };
+  await new Promise(res => { const im = new Image(); im.onload = () => { try { x.save(); x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.clip(); x.drawImage(im, 448, 113, 184, 184); x.restore(); x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.stroke(); } catch (_) {} res(); }; im.onerror = () => res(); im.src = 'logo.jpg'; });
+  x.fillStyle = accent; x.font = F(46); x.fillText('أسرة آل مطارد', 540, 395);
+  x.fillStyle = '#f1f5f9';
+  const title = birth ? 'بُشرى سارّة' : 'إنا لله وإنا إليه راجعون';
+  fit(title, birth ? 88 : 64); x.fillText(title, 540, 505);
+  x.fillStyle = accent; x.font = F(38, 600);
+  x.fillText(birth ? (gram ? 'مولودة جديدة' : 'مولود جديد') : (gram ? 'فقيدتنا الغالية' : 'فقيدنا الغالي'), 540, 580);
+  x.fillStyle = '#f1f5f9'; fit(data.full_name, 68); x.fillText(data.full_name, 540, 665);
+  x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.moveTo(390, 715); x.lineTo(690, 715); x.stroke();
+  x.fillStyle = '#cbd5e1'; x.font = F(40, 600);
+  const lines = birth
+    ? ['بارك الله لكم في الموهوب وشكرتم الواهب', (gram ? 'جعلها' : 'جعله') + ' الله من مواليد السعادة وقرة عين لوالديه']
+    : [(gram ? 'رحمها الله وغفر لها وأسكنها فسيح جناته' : 'رحمه الله وغفر له وأسكنه فسيح جناته'), 'وألهم أهله وذويه الصبر والسلوان'];
+  x.fillText(lines[0], 540, 790); x.fillText(lines[1], 540, 855);
+  x.fillStyle = '#94a3b8'; x.font = F(32, 400);
+  x.fillText(new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' }).format(new Date()), 540, 965);
+  return cv;
+}
+async function openCard(data, kind) {
+  const cv = await drawCard(data, kind), url = cv.toDataURL('image/png');
+  showInfo(`<h2>${kind === 'birth' ? '💌 بطاقة تهنئة' : '🕊️ بطاقة تعزية'}</h2><img class="cardimg" src="${url}" alt="البطاقة"><div class="row adm"><button id="card-dl">⬇️ تنزيل البطاقة</button></div>`);
+  $('#card-dl').onclick = () => { const a = Object.assign(document.createElement('a'), { href: url, download: 'al-matarid-card.png' }); a.click(); };
+}
+$('#m-cards').onclick = menuClose(() => {
+  openForm('إنشاء بطاقة', [
+    { k: 'who', label: 'الاسم', type: 'select', opts: S.members.slice().sort(byName).map(m => [m.id, m.full_name]) },
+    { k: 'kind', label: 'نوع البطاقة', type: 'select', opts: [['birth', 'تهنئة بمولود'], ['condolence', 'تعزية بوفاة']] }], d => {
+    const mm = S.byId.get(d.who); if (mm) openCard({ full_name: mm.full_name, gender: mm.gender, father_id: mm.father_id }, d.kind);
+  });
+});
 
 /* ---------- البداية ---------- */
 (async () => {
