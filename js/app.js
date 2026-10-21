@@ -661,12 +661,12 @@ const seenAnn = () => { try { return JSON.parse(localStorage.getItem(ANN_KEY) ||
 function markSeenAnn(id) { if (!id) return; const s = seenAnn(); if (!s.includes(id)) { s.push(id); try { localStorage.setItem(ANN_KEY, JSON.stringify(s.slice(-60))); } catch (_) {} } }
 async function postAnnouncement(kind, member) {
   if (CFG.DEMO || !canEdit() || !member) return;
-  try { const r = await call('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male' }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } } catch (_) {}
+  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male' }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } } catch (_) {}
 }
 async function checkAnnouncements(popups = true) {
   if (CFG.DEMO || !S.code) return;
   let items = [];
-  try { const r = await call('get_announcements', { p_code: S.code }); if (!r.ok) return; items = r.items || []; } catch (_) { return; }
+  try { const r = await rpc('get_announcements', { p_code: S.code }); if (!r.ok) return; items = r.items || []; } catch (_) { return; }
   S.ann = items; renderNewsbar();
   if (!popups) return;
   const seen = seenAnn();
