@@ -151,7 +151,7 @@ button.danger{background:#7f1d1d;color:#fecaca}
 .x{background:transparent;color:#fca5a5;padding:0 6px;font-size:.9rem}
 
 /* ---------- 6) الحركة ---------- */
-#nodes.enter .gn{animation:pop .45s backwards;animation-delay:calc(var(--i,0)*22ms)}
+#nodes.enter .gn{animation:pop .45s backwards;animation-delay:calc(min(var(--i,0),24)*22ms)}
 @keyframes dn{from{opacity:0}to{opacity:1}}
 @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.92)}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%,100%{box-shadow:0 0 0 7px rgba(52,211,153,0)}}

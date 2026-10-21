@@ -22,8 +22,8 @@ function demo() {
 }
 
 /* ---------- التحميل والدخول ---------- */
-$('#gate').showModal();
-const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
+async function load(code) {
+  const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
   if (!b.ok) { S.locked = b.error === 'locked'; return false; }
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
   const day = n => new Date(Date.now() + n * 864e5 + 2 * 36e5).toISOString();
@@ -44,13 +44,8 @@ $('#gate-form').addEventListener('submit', async e => {
   e.preventDefault();
   const code = $('#code').value.trim(); if (!code) return;
   try {
-    // قبول رمز العائلة مباشرة أو تمريره للدالة load
-    if (code === 'matarid2026' || await load(code)) {
+    if (await load(code)) {
       sessionStorage.setItem('code', code);
-      // إذا كان الدخول برمز العائلة ولم يتم تحميل البيانات مسبقاً، يتم استدعاء التحميل برمز عام
-      if (code === 'matarid2026' && !window.loadedData) {
-        try { await load(''); } catch (_) {}
-      }
       $('#gate').close();
     }
     else showGate(S.locked ? 'محاولات خاطئة كثيرة. انتظر 15 دقيقة ثم حاول من جديد.' : 'الرمز غير صحيح. تأكد منه وحاول مرة أخرى.');
@@ -84,7 +79,7 @@ function index() {
   for (const a of S.kids.values()) a.sort((x, y) => (x.birth_order || 99) - (y.birth_order || 99));
   S.roots = S.members.filter(m => !m.father_id || !S.byId.has(m.father_id));
 }
-const gen = m => { let n = 1, p = S.byId.get(m.father_id); while (p && n < 30) { n++; p = S.byId.get(p.father_id); } return n; };
+const gen = m => { if (m._g) return m._g; let n = 1, p = S.byId.get(m.father_id); while (p && n < 30) { n++; p = S.byId.get(p.father_id); } return m._g = n; };
 function stats() {
   const n = f => S.members.filter(f).length, gens = S.members.reduce((x, m) => Math.max(x, gen(m)), 0);
   const c = [['👥', 'الإجمالي', S.members.length], ['👨', 'الذكور', n(m => m.gender === 'male')], ['👩', 'الإناث', n(m => m.gender === 'female')],
@@ -235,7 +230,8 @@ function goHit(i) {  // الانتقال إلى نتيجة محددة (Enter ل�
   S.curId = S.order[(i % n + n) % n];
   render();
   if (S.view === 'graph') {
-    const p = S._pos.get(S.curId), vp = $('#vp'), st = $('#stage');
+    const p = S._pos.get(S.curId); if (!p) return;
+    const vp = $('#vp'), st = $('#stage');
     st.classList.add('anim'); V.k = 1;
     V.x = vp.clientWidth / 2 - (S._X(p.x) + W / 2); V.y = vp.clientHeight / 2 - (p.y + H / 2); setT();
     setTimeout(() => st.classList.remove('anim'), 350);
@@ -465,7 +461,7 @@ function namesList(q = '') {
   $('#nlist').innerHTML = L.slice(0, 300).map(nameBtn).join('') + (L.length > 300 ? '<p class="sub">اكتب في البحث لتضييق النتائج…</p>' : '');
 }
 $('#profile-body').addEventListener('input', e => { if (e.target.id === 'nsrch') namesList(e.target.value); });
-$('#m-names').onclick = menuClose(() => { $('#profile-body').innerHTML = ''; namesList(); $('#profile').showModal(); $('#nsrch').focus(); });
+$('#m-names').onclick = menuClose(() => { $('#profile-body').innerHTML = ''; namesList(); $('#nsrch').focus(); });
 
 $('#m-cities').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) { const c = (m.city || '').trim() || 'غير محددة'; (g.get(c) || g.set(c, []).get(c)).push(m); }
