@@ -333,11 +333,11 @@ async function saveMember(m, fid, d) {
   await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_passcode: S.code }, () => {});
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
-  // بطاقات تلقائية: إضافة مولود ← تهنئة، وتحويل حي إلى متوفى ← تعزية (الأرقام تُطبَّع: عربية/إنجليزية، وبلا حروف زائدة)
-  const yrs = s => String(s || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
-  const by = yrs(v.birth_year_text), yr = String(new Date().getFullYear());
-  const hj = yrs(new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' }).format(new Date()));
-  if (!m && v.is_alive && (!by || by === yr || by === hj)) setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: fid }, 'birth'), 80);
+  // بطاقات تلقائية: إضافة مولود ← تهنئة، وتحويل حي إلى متوفى ← تعزية (تقبل السنة الحالية أو الماضية، هجري/ميلادي، بأرقام عربية أو إنجليزية)
+  const ym = (String(v.birth_year_text || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).match(/\d{4}/) || [''])[0];
+  const yr = new Date().getFullYear(), hj = +new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' }).format(new Date()).replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
+  const newborn = !ym || Math.abs(+ym - yr) <= 1 || Math.abs(+ym - hj) <= 1;
+  if (!m && v.is_alive && newborn) setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: fid }, 'birth'), 80);
   else if (m && m.is_alive !== false && !v.is_alive) setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: m.father_id }, 'condolence'), 80);
 }
 const CITIES = ['المدينة المنورة', 'ينبع', 'العلا', 'خيبر', 'الحناكية', 'المهد', 'بدر', 'وادي الفرع', 'العيص', 'مكة المكرمة', 'جدة', 'الطائف', 'رابغ', 'الليث', 'القنفذة', 'الجموم', 'الرياض', 'الخرج', 'الدوادمي', 'المجمعة', 'الزلفي', 'شقراء', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الدمام', 'الخبر', 'الظهران', 'الجبيل', 'الأحساء', 'القطيف', 'حفر الباطن', 'تبوك', 'ضباء', 'الوجه', 'أملج', 'تيماء', 'حائل', 'بريدة', 'عنيزة', 'الرس', 'عرعر', 'سكاكا', 'القريات', 'أبها', 'خميس مشيط', 'بيشة', 'جازان', 'صبيا', 'نجران', 'الباحة', 'بلجرشي', 'خارج المملكة'];
