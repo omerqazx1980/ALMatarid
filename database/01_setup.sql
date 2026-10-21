@@ -43,7 +43,7 @@ begin
          '_branch_of','_in_branch','_branch_members','_role_of','_authenticate','_who','_fail','_deny','_actor',
          '_client_ip','_audit','_take_snapshot','admin_restore','admin_restore_snapshot')
   loop
-    execute 'drop function ' || r.sig;
+    execute 'drop function ' || r.sig || ' cascade';
   end loop;
 end $$;
 
