@@ -819,13 +819,17 @@ revoke all on public.announcements from anon, authenticated;
 
 create or replace function public.secure_post_announcement(p_passcode text, p_kind text, p_member_id uuid, p_member_name text, p_gender text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
-declare a record; v_id uuid;
+declare v_role text; v_branch uuid; v_id uuid;
 begin
-  select * into a from public._authenticate(p_passcode);
-  if not a.ok then return jsonb_build_object('ok', false, 'error', a.error); end if;
-  if p_kind not in ('birth','condolence') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
-  if a.role = 'branch' and (p_member_id is null or not public._in_branch(a.branch_root_id, p_member_id)) then
-    return jsonb_build_object('ok', false, 'error', 'out_of_scope');
+  v_role := public._authenticate(p_passcode);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if v_role is null or v_role not in ('owner', 'editor', 'branch') then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  if p_kind not in ('birth', 'condolence') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+  if v_role = 'branch' then
+    v_branch := public._branch_of(p_passcode);
+    if p_member_id is null or not public._in_branch(v_branch, p_member_id) then
+      return jsonb_build_object('ok', false, 'error', 'out_of_scope');
+    end if;
   end if;
   insert into public.announcements(kind, member_id, member_name, gender)
   values (p_kind, p_member_id, left(coalesce(p_member_name, ''), 120), case when p_gender = 'female' then 'female' else 'male' end)
@@ -835,10 +839,11 @@ end $$;
 
 create or replace function public.get_announcements(p_code text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
-declare a record;
+declare v_role text;
 begin
-  select * into a from public._authenticate(p_code);
-  if not a.ok then return jsonb_build_object('ok', false, 'error', a.error); end if;
+  v_role := public._authenticate(p_code);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if v_role is null then return jsonb_build_object('ok', false, 'error', 'code_required'); end if;
   return jsonb_build_object('ok', true, 'items', coalesce((
     select jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'member_id', member_id,
       'member_name', member_name, 'gender', gender, 'created_at', created_at, 'expires_at', expires_at)
