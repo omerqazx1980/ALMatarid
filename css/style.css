@@ -152,6 +152,7 @@ dd{overflow-wrap:anywhere}
 .nbcard.on{opacity:1;transform:none;pointer-events:auto}
 .nbcard img{width:56px;height:56px;border-radius:10px;object-fit:cover;flex:none}
 .nbcard span{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.beta{font-size:11px;font-weight:600;color:var(--gold);border:1px solid var(--gold);border-radius:99px;padding:1px 9px;vertical-align:middle;white-space:nowrap}
 .kin b{color:var(--gold)}
 button.danger{background:#7f1d1d;color:#fecaca}
 .x{background:transparent;color:#fca5a5;padding:0 6px;font-size:.9rem}
