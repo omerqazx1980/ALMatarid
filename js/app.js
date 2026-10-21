@@ -80,6 +80,17 @@ function index() {
   S.roots = S.members.filter(m => !m.father_id || !S.byId.has(m.father_id));
 }
 const gen = m => { if (m._g) return m._g; let n = 1, p = S.byId.get(m.father_id); while (p && n < 30) { n++; p = S.byId.get(p.father_id); } return m._g = n; };
+/* اسم البطاقة: الجيلان الأول والثاني بالاسم الكامل، ومن الثالث فأحدث الاسم الأول فقط (بلا سلسلة الأب) */
+const shortName = m => {
+  const f = S.byId.get(m.father_id); if (!f) return m.full_name;
+  for (const sep of [' بن ', ' بنت ']) {
+    if (m.full_name.endsWith(sep + f.full_name)) return m.full_name.slice(0, -(sep + f.full_name).length);
+    const i = m.full_name.indexOf(sep);
+    if (i > 0 && m.full_name.slice(i + sep.length).split(' ')[0] === f.full_name.split(' ')[0]) return m.full_name.slice(0, i);
+  }
+  return m.full_name;
+};
+const cardName = m => gen(m) <= 2 ? m.full_name : shortName(m);
 function stats() {
   const n = f => S.members.filter(f).length, gens = S.members.reduce((x, m) => Math.max(x, gen(m)), 0);
   const c = [['👥', 'الإجمالي', S.members.length], ['👨', 'الذكور', n(m => m.gender === 'male')], ['👩', 'الإناث', n(m => m.gender === 'female')],
@@ -137,7 +148,7 @@ function renderGraph(fitView) {
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
       <i>الجيل ${gen(m)}</i>${m.is_alive === false ? '' : '<em class="al"></em>'}${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
-      <b>${esc(m.full_name)}</b><small>${esc(m.nickname || (m.is_alive === false ? 'رحمه الله' : ''))}</small>
+      <b>${esc(cardName(m))}</b><small>${esc(m.nickname || (m.is_alive === false ? 'رحمه الله' : ''))}</small>
       ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'} ${all.length}</button>` : ''}</div>`;
   }
   const st = $('#stage'); st.style.width = mw + 'px'; st.style.height = mh + 'px';
@@ -186,7 +197,7 @@ function node(m) {
   const k = S.kids.get(m.id) || [], o = S.open.has(m.id), hit = S.hit?.has(m.id);
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
     ${k.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'}</button>` : '<span class="tg dot"></span>'}
-    <div class="nm" data-p="${m.id}" tabindex="0" role="button"><b>${esc(m.full_name)}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</div>
+    <div class="nm" data-p="${m.id}" tabindex="0" role="button"><b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</div>
     ${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${k.length ? `<span class="ct">${k.length}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
 }
