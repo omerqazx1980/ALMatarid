@@ -1,5 +1,7 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let _toastT = null;
+function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; requestAnimationFrame(() => t.classList.add('on')); clearTimeout(_toastT); _toastT = setTimeout(() => { t.classList.remove('on'); setTimeout(() => { t.hidden = true; }, 300); }, 2600); }
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
@@ -177,7 +179,7 @@ async function loadEvDoc(e) {
       if (CFG.DEMO) { evDocCodes.set(String(e.id), code); loadEvDoc(e); return; }
       try {
         const r = await rpc('verify_event_doc', { p_passcode: code, p_event_id: e.id });
-        if (r && r.ok) { evDocCodes.set(String(e.id), code); toast('تم التحقق من الرمز — تقدر توثّق الآن'); loadEvDoc(e); }
+        if (r && r.ok) { evDocCodes.set(String(e.id), code); loadEvDoc(e); toast('تم التحقق من الرمز — تقدر توثّق الآن'); }
         else toast(r && r.error === 'locked' ? 'محاولات خاطئة كثيرة — انتظر 15 دقيقة ثم حاول' : 'الرمز غير مطابق لهذه المناسبة');
       } catch (_) { toast('تعذر التحقق من الرمز'); }
       return;
