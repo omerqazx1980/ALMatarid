@@ -381,13 +381,13 @@ function memberForm(m, parentId) {
     f('gender', 'الجنس', m?.gender || 'male', 'select', { opts: [['male', 'ذكر'], ['female', 'أنثى']] }),
     f('alive', 'الحالة', m?.is_alive === false ? '0' : '1', 'select', { opts: [['1', 'حي'], ['0', 'متوفى']] }),
     f('by', 'سنة الميلاد (نص)', m?.birth_year_text ?? (m?.birth_date || '').slice(0, 4)), f('dy', 'سنة الوفاة', m?.death_year_text),
+    { type: 'raw', html: `<div class="conv"><b>محوّل سنة الميلاد والوفاة (هجري ⇄ ميلادي)</b><div class="convrow"><input name="cy" type="number" placeholder="السنة" aria-label="السنة للتحويل"><select name="cc" aria-label="نوع السنة"><option value="h">هجرية</option><option value="g">ميلادية</option></select><button type="button" id="cv-go">حوّل</button></div><p class="cvout sub" hidden></p><div class="convrow"><button type="button" id="cv-by">املأ به سنة الميلاد</button><button type="button" id="cv-dy">املأ به سنة الوفاة</button></div></div>` },
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
     f('order', 'ترتيب الميلاد بين إخوته', m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1, 'number'),
     ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name])] })] : []),
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
-    { type: 'raw', html: `<div class="conv"><b>محوّل السنوات (هجري ⇄ ميلادي)</b><div class="convrow"><input name="cy" type="number" placeholder="السنة" aria-label="السنة للتحويل"><select name="cc" aria-label="نوع السنة"><option value="h">هجرية</option><option value="g">ميلادية</option></select><button type="button" id="cv-go">حوّل</button></div><p class="cvout sub" hidden></p><div class="convrow"><button type="button" id="cv-by">املأ به سنة الميلاد</button><button type="button" id="cv-dy">املأ به سنة الوفاة</button></div></div>` },
     f('story', 'نبذة', m?.biography_story || m?.bio, 'area')], d => saveMember(m, fid, d));
   const cvGo = document.querySelector('#cv-go');
   if (cvGo) {
