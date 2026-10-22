@@ -132,16 +132,17 @@ function showEvent() {
   evTick = setInterval(() => { const cur = evList(); if (!cur.length) return showEvent(); if ((S.ev || 0) >= cur.length) S.ev = 0; const e = cur[S.ev || 0]; if (!e || e.t - Date.now() <= 0) return draw(); const cd = box.querySelector('.ev-cd'); if (cd) { const s = Math.floor((e.t - Date.now()) / 1000); cd.textContent = `⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; } }, 1000);
   if (L.length > 1) evRot = setInterval(() => { if (!evHold) { const cur = evList(); if (cur.length > 1) { S.ev = ((S.ev || 0) + 1) % cur.length; draw(); } } }, 7000);
 }
-function evDetails() {
-  const e = evList()[S.ev || 0]; if (!e) return;
-  const d = new Date(e.t), f = (loc, o) => d.toLocaleString(loc, o);
+function evDetails(e) {
+  e = e || S.evDetail || evList()[S.ev || 0]; if (!e) return;
+  S.evDetail = e;
+  const d = new Date(e.t || e.event_date), f = (loc, o) => d.toLocaleString(loc, o);
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
   const url = /^https?:\/\//.test(e.location_url || '') ? e.location_url : '';
   $('#profile-body').innerHTML = `<h2>${esc(e.title)}</h2><p class="sub">${esc((e.description || '').split('\n')[0].split(' — ')[0])}</p>
     <dl>${row('الميلادي', esc(f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })))}${row('الهجري', esc(f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })))}
     ${row('المكان', esc(e.location_name || '') + (url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">الخريطة</a>` : ''))}</dl>
     ${e.description ? `<div class="story">${esc(e.description)}</div>` : ''}<div id="evdoc"></div>`;
-  $('#profile').showModal();
+  if (!$('#profile').open) $('#profile').showModal();
   loadEvDoc(e);
 }
 /* توثيق المناسبة: صور داخل الموقع + روابط فيديو + حكاية — للمالك/المحرر أو صاحب المناسبة برمز توثيقها */
@@ -544,7 +545,8 @@ const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', 
 function eventsList() {
   const now = Date.now(), past = e => new Date(e.event_date).getTime() < now;
   const L = [...(S.events || [])].sort((a, b) => (past(a) ? 1 : 0) - (past(b) ? 1 : 0) || new Date(a.event_date) - new Date(b.event_date));
-  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}${e.media_count ? ` <span class="evmed">📸 ${e.media_count}</span>` : ''}<small>${esc(evWhen(e))} · ${esc(hijriShort(new Date(e.event_date)))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
+  showInfo(`<h2>مناسبات الأسرة</h2><p class="sub">اضغط على أي مناسبة لفتح تفاصيلها وتوثيقها بالصور والفيديو</p>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}" data-evopen="${esc(e.id)}" style="cursor:pointer"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}${e.media_count ? ` <span class="evmed">📸 ${e.media_count}</span>` : ''}<small>${esc(evWhen(e))} · ${esc(hijriShort(new Date(e.event_date)))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
+  document.querySelectorAll('#profile-body [data-evopen]').forEach(r => r.onclick = ev2 => { if (ev2.target.closest('button')) return; const x = S.events.find(z => String(z.id) === String(r.dataset.evopen)); if (x) evDetails(x); });
 }
 function eventForm(e) {
   const cur = e ? new Date(e.event_date) : new Date(), hj = gregToHijri(cur);
