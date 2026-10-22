@@ -1,7 +1,7 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
-const W = 156, H = 78, GX = 18, GY = 54;
+const W = 170, H = 104, GX = 18, GY = 54;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
 const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [] };
 const V = { x: 0, y: 0, k: 1 };
@@ -122,7 +122,7 @@ function showEvent() {
     S.ev = Math.min(S.ev || 0, cur.length - 1);
     const e = cur[S.ev], ms = e.t - Date.now(), s = Math.max(0, Math.floor(ms / 1000));
     box.innerHTML = `<span class="ev-type">${esc((e.description || '').split(' — ')[0] || 'مناسبة')}</span><b class="ev-title">${esc(e.title)}</b>
-    <span class="ev-cd">⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}</span><button class="ev-more">تفاصيل</button>
+    <span class="ev-cd">⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}</span><button class="ev-more">📍 تفاصيل الدعوة والموقع</button>
     ${cur.length > 1 ? `<span class="ev-pg"><button data-evn="-1" aria-label="السابقة">›</button>${S.ev + 1} / ${cur.length}<button data-evn="1" aria-label="التالية">‹</button></span>` : ''}`;
   };
   draw();
@@ -179,8 +179,9 @@ function renderGraph(fitView) {
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
       <i>الجيل ${gen(m)}</i>${S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
-      <b>${esc(cardName(m))}</b><small>${esc([m.nickname || (m.is_alive === false ? 'رحمه الله' : ''), kidsTxt(m)].filter(Boolean).join(' · '))}</small>
-      ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'} ${all.length}</button>` : ''}</div>`;
+      <b>${esc(cardName(m))}</b><small class="stt ${m.is_alive === false ? 'dead' : 'alive'}">${m.is_alive === false ? 'رحمه الله' : 'حي يرزق'}${m.nickname ? ' · ' + esc(m.nickname) : ''}</small>
+      <small class="meta">${esc([m.city ? '📍 ' + m.city : '', kidsTxt(m)].filter(Boolean).join(' · '))}</small>
+      ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'} ${all.length}</button>` : ''}</div>`;
   }
   const st = $('#stage'); st.style.width = mw + 'px'; st.style.height = mh + 'px';
   $('#lines').setAttribute('width', mw); $('#lines').setAttribute('height', mh);
@@ -217,17 +218,15 @@ addEventListener('pointermove', e => {
   else { V.x += dx; V.y += dy; ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); setT(); }
 });
 ['pointerup', 'pointercancel'].forEach(t => addEventListener(t, e => ptr.delete(e.pointerId)));
-vp.addEventListener('click', e => { if (moved > 8) e.stopPropagation(); }, true);
+vp.addEventListener('click', e => { if (moved > 8 && !e.target.closest('button')) e.stopPropagation(); }, true);
 vp.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 1 / 1.1); }, { passive: false });
-$('#z-in').onclick = () => { const r = vp.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.25); };
-$('#z-out').onclick = () => { const r = vp.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, .8); };
 $('#z-fit').onclick = fit;
 
 /* ---------- القائمة (للجوال) ---------- */
 function node(m) {
   const k = dispKids(m), o = S.open.has(m.id), hit = S.hit?.has(m.id);
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
-    ${k.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'}</button>` : '<span class="tg dot"></span>'}
+    ${k.length ? `<button class="tg tgl" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'}</button>` : '<span class="tg dot"></span>'}
     <div class="nm" data-p="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</div>
     ${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${kidsTxt(m) ? `<span class="ct">${kidsTxt(m)}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
@@ -316,7 +315,7 @@ function profile(id) {
     ${m.achievement_badge ? `<p><span class="bd">${esc(m.achievement_badge)}</span></p>` : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
       ${row('الزوج', husband ? esc(husband.full_name) : '')}
-      ${row('الزوجات', wives.map(w => esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (w.member_id ? ' · من الأسرة <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>' : '') + (canMember(m) ? `<button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : '')).join('، '))}
+      ${row('الزوجات', wives.map(w => esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : '')).join('، '))}
       ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
@@ -358,12 +357,12 @@ $('#form-x').onclick = () => $('#form').close();
 async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
     death_year_text: d.dy.trim() || null, city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
-    birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.namepub === '1' };
+    birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' };
   const r = await op('secure_save_member', { p_id: m?.id ?? null, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: fid,
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
     p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code },
     () => { if (m) Object.assign(m, v); else S.members.push({ id: 'n' + Date.now(), father_id: fid, audio_url: null, created_at: Date.now(), ...v }); });
-  await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_passcode: S.code }, () => {});
+  await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
   // بطاقات تلقائية: إضافة مولود ← تهنئة، وتحويل حي إلى متوفى ← تعزية (تقبل السنة الحالية أو الماضية، هجري/ميلادي، بأرقام عربية أو إنجليزية)
@@ -387,6 +386,7 @@ function memberForm(m, parentId) {
     f('order', 'ترتيب الميلاد بين إخوته', m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1, 'number'),
     ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name])] })] : []),
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
+    f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('story', 'نبذة', m?.biography_story || m?.bio, 'area')], d => saveMember(m, fid, d));
 }
 function wifeForm(m) {
@@ -395,14 +395,15 @@ function wifeForm(m) {
     { k: 'mode', label: 'نوع الزوجة', type: 'select', val: 'new', opts: [['new', 'من خارج الأسرة (اسم نصي)'], ['link', 'من نساء الأسرة (ربط بسجلها)']] },
     { k: 'member', label: 'اخترها من نساء الشجرة (عند الربط)', type: 'select', opts: [['', '—'], ...women.map(w => [w.id, w.full_name])] },
     { k: 'name', label: 'اسم الزوجة (عند عدم الربط)' }, { k: 'fam', label: 'اسم عائلتها' },
-    { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] }], async d => {
+    { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] },
+    { k: 'namehid', label: 'إخفاء اسمها برغبتها', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] }], async d => {
     const linked = d.mode === 'link' && d.member ? S.byId.get(d.member) : null;
     if (d.mode === 'link' && !linked) throw new Error('اختر الزوجة من قائمة نساء الأسرة');
     const name = linked ? linked.full_name : d.name.trim();
     if (!name) throw new Error('الاسم مطلوب');
     const fam = linked ? null : (d.fam.trim() || null);
-    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_passcode: S.code },
-      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1' }));
+    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code },
+      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' }));
     if (!CFG.DEMO) await refresh(); profile(m.id);
   });
 }
@@ -457,8 +458,9 @@ const localDT = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d
 function showInfo(html) { $('#profile-body').dataset.id = ''; $('#profile-body').innerHTML = html; const p = $('#profile'); if (!p.open) p.showModal(); }
 const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' });
 function eventsList() {
-  const L = [...(S.events || [])].sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
-  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow"><div><b>${esc(e.title)}</b><small>${esc(evWhen(e))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
+  const now = Date.now(), past = e => new Date(e.event_date).getTime() < now;
+  const L = [...(S.events || [])].sort((a, b) => (past(a) ? 1 : 0) - (past(b) ? 1 : 0) || new Date(a.event_date) - new Date(b.event_date));
+  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}<small>${esc(evWhen(e))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
 }
 function eventForm(e) {
   openForm(e ? 'تعديل مناسبة' : 'إضافة مناسبة', [
@@ -742,12 +744,21 @@ async function renderNewsbar() {
   const items = S.ann || [];
   if (!items.length) { bar.hidden = true; bar.innerHTML = ''; stopNbCycle(); return; }
   bar.hidden = false;
-  bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'birth' ? '💌 تهنئة' : '🕊️ تعزية'}: ${esc(a.member_name)}</span></button>`).join('');
+  bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'birth' ? '💌 تهنئة' : '🕊️ تعزية'}: ${esc(a.member_name)}</span>${canEdit() ? `<span class="nbdel" data-andel="${a.id}" role="button" aria-label="حذف الإعلان" title="حذف الإعلان">✕</span>` : ''}</button>`).join('');
   for (const a of items) {
     const img = bar.querySelector(`[data-ann="${a.id}"] img`);
     try { img.src = (await drawCard({ full_name: a.member_name, gender: a.gender }, a.kind)).toDataURL('image/png'); } catch (_) {}
   }
   bar.querySelectorAll('[data-ann]').forEach(b => b.onclick = () => { const a = items.find(z => z.id === b.dataset.ann); if (a) { markSeenAnn(a.id); openCard({ full_name: a.member_name, gender: a.gender }, a.kind); } });
+  bar.querySelectorAll('[data-andel]').forEach(x => x.onclick = async e => {
+    e.stopPropagation();
+    if (!confirm('حذف هذا الإعلان نهائيًا؟')) return;
+    const id = x.dataset.andel;
+    try {
+      if (!CFG.DEMO) { const r = await rpc('secure_delete_announcement', { p_passcode: S.code, p_id: id }); if (!r || !r.ok) throw new Error('delete failed'); }
+      S.ann = (S.ann || []).filter(z => z.id !== id); renderNewsbar(); toast('تم حذف الإعلان');
+    } catch (_) { toast('تعذر حذف الإعلان'); }
+  });
   startNbCycle(items.length);
 }
 
@@ -807,9 +818,9 @@ async function silentRefresh() {
 
 /* ---------- محرر العائلة: زوجات وأبناء الأب في شاشة واحدة، لصق جماعي، حفظ واحد ---------- */
 async function saveMemberData(m, over) {
-  const v = { full_name: m.full_name, nickname: m.nickname, gender: m.gender, is_alive: m.is_alive !== false, birth_year_text: m.birth_year_text, death_year_text: m.death_year_text, city: m.city, achievement_badge: m.achievement_badge, phone: m.phone, birth_order: m.birth_order, wife_mother_id: m.wife_mother_id, biography_story: m.biography_story || m.bio, name_public: !!m.name_public, ...over };
+  const v = { full_name: m.full_name, nickname: m.nickname, gender: m.gender, is_alive: m.is_alive !== false, birth_year_text: m.birth_year_text, death_year_text: m.death_year_text, city: m.city, achievement_badge: m.achievement_badge, phone: m.phone, birth_order: m.birth_order, wife_mother_id: m.wife_mother_id, biography_story: m.biography_story || m.bio, name_public: !!m.name_public, name_hidden: !!m.name_hidden, ...over };
   const r = await op('secure_save_member', { p_id: m.id, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: m.father_id, p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text, p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code }, () => Object.assign(m, v));
-  await op('secure_update_member_extras', { p_id: m.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m.audio_url || null, p_name_public: v.name_public, p_passcode: S.code }, () => {});
+  await op('secure_update_member_extras', { p_id: m.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
   return r;
 }
 function familyEditor(fid) {
