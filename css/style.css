@@ -137,6 +137,14 @@ dd{overflow-wrap:anywhere}
 .menu #adm-menu button:not(:disabled){color:var(--gold)}
 .fl{display:flex;flex-direction:column;gap:3px;margin-bottom:10px;font-size:.85rem;color:var(--mut)}
 .fl input,.fl select,.fl textarea{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font:inherit}
+.hjrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.hjrow[hidden]{display:none}
+.hjlab{width:100%;font-size:.85rem;color:var(--mut)}
+.hjrow select,.hjrow input{flex:1;min-width:64px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font:inherit}
+.conv{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:.85rem}
+.convrow{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.convrow input,.convrow select{flex:1;min-width:80px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font:inherit}
+.cvout{margin-top:6px;color:var(--gold)}
 .adm{margin-top:14px;flex-wrap:wrap}
 .adm button{padding:5px 12px;font-size:.82rem}
 #profile-body .evrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}

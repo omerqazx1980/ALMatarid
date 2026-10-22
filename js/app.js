@@ -339,7 +339,7 @@ async function refresh() {
 }
 function openForm(title, fields, onSubmit) {
   $('#form-title').textContent = title; $('#form-err').hidden = true; S.onForm = onSubmit;
-  $('#form-fields').innerHTML = fields.map(f => `<label class="fl">${esc(f.label)}${
+  $('#form-fields').innerHTML = fields.map(f => f.type === 'raw' ? f.html : `<label class="fl">${esc(f.label)}${
     f.type === 'select' ? `<select name="${f.k}">${f.opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(f.val ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`
     : f.type === 'area' ? `<textarea name="${f.k}" rows="4"${f.req ? ' required' : ''}>${esc(f.val)}</textarea>`
     : `<input name="${f.k}" type="${f.type || 'text'}" value="${esc(f.val)}"${f.req ? ' required' : ''} autocomplete="off">`}</label>`).join('');
@@ -387,7 +387,18 @@ function memberForm(m, parentId) {
     ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name])] })] : []),
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
+    { type: 'raw', html: `<div class="conv"><b>محوّل السنوات (هجري ⇄ ميلادي)</b><div class="convrow"><input name="cy" type="number" placeholder="السنة" aria-label="السنة للتحويل"><select name="cc" aria-label="نوع السنة"><option value="h">هجرية</option><option value="g">ميلادية</option></select><button type="button" id="cv-go">حوّل</button></div><p class="cvout sub" hidden></p><div class="convrow"><button type="button" id="cv-by">املأ به سنة الميلاد</button><button type="button" id="cv-dy">املأ به سنة الوفاة</button></div></div>` },
     f('story', 'نبذة', m?.biography_story || m?.bio, 'area')], d => saveMember(m, fid, d));
+  const cvGo = document.querySelector('#cv-go');
+  if (cvGo) {
+    let cvText = '';
+    const run = () => { const y = +document.querySelector('#form-fields [name=cy]').value, cc = document.querySelector('#form-fields [name=cc]').value, out = document.querySelector('.cvout');
+      if (!y || y < 1000 || y > 3000) { out.hidden = false; out.textContent = 'أدخل سنة صحيحة أولًا'; cvText = ''; return; }
+      cvText = cc === 'h' ? hijriYearText(y) : gregYearText(y); out.hidden = false; out.textContent = cvText; };
+    cvGo.onclick = run;
+    document.querySelector('#cv-by').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=by]').value = cvText; };
+    document.querySelector('#cv-dy').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=dy]').value = cvText; };
+  }
 }
 function wifeForm(m) {
   const women = S.members.filter(x => x.gender === 'female').sort(byName);
@@ -454,26 +465,58 @@ $('#m-settings').onclick = async () => {
 
 /* ---------- المناسبات والاقتراحات ---------- */
 const pad = n => String(n).padStart(2, '0');
+/* تقويم أم القرى: تحويلات هجري ⇄ ميلادي عبر Intl المدمج (بلا مكتبات) */
+const HJ_MONTHS = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الثانية', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
+const _hjF = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' });
+function gregToHijri(d) { const o = {}; for (const p of _hjF.formatToParts(d)) if (p.type !== 'literal') o[p.type] = +p.value; return { y: o.year, m: o.month, d: o.day }; }
+function hijriToGreg(y, m, d) {
+  let t = Date.UTC(Math.round(y * 0.970224 + 621.577), m - 1, d);
+  const key = h => h.y * 10000 + h.m * 100 + h.d, want = y * 10000 + m * 100 + d;
+  for (let i = 0; i < 400; i++) { const k = key(gregToHijri(new Date(t))); if (k === want) return new Date(t); t += (k < want ? 86400000 : -86400000); }
+  return new Date(t);
+}
+const hijriLong = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d); } catch (_) { return ''; } };
+const hijriShort = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(d); } catch (_) { return ''; } };
+function hijriYearText(y) { const a = hijriToGreg(y, 1, 1).getUTCFullYear(), b = hijriToGreg(y + 1, 1, 1).getUTCFullYear(); return b > a ? `${y}هـ (الموافق ${a}–${b}م)` : `${y}هـ (الموافق ${a}م)`; }
+function gregYearText(y) { const a = gregToHijri(new Date(Date.UTC(y, 0, 1))).y, b = gregToHijri(new Date(Date.UTC(y, 11, 31))).y; return b > a ? `${y}م (الموافق ${a}–${b}هـ)` : `${y}م (الموافق ${a}هـ)`; }
 const localDT = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 function showInfo(html) { $('#profile-body').dataset.id = ''; $('#profile-body').innerHTML = html; const p = $('#profile'); if (!p.open) p.showModal(); }
 const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' });
 function eventsList() {
   const now = Date.now(), past = e => new Date(e.event_date).getTime() < now;
   const L = [...(S.events || [])].sort((a, b) => (past(a) ? 1 : 0) - (past(b) ? 1 : 0) || new Date(a.event_date) - new Date(b.event_date));
-  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}<small>${esc(evWhen(e))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
+  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}<small>${esc(evWhen(e))} · ${esc(hijriShort(new Date(e.event_date)))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
 }
 function eventForm(e) {
+  const cur = e ? new Date(e.event_date) : new Date(), hj = gregToHijri(cur);
   openForm(e ? 'تعديل مناسبة' : 'إضافة مناسبة', [
     { k: 'title', label: 'عنوان المناسبة', val: e?.title, req: true },
-    { k: 'date', label: 'الموعد', val: e ? localDT(e.event_date) : '', type: 'datetime-local', req: true },
+    { k: 'cal', label: 'تقويم الموعد', type: 'select', val: 'g', opts: [['g', 'ميلادي'], ['h', 'هجري (أم القرى)']] },
+    { k: 'date', label: 'الموعد (ميلادي)', val: e ? localDT(e.event_date) : '', type: 'datetime-local' },
+    { type: 'raw', html: `<div class="hjrow" hidden><span class="hjlab">الموعد (هجري)</span><select name="hd">${Array.from({ length: 30 }, (_, i) => `<option value="${i + 1}"${hj.d === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select><select name="hm">${HJ_MONTHS.map((t, i) => `<option value="${i + 1}"${hj.m === i + 1 ? ' selected' : ''}>${t}</option>`).join('')}</select><input name="hy" type="number" value="${hj.y}" min="1300" max="1600" aria-label="السنة الهجرية"><input name="ht" type="time" value="${pad(cur.getHours())}:${pad(cur.getMinutes())}" aria-label="الوقت"></div>` },
     { k: 'place', label: 'المكان', val: e?.location_name }, { k: 'url', label: 'رابط الخريطة (اختياري)', val: e?.location_url, type: 'url' },
     { k: 'desc', label: 'النوع والتفاصيل (السطر الأول: النوع — المستضيف)', val: e?.description, type: 'area' }], async d => {
     const url = d.url.trim(); if (url && !/^https?:\/\//.test(url)) throw new Error('رابط الخريطة يجب أن يبدأ بـ http');
-    const v = { title: d.title.trim(), event_date: new Date(d.date).toISOString(), location_name: d.place.trim() || null, location_url: url || null, description: d.desc.trim() || null };
+    let when;
+    if (d.cal === 'h') {
+      const y = +d.hy, m = +d.hm, dd = +d.hd;
+      if (!y || y < 1300 || y > 1600) throw new Error('أدخل السنة الهجرية بشكل صحيح');
+      const g = hijriToGreg(y, m, dd), chk = gregToHijri(g);
+      if (chk.y !== y || chk.m !== m || chk.d !== dd) throw new Error('هذا اليوم غير موجود في هذا الشهر الهجري — جرّب يومًا آخر');
+      const [hh, mm] = (d.ht || '18:00').split(':').map(Number);
+      when = new Date(g.getUTCFullYear(), g.getUTCMonth(), g.getUTCDate(), hh || 0, mm || 0);
+    } else {
+      if (!d.date) throw new Error('أدخل الموعد');
+      when = new Date(d.date);
+    }
+    const v = { title: d.title.trim(), event_date: when.toISOString(), location_name: d.place.trim() || null, location_url: url || null, description: d.desc.trim() || null };
     await op('secure_save_event', { p_id: e?.id ?? null, p_title: v.title, p_event_date: v.event_date, p_location_name: v.location_name, p_location_url: v.location_url, p_description: v.description, p_passcode: S.code },
       () => { if (e) Object.assign(e, v); else S.events.push({ id: 'e' + Date.now(), ...v }); });
     if (!CFG.DEMO) await refresh(); showEvent(); eventsList();
   });
+  const calSel = document.querySelector('#form-fields [name=cal]'), dtInp = document.querySelector('#form-fields [name=date]'), hjRow = document.querySelector('#form-fields .hjrow');
+  const syncCal = () => { const h = calSel.value === 'h'; hjRow.hidden = !h; dtInp.closest('.fl').style.display = h ? 'none' : ''; dtInp.required = !h; };
+  calSel.addEventListener('change', syncCal); syncCal();
 }
 async function delEvent(id) {
   const e = S.events.find(x => String(x.id) === id); if (!e || !confirm(`حذف المناسبة «${e.title}»؟`)) return;
