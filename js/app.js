@@ -171,7 +171,17 @@ async function loadEvDoc(e) {
   });
   box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
     const k = b.dataset.evadd;
-    if (k === 'code') { const c = prompt('أدخل رمز توثيق هذه المناسبة (تحصل عليه من مالك الموقع):'); if (c) { evDocCodes.set(String(e.id), c.trim()); loadEvDoc(e); } return; }
+    if (k === 'code') {
+      const c = prompt('أدخل رمز توثيق هذه المناسبة (تحصل عليه من مالك الموقع):'); if (!c) return;
+      const code = c.trim();
+      if (CFG.DEMO) { evDocCodes.set(String(e.id), code); loadEvDoc(e); return; }
+      try {
+        const r = await rpc('verify_event_doc', { p_passcode: code, p_event_id: e.id });
+        if (r && r.ok) { evDocCodes.set(String(e.id), code); toast('تم التحقق من الرمز — تقدر توثّق الآن'); loadEvDoc(e); }
+        else toast(r && r.error === 'locked' ? 'محاولات خاطئة كثيرة — انتظر 15 دقيقة ثم حاول' : 'الرمز غير مطابق لهذه المناسبة');
+      } catch (_) { toast('تعذر التحقق من الرمز'); }
+      return;
+    }
     if (k === 'photo') { const f = $('#ev-file'); f.dataset.eid = e.id; f.click(); return; }
     if (k === 'video') {
       const u = prompt('رابط الفيديو (يوتيوب/درايف…):'); if (!u) return;

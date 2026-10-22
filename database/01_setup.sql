@@ -1181,6 +1181,66 @@ begin
 end $$;
 grant execute on function public.secure_set_event_story(text, uuid, text) to anon, authenticated;
 
+-- تحقق فوري من رمز التوثيق + مصادقة وسائط لا تلوّث عدّاد القفل برموز التوثيق الصحيحة
+create or replace function public._media_auth(p_passcode text, p_event_id uuid) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_ip text := public._client_ip(); v_role text;
+begin
+  if p_passcode is null or length(p_passcode) = 0 then return false; end if;
+  if (select count(*) from public.auth_attempts where ip = v_ip and created_at > now() - interval '15 minutes') >= 8 then return false; end if;
+  if public._event_doc_ok(p_passcode, p_event_id) then return true; end if;
+  v_role := public._role_of(p_passcode);
+  if v_role in ('owner', 'editor') then return true; end if;
+  insert into public.auth_attempts (ip) values (v_ip);
+  delete from public.auth_attempts where created_at < now() - interval '1 day';
+  return false;
+end $$;
+revoke execute on function public._media_auth(text, uuid) from public, anon, authenticated;
+
+create or replace function public.verify_event_doc(p_passcode text, p_event_id uuid)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if (select count(*) from public.auth_attempts where ip = public._client_ip() and created_at > now() - interval '15 minutes') >= 8 then
+    return jsonb_build_object('ok', false, 'error', 'locked');
+  end if;
+  return jsonb_build_object('ok', public._media_auth(p_passcode, p_event_id));
+end $$;
+grant execute on function public.verify_event_doc(text, uuid) to anon, authenticated;
+
+create or replace function public.secure_add_event_media(p_passcode text, p_event_id uuid, p_kind text, p_url text, p_caption text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  if not public._media_auth(p_passcode, p_event_id) then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  if p_kind not in ('photo', 'video') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+  if p_kind = 'video' and coalesce(p_url, '') !~* '^https?://' then return jsonb_build_object('ok', false, 'error', 'bad_url'); end if;
+  if p_kind = 'photo' and (coalesce(p_url, '') !~ '^data:image/' or length(p_url) > 600000) then return jsonb_build_object('ok', false, 'error', 'bad_photo'); end if;
+  if (select count(*) from public.event_media where event_id = p_event_id) >= 60 then return jsonb_build_object('ok', false, 'error', 'full'); end if;
+  insert into public.event_media (event_id, kind, url, caption)
+  values (p_event_id, p_kind, p_url, nullif(trim(coalesce(p_caption, '')), '')) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+create or replace function public.secure_delete_event_media(p_passcode text, p_media_id uuid)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_event uuid;
+begin
+  select event_id into v_event from public.event_media where id = p_media_id;
+  if v_event is null then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if not public._media_auth(p_passcode, v_event) then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  delete from public.event_media where id = p_media_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.secure_set_event_story(p_passcode text, p_event_id uuid, p_story text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not public._media_auth(p_passcode, p_event_id) then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  update public.family_events set story = nullif(trim(coalesce(p_story, '')), '') where id = p_event_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+
 -- حفظ المناسبة: توقيع جديد يضيف رمز التوثيق
 drop function if exists public.secure_save_event(uuid, text, timestamptz, text, text, text, text);
 create function public.secure_save_event(
