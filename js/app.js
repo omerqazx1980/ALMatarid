@@ -1,9 +1,9 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ROLES = { visitor: 'زائر', family: 'فرد عائلة', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
+const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 156, H = 78, GX = 18, GY = 54;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
-const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph' };
+const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [] };
 const V = { x: 0, y: 0, k: 1 };
 
 /* ---------- بيانات وهمية للتصميم ---------- */
@@ -26,6 +26,7 @@ async function load(code) {
   const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
   if (!b.ok) { S.locked = b.error === 'locked'; return false; }
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
+  S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
   const day = n => new Date(Date.now() + n * 864e5 + 2 * 36e5).toISOString();
   S.events = CFG.DEMO ? [
     { id: 'e1', title: 'حفل زواج (تجريبي)', event_date: day(33), location_name: 'قاعة المناسبات الكبرى', location_url: 'https://maps.google.com', description: 'عقد قران وزواج 💍 — المستضيف: أسرة تجريبية\nالدعوة عامة للعائلة.' },
@@ -36,6 +37,8 @@ async function load(code) {
   applyRole();
   checkAnnouncements();
   inboxBadge();
+  setTimeout(fetchPhotos, 400);
+  if (!window._almAuto) window._almAuto = setInterval(silentRefresh, 90000);
   return true;
 }
 function showGate(msg) {
@@ -60,7 +63,7 @@ const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.fat
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
   $('#btn-login').textContent = S.role === 'visitor' ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : '');
-  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-inbox').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner';
+  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-inbox').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-family').hidden = !canEdit();
 }
 $('#btn-login').onclick = () => {
   if (CFG.DEMO) {  // تجربة الأدوار: زائر ثم مالك ثم مسؤول فرع
@@ -100,13 +103,27 @@ function stats() {
   $('#chips').innerHTML = c.map(([i, l, v]) => `<span class="chip">${i} ${l} <b>${v}</b></span>`).join('');
 }
 const evList = () => (S.events || []).map(e => ({ ...e, t: new Date(e.event_date).getTime() })).filter(e => e.t > Date.now()).sort((a, b) => a.t - b.t);
+let evRot = null, evTick = null, evHold = false;
 function showEvent() {
-  const L = evList(), box = $('#event'); box.hidden = !L.length; if (!L.length) return;
+  const box = $('#event');
+  clearInterval(evRot); clearInterval(evTick); evRot = evTick = null;
+  const L = evList();
+  box.hidden = !L.length; if (!L.length) { box.innerHTML = ''; return; }
   S.ev = Math.min(S.ev || 0, L.length - 1);
-  const e = L[S.ev], ms = e.t - Date.now();
-  box.innerHTML = `<span class="ev-type">${esc((e.description || '').split(' — ')[0] || 'مناسبة')}</span><b class="ev-title">${esc(e.title)}</b>
-    <span class="ev-cd">⏳ متبقي ${Math.floor(ms / 864e5)} يوم و ${Math.floor(ms % 864e5 / 36e5)} س</span><button class="ev-more">تفاصيل</button>
-    ${L.length > 1 ? `<span class="ev-pg"><button data-evn="-1" aria-label="السابقة">›</button>${S.ev + 1} / ${L.length}<button data-evn="1" aria-label="التالية">‹</button></span>` : ''}`;
+  const draw = () => {
+    const cur = evList(); if (!cur.length) return showEvent();
+    S.ev = Math.min(S.ev || 0, cur.length - 1);
+    const e = cur[S.ev], ms = e.t - Date.now(), s = Math.max(0, Math.floor(ms / 1000));
+    box.innerHTML = `<span class="ev-type">${esc((e.description || '').split(' — ')[0] || 'مناسبة')}</span><b class="ev-title">${esc(e.title)}</b>
+    <span class="ev-cd">⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}</span><button class="ev-more">تفاصيل</button>
+    ${cur.length > 1 ? `<span class="ev-pg"><button data-evn="-1" aria-label="السابقة">›</button>${S.ev + 1} / ${cur.length}<button data-evn="1" aria-label="التالية">‹</button></span>` : ''}`;
+  };
+  draw();
+  box.onpointerenter = () => evHold = true;
+  box.onpointerleave = () => evHold = false;
+  box.onpointerdown = () => evHold = true;
+  evTick = setInterval(() => { const cur = evList(); if (!cur.length) return showEvent(); if ((S.ev || 0) >= cur.length) S.ev = 0; const e = cur[S.ev || 0]; if (!e || e.t - Date.now() <= 0) return draw(); const cd = box.querySelector('.ev-cd'); if (cd) { const s = Math.floor((e.t - Date.now()) / 1000); cd.textContent = `⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; } }, 1000);
+  if (L.length > 1) evRot = setInterval(() => { if (!evHold) { const cur = evList(); if (cur.length > 1) { S.ev = ((S.ev || 0) + 1) % cur.length; draw(); } } }, 7000);
 }
 function evDetails() {
   const e = evList()[S.ev || 0]; if (!e) return;
@@ -149,7 +166,7 @@ function renderGraph(fitView) {
     const all = S.kids.get(m.id) || [], ks = kidsOf(m), o = ks.length > 0, hit = S.hit?.has(m.id);
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
-      <i>الجيل ${gen(m)}</i>${m.is_alive === false ? '' : '<em class="al"></em>'}${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
+      <i>الجيل ${gen(m)}</i>${S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
       <b>${esc(cardName(m))}</b><small>${esc(m.nickname || (m.is_alive === false ? 'رحمه الله' : ''))}</small>
       ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'} ${all.length}</button>` : ''}</div>`;
   }
@@ -199,7 +216,7 @@ function node(m) {
   const k = S.kids.get(m.id) || [], o = S.open.has(m.id), hit = S.hit?.has(m.id);
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
     ${k.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'}</button>` : '<span class="tg dot"></span>'}
-    <div class="nm" data-p="${m.id}" tabindex="0" role="button"><b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</div>
+    <div class="nm" data-p="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</div>
     ${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${k.length ? `<span class="ct">${k.length}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
 }
@@ -277,20 +294,22 @@ function waNum(p) {  // 05xxxxxxxx أو 5xxxxxxxx أو 00966... إلى صيغة 
 function profile(id) {
   const m = S.byId.get(id); if (!m) return;
   const father = S.byId.get(m.father_id), wives = S.wives.filter(w => w.husband_id === m.id), mother = S.wives.find(w => w.id === m.wife_mother_id);
+  const hub = S.wives.find(w => w.member_id === m.id), husband = hub ? S.byId.get(hub.husband_id) : null;
   const born = m.birth_year_text || (m.birth_date || '').slice(0, 4);
   const died = m.is_alive === false ? (m.death_year_text || (m.death_date || '').slice(0, 4) || 'غير معروف') : '';
   $('#profile-body').dataset.id = id;
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '', digits = waNum(m.phone);
-  $('#profile-body').innerHTML = `<h2>${esc(m.full_name)}</h2>
+  $('#profile-body').innerHTML = `${S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
     <p class="sub">${m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · رحمه الله' : ''}</p>
     ${m.achievement_badge ? `<p><span class="bd">${esc(m.achievement_badge)}</span></p>` : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
-      ${row('الزوجات', wives.map(w => esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (canMember(m) ? `<button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : '')).join('، '))}
+      ${row('الزوج', husband ? esc(husband.full_name) : '')}
+      ${row('الزوجات', wives.map(w => esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (w.member_id ? ' · من الأسرة <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>' : '') + (canMember(m) ? `<button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : '')).join('، '))}
       ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
   $('#profile').showModal();
 }
 $('#profile-x').onclick = () => $('#profile').close();
@@ -326,13 +345,13 @@ $('#form-x').onclick = () => $('#form').close();
 
 async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
-    death_year_text: d.dy.trim() || null, city: d.city.trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
-    birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null };
+    death_year_text: d.dy.trim() || null, city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
+    birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.namepub === '1' };
   const r = await op('secure_save_member', { p_id: m?.id ?? null, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: fid,
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
     p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code },
     () => { if (m) Object.assign(m, v); else S.members.push({ id: 'n' + Date.now(), father_id: fid, audio_url: null, created_at: Date.now(), ...v }); });
-  await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_passcode: S.code }, () => {});
+  await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_passcode: S.code }, () => {});
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
   // بطاقات تلقائية: إضافة مولود ← تهنئة، وتحويل حي إلى متوفى ← تعزية (تقبل السنة الحالية أو الماضية، هجري/ميلادي، بأرقام عربية أو إنجليزية)
@@ -351,15 +370,27 @@ function memberForm(m, parentId) {
     f('gender', 'الجنس', m?.gender || 'male', 'select', { opts: [['male', 'ذكر'], ['female', 'أنثى']] }),
     f('alive', 'الحالة', m?.is_alive === false ? '0' : '1', 'select', { opts: [['1', 'حي'], ['0', 'متوفى']] }),
     f('by', 'سنة الميلاد (نص)', m?.birth_year_text ?? (m?.birth_date || '').slice(0, 4)), f('dy', 'سنة الوفاة', m?.death_year_text),
-    f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
+    f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
+    f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
     f('order', 'ترتيب الميلاد بين إخوته', m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1, 'number'),
     ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name])] })] : []),
+    f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('story', 'نبذة', m?.biography_story || m?.bio, 'area')], d => saveMember(m, fid, d));
 }
 function wifeForm(m) {
-  openForm('إضافة زوجة لـ ' + m.full_name, [{ k: 'name', label: 'اسم الزوجة', req: true }, { k: 'fam', label: 'اسم عائلتها' }], async d => {
-    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: d.name.trim(), p_family_name: d.fam.trim() || null, p_passcode: S.code },
-      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: d.name.trim(), family_name: d.fam.trim() || null }));
+  const women = S.members.filter(x => x.gender === 'female').sort(byName);
+  openForm('إضافة زوجة لـ ' + m.full_name, [
+    { k: 'mode', label: 'نوع الزوجة', type: 'select', val: 'new', opts: [['new', 'من خارج الأسرة (اسم نصي)'], ['link', 'من نساء الأسرة (ربط بسجلها)']] },
+    { k: 'member', label: 'اخترها من نساء الشجرة (عند الربط)', type: 'select', opts: [['', '—'], ...women.map(w => [w.id, w.full_name])] },
+    { k: 'name', label: 'اسم الزوجة (عند عدم الربط)' }, { k: 'fam', label: 'اسم عائلتها' },
+    { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] }], async d => {
+    const linked = d.mode === 'link' && d.member ? S.byId.get(d.member) : null;
+    if (d.mode === 'link' && !linked) throw new Error('اختر الزوجة من قائمة نساء الأسرة');
+    const name = linked ? linked.full_name : d.name.trim();
+    if (!name) throw new Error('الاسم مطلوب');
+    const fam = linked ? null : (d.fam.trim() || null);
+    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_passcode: S.code },
+      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1' }));
     if (!CFG.DEMO) await refresh(); profile(m.id);
   });
 }
@@ -384,7 +415,8 @@ $('#profile-body').addEventListener('click', e => {
   const m = S.byId.get($('#profile-body').dataset.id);
   if (b.dataset.wd) return delWife(b.dataset.wd);
   ({ edit: () => { $('#profile').close(); memberForm(m); }, child: () => { $('#profile').close(); memberForm(null, m.id); },
-     wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m) })[b.dataset.act]?.();
+     wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m),
+     photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); } })[b.dataset.act]?.();
 });
 $('#m-export').onclick = () => {
   const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), members: S.members, wives: S.wives, events: S.events }, null, 1)], { type: 'application/json' });
@@ -396,9 +428,11 @@ $('#m-settings').onclick = async () => {
   const mode = CFG.DEMO ? 'family_code' : await rpc('get_access_mode');
   openForm('إعدادات الوصول', [
     { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
+    { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
     { k: 'fam', label: 'رمز عائلة جديد (فارغ = بلا تغيير، 6 خانات فأكثر)', type: 'password' },
     { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر)', type: 'password' }], async d => {
     await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
+    await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
     if (d.fam) await op('secure_set_family_code', { p_new_code: d.fam, p_passcode: S.code }, () => {});
     if (d.ed) await op('secure_set_editor_code', { p_new_code: d.ed, p_passcode: S.code }, () => {});
     alert('تم الحفظ');
@@ -544,9 +578,21 @@ $('#m-csv').onclick = menuClose(() => {
 
 /* ---------- مسؤولو الفروع (للمالك) ---------- */
 function branchesList() {
-  showInfo(`<h2>👥 مسؤولو الفروع</h2><p class="sub">لكل فرع مسؤول واحد يضيف ويعدّل داخل فرعه فقط، ولا يحذف ولا يصل لفروع الآخرين.</p>
-    ${S.branches.map(b => `<div class="evrow"><div><b>${esc(S.byId.get(b.root_id)?.full_name || '؟')}</b><small>المسؤول: ${esc(delegateName(b))}</small></div><span><button class="x" data-bf="${esc(b.root_id)}" aria-label="تعديل">✏️</button><button class="x" data-bx="${esc(b.root_id)}" aria-label="إلغاء">✕</button></span></div>`).join('') || '<p class="sub">لم يُعيَّن أحد بعد.</p>'}
+  showInfo(`<h2>👥 مسؤولو الفروع</h2><p class="sub">لكل فرع مسؤول واحد يضيف ويعدّل داخل فرعه فقط، ولا يحذف ولا يصل لفروع الآخرين. ورمز قراءة خاص بكل فرع يوزّعه المسؤول على أهله — إن تسرّب غيّرته وحده.</p>
+    ${S.branches.map(b => { const visits = S.accessStats?.by_branch?.[b.root_id] || 0; return `<div class="evrow"><div><b>${esc(S.byId.get(b.root_id)?.full_name || '؟')}</b><small>المسؤول: ${esc(delegateName(b))} · رمز القراءة: ${b.reader_set ? 'مضبوط ✓' : 'غير مضبوط'} · دخولات الفرع آخر 30 يوم: ${visits}</small></div><span><button class="x" data-brc="${esc(b.root_id)}" aria-label="رمز القراءة" title="رمز قراءة الفرع">🔑</button>${b.reader_set ? `<button class="x" data-brx="${esc(b.root_id)}" aria-label="إلغاء رمز القراءة" title="إلغاء رمز القراءة">🚫</button>` : ''}<button class="x" data-bf="${esc(b.root_id)}" aria-label="تعديل">✏️</button><button class="x" data-bx="${esc(b.root_id)}" aria-label="إلغاء">✕</button></span></div>`; }).join('') || '<p class="sub">لم يُعيَّن أحد بعد.</p>'}
     <div class="row adm"><button data-bf="">➕ تعيين مسؤول لفرع</button></div>`);
+}
+function readCodeForm(root) {
+  openForm(`رمز قراءة فرع «${S.byId.get(root)?.full_name || ''}»`, [
+    { k: 'code', label: 'رمز قراءة جديد (6 خانات فأكثر) — للقراءة فقط، يوزّعه المسؤول على أهل الفرع، وتغييره يبطل القديم فورًا', type: 'password', req: true }], async d => {
+    await op('secure_set_branch_read_code', { p_root: root, p_code: d.code, p_passcode: S.code }, () => { const b = S.branches.find(x => x.root_id === root); if (b) b.reader_set = true; });
+    if (!CFG.DEMO) await refresh(); branchesList();
+  });
+}
+async function clearReadCode(root) {
+  if (!confirm('إلغاء رمز قراءة هذا الفرع؟ من يدخل به سيفقد الوصول فورًا.')) return;
+  try { await op('secure_set_branch_read_code', { p_root: root, p_code: null, p_passcode: S.code }, () => { const b = S.branches.find(x => x.root_id === root); if (b) b.reader_set = false; }); if (!CFG.DEMO) await refresh(); branchesList(); }
+  catch (err) { alert(err.message); }
 }
 const underRoot = (m, root) => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.father_id), i++) if (p.id === root) return true; return false; };
 function branchForm(rootId) {
@@ -574,8 +620,11 @@ async function delBranch(root) {
   catch (err) { alert(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
-  const b = e.target.closest('[data-bf],[data-bx]'); if (!b) return;
-  if ('bx' in b.dataset) delBranch(b.dataset.bx); else { $('#profile').close(); branchForm(b.dataset.bf || null); }
+  const b = e.target.closest('[data-bf],[data-bx],[data-brc],[data-brx]'); if (!b) return;
+  if ('bx' in b.dataset) delBranch(b.dataset.bx);
+  else if ('brc' in b.dataset) { $('#profile').close(); readCodeForm(b.dataset.brc); }
+  else if ('brx' in b.dataset) clearReadCode(b.dataset.brx);
+  else { $('#profile').close(); branchForm(b.dataset.bf || null); }
 });
 $('#m-branches').onclick = () => { $('.more').open = false; branchesList(); };
 
@@ -660,8 +709,9 @@ const ANN_KEY = 'alm_seen_ann';
 const seenAnn = () => { try { return JSON.parse(localStorage.getItem(ANN_KEY) || '[]'); } catch (_) { return []; } };
 function markSeenAnn(id) { if (!id) return; const s = seenAnn(); if (!s.includes(id)) { s.push(id); try { localStorage.setItem(ANN_KEY, JSON.stringify(s.slice(-60))); } catch (_) {} } }
 async function postAnnouncement(kind, member) {
-  if (CFG.DEMO || !canEdit() || !member) return;
-  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male' }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } } catch (_) {}
+  if (CFG.DEMO || !member) return;
+  if (!canEdit()) { toast('البطاقة ظهرت لك فقط — نشرها للزوار يحتاج دخول المالك أو المحرر'); return; }
+  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male' }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } else toast('تعذر نشر البطاقة للزوار'); } catch (_) { toast('تعذر نشر البطاقة للزوار'); }
 }
 async function checkAnnouncements(popups = true) {
   if (CFG.DEMO || !S.code) return;
@@ -688,6 +738,108 @@ async function renderNewsbar() {
   bar.querySelectorAll('[data-ann]').forEach(b => b.onclick = () => { const a = items.find(z => z.id === b.dataset.ann); if (a) { markSeenAnn(a.id); openCard({ full_name: a.member_name, gender: a.gender }, a.kind); } });
   startNbCycle(items.length);
 }
+
+/* ---------- صور الأعضاء: ضغط بالمتصفح (~20KB)، تُجلب كسولًا بعد التحميل، وتحديث تلقائي ---------- */
+async function fetchPhotos() {
+  if (CFG.DEMO || !S.code || !S.members.length) return;
+  try {
+    const r = await rpc('get_photos', { p_code: S.code, p_ids: S.members.map(m => m.id) });
+    if (!r.ok) return;
+    const before = S.photos.size;
+    S.photos = new Map((r.items || []).map(x => [x.member_id, x.photo]));
+    if (S.photos.size !== before) render();
+  } catch (_) {}
+}
+function compressPhoto(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      let w = img.width, h = img.height; const k = Math.min(1, 360 / Math.max(w, h)); w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      let q = 0.82, out = cv.toDataURL('image/jpeg', q);
+      while (out.length > 28000 && q > 0.4) { q -= 0.12; out = cv.toDataURL('image/jpeg', q); }
+      res(out);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+$('#photo-file').addEventListener('change', async e => {
+  const file = e.target.files[0], mid = e.target.dataset.mid; e.target.value = '';
+  if (!file || !mid) return;
+  try {
+    const data = await compressPhoto(file);
+    if (CFG.DEMO) { S.photos.set(mid, data); }
+    else {
+      const r = await rpc('secure_set_photo', { p_passcode: S.code, p_member_id: mid, p_photo: data });
+      if (!r.ok) throw new Error(r.error || 'failed');
+      S.photos.set(mid, data);
+    }
+    toast('تم حفظ الصورة'); profile(mid); render();
+  } catch (_) { toast('تعذر حفظ الصورة'); }
+});
+async function silentRefresh() {
+  if (CFG.DEMO || !S.code || document.hidden || document.querySelector('dialog[open]')) return;
+  try {
+    const b = await rpc('get_bundle', { p_code: S.code });
+    if (!b.ok) return;
+    S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.role = b.role; S.branches = b.branches || []; S.branch = b.branch || null;
+    S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
+    index(); render(); showEvent(); applyRole(); inboxBadge();
+    checkAnnouncements(true);
+    fetchPhotos();
+  } catch (_) {}
+}
+
+/* ---------- محرر العائلة: زوجات وأبناء الأب في شاشة واحدة، لصق جماعي، حفظ واحد ---------- */
+async function saveMemberData(m, over) {
+  const v = { full_name: m.full_name, nickname: m.nickname, gender: m.gender, is_alive: m.is_alive !== false, birth_year_text: m.birth_year_text, death_year_text: m.death_year_text, city: m.city, achievement_badge: m.achievement_badge, phone: m.phone, birth_order: m.birth_order, wife_mother_id: m.wife_mother_id, biography_story: m.biography_story || m.bio, name_public: !!m.name_public, ...over };
+  const r = await op('secure_save_member', { p_id: m.id, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: m.father_id, p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text, p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code }, () => Object.assign(m, v));
+  await op('secure_update_member_extras', { p_id: m.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m.audio_url || null, p_name_public: v.name_public, p_passcode: S.code }, () => {});
+  return r;
+}
+function familyEditor(fid) {
+  if (!fid) {
+    const opts = [['', 'اختر…'], ...S.members.filter(m => m.gender !== 'female').sort(byName).map(m => [m.id, m.full_name])];
+    return openForm('محرر العائلة: اختر الأب', [{ k: 'f', label: 'الأب', type: 'select', opts }], d => { if (!d.f) throw new Error('اختر الأب'); setTimeout(() => familyEditor(d.f), 0); });
+  }
+  const f = S.byId.get(fid); if (!f) return;
+  const wives = S.wives.filter(w => w.husband_id === fid), kids = (S.kids.get(fid) || []);
+  showInfo(`<h2>👨‍👩‍👧 عائلة ${esc(f.full_name)}</h2>
+   <h3>الزوجات</h3>
+   ${wives.map(w => `<div class="evrow"><div><b>${esc(w.full_name)}</b>${w.member_id ? '<small>مرتبطة بسجلها في الشجرة</small>' : ''}</div></div>`).join('') || '<p class="sub">لا زوجات مسجلات — أضف من ملف الأب.</p>'}
+   <h3>الأبناء (${kids.length}) — عدّل الاسم أو الجنس في مكانه</h3>
+   ${kids.map(k => `<div class="frow"><input data-kn="${k.id}" value="${esc(k.full_name)}"><select data-kg="${k.id}"><option value="male"${k.gender !== 'female' ? ' selected' : ''}>ذكر</option><option value="female"${k.gender === 'female' ? ' selected' : ''}>أنثى</option></select></div>`).join('') || '<p class="sub">لا أبناء بعد.</p>'}
+   <h3>إضافة أبناء دفعة واحدة</h3>
+   <p class="sub">اسم في كل سطر، وتُضاف كلها عند الحفظ. للبنات اختم السطر بكلمة «بنت».</p>
+   <textarea id="fe-new" rows="4" placeholder="اسم الابن الأول&#10;اسم الابنة الثانية بنت"></textarea>
+   <div class="frow"><label>أم المضافين</label><select id="fe-mom"><option value="">—</option>${wives.map(w => `<option value="${w.id}">${esc(w.full_name)}</option>`).join('')}</select></div>
+   <div class="row adm"><button id="fe-save">💾 حفظ الكل</button></div>
+   <p class="sub" id="fe-msg"></p>`);
+  $('#fe-save').onclick = async () => {
+    const msg = $('#fe-msg'); msg.textContent = 'جارٍ الحفظ…';
+    let done = 0, fail = 0;
+    for (const inp of document.querySelectorAll('[data-kn]')) {
+      const k = S.byId.get(inp.dataset.kn); if (!k) continue;
+      const name = inp.value.trim(), g = document.querySelector(`[data-kg="${k.id}"]`).value;
+      if (!name || (name === k.full_name && g === k.gender)) continue;
+      try { await saveMemberData(k, { full_name: name, gender: g }); done++; } catch (_) { fail++; }
+    }
+    const mom = $('#fe-mom').value || null;
+    let order = kids.length;
+    for (const raw of $('#fe-new').value.split('\n')) {
+      let name = raw.trim(); if (!name) continue;
+      let gender = 'male';
+      if (/\s(بنت|أنثى)$/.test(name)) { gender = 'female'; name = name.replace(/\s(بنت|أنثى)$/, '').trim(); }
+      try { await op('secure_save_member', { p_id: null, p_full_name: name, p_nickname: null, p_gender: gender, p_father_id: fid, p_wife_mother_id: mom, p_birth_order: ++order, p_phone: null, p_is_alive: true, p_birth_year_text: null, p_death_year_text: null, p_biography_story: null, p_passcode: S.code }, () => {}); done++; } catch (_) { fail++; }
+    }
+    msg.textContent = `تم حفظ ${done} تغيير${fail ? ` — وتعذّر ${fail} (راجعها من ملف كل فرد)` : ''}.`;
+    if (!CFG.DEMO) await refresh(); else render();
+  };
+}
+$('#m-family').onclick = menuClose(() => familyEditor(null));
 
 /* ---------- البداية ---------- */
 (async () => {

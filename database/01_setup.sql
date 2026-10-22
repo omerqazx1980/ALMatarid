@@ -142,6 +142,9 @@ begin
   for r in select branch_root_id, passcode_hash from public.branch_editors loop
     if r.passcode_hash = crypt(p_code, r.passcode_hash) then return r.branch_root_id; end if;
   end loop;
+  for r in select branch_root_id, code_hash from public.branch_access_codes loop
+    if r.code_hash = crypt(p_code, r.code_hash) then return r.branch_root_id; end if;
+  end loop;
   return null;
 end $$;
 
@@ -168,10 +171,18 @@ $$;
 
 create function public._role_of(p_code text) returns text
 language plpgsql security definer set search_path = public, extensions as $$
+declare r record;
 begin
   if public.verify_owner(p_code)  then return 'owner';  end if;
   if public.verify_editor(p_code) then return 'editor'; end if;
-  if public._branch_of(p_code) is not null then return 'branch'; end if;
+  if p_code is not null and length(p_code) > 0 then
+    for r in select passcode_hash from public.branch_editors loop
+      if r.passcode_hash = crypt(p_code, r.passcode_hash) then return 'branch'; end if;
+    end loop;
+    for r in select code_hash from public.branch_access_codes loop
+      if r.code_hash = crypt(p_code, r.code_hash) then return 'reader'; end if;
+    end loop;
+  end if;
   if public.verify_family(p_code) then return 'family'; end if;
   return null;
 end $$;
@@ -212,7 +223,7 @@ create function public._who(p_code text, out o_role text, out o_branch uuid)
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   o_role := public._authenticate(p_code);
-  if o_role = 'branch' then o_branch := public._branch_of(p_code); end if;
+  if o_role in ('branch', 'reader') then o_branch := public._branch_of(p_code); end if;
 end $$;
 
 create function public._fail(p_msg text) returns jsonb
@@ -289,7 +300,7 @@ $$;
 create function public.get_bundle(p_code text default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare
-  v_mode text; v_role text; v_priv boolean; v_seen boolean; v_branch uuid; v_scope uuid[];
+  v_mode text; v_role text; v_priv boolean; v_seen boolean; v_branch uuid; v_scope uuid[]; v_wvis boolean;
 begin
   select access_mode into v_mode from public.system_settings where id = 1;
   v_role := public._authenticate(p_code);
@@ -302,27 +313,43 @@ begin
   end if;
 
   v_priv := coalesce(v_role in ('owner', 'editor'), false);
+  select coalesce(women_names_visible, true) into v_wvis from public.system_settings where id = 1;
   v_seen := v_role is not null;
 
-  if v_role = 'branch' then
+  if v_role in ('branch', 'reader') then
     v_branch := public._branch_of(p_code);
-    select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
+    if v_role = 'branch' then
+      select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
+    end if;
+  end if;
+
+  if v_role in ('family', 'branch', 'reader') and p_code is not null then
+    insert into public.access_log(role, branch_root_id, ip)
+    select v_role, v_branch, public._client_ip()
+    where not exists (select 1 from public.access_log a where a.ip = public._client_ip() and a.role = v_role
+      and a.branch_root_id is not distinct from v_branch and a.created_at > now() - interval '30 minutes');
   end if;
 
   return jsonb_build_object(
     'ok', true,
     'mode', v_mode,
     'role', coalesce(v_role, 'visitor'),
+    'women_names_visible', v_wvis,
+    'access_stats', case when v_role = 'owner' then (select jsonb_build_object(
+      'family', (select count(*) from public.access_log where role = 'family' and created_at > now() - interval '30 days'),
+      'by_branch', coalesce((select jsonb_object_agg(branch_root_id::text, c) from (select branch_root_id, count(*) c from public.access_log where branch_root_id is not null and created_at > now() - interval '30 days' group by branch_root_id) t), '{}'::jsonb))) end,
     'branch', case when v_branch is not null then
         (select jsonb_build_object('root_id', e.branch_root_id, 'delegate_id', e.delegate_member_id, 'label', e.label)
            from public.branch_editors e where e.branch_root_id = v_branch) end,
     'branches', case when v_role = 'owner' then
-        coalesce((select jsonb_agg(jsonb_build_object('root_id', e.branch_root_id, 'delegate_id', e.delegate_member_id, 'label', e.label) order by e.created_at)
+        coalesce((select jsonb_agg(jsonb_build_object('root_id', e.branch_root_id, 'delegate_id', e.delegate_member_id, 'label', e.label, 'reader_set', exists(select 1 from public.branch_access_codes c where c.branch_root_id = e.branch_root_id)) order by e.created_at)
                     from public.branch_editors e), '[]'::jsonb) end,
     'members', coalesce((
       select jsonb_agg(
         jsonb_build_object(
-          'id', m.id, 'full_name', m.full_name, 'nickname', m.nickname, 'gender', m.gender,
+          'id', m.id, 'full_name', public._woman_name(m.full_name, coalesce(m.name_public, false), (v_scope is not null and m.id = any(v_scope)), 'ابنة ' || coalesce((select f.full_name from public.members f where f.id = m.father_id), 'الأسرة'), (m.gender = 'female' and not v_wvis and not v_priv)),
+          'nickname', case when m.gender = 'female' and not v_wvis and not v_priv and not coalesce(m.name_public, false) and not (v_scope is not null and m.id = any(v_scope)) then null else m.nickname end,
+          'name_public', coalesce(m.name_public, false), 'gender', m.gender,
           'father_id', m.father_id, 'wife_mother_id', m.wife_mother_id,
           'birth_date', m.birth_date, 'death_date', m.death_date, 'is_alive', m.is_alive,
           'birth_year_text', m.birth_year_text, 'death_year_text', m.death_year_text,
@@ -333,8 +360,12 @@ begin
         order by m.created_at)
         from public.members m), '[]'::jsonb),
     'wives', case when v_seen then coalesce((
-      select jsonb_agg(jsonb_build_object('id', w.id, 'husband_id', w.husband_id, 'full_name', w.full_name,
-                                          'family_name', w.family_name, 'created_at', w.created_at) order by w.created_at)
+      select jsonb_agg(jsonb_build_object('id', w.id, 'husband_id', w.husband_id, 'full_name', public._woman_name(coalesce((select lm.full_name from public.members lm where lm.id = w.member_id), w.full_name),
+            coalesce(w.name_public, false) or coalesce((select lm.name_public from public.members lm where lm.id = w.member_id), false),
+            (v_scope is not null and (w.husband_id = any(v_scope) or w.member_id = any(v_scope))),
+            'زوجة ' || coalesce((select h.full_name from public.members h where h.id = w.husband_id), 'أحد أفراد الأسرة'), (not v_wvis and not v_priv)),
+                                          'family_name', case when v_wvis or v_priv or coalesce(w.name_public, false) or (v_scope is not null and (w.husband_id = any(v_scope) or w.member_id = any(v_scope))) then w.family_name else null end,
+                                          'member_id', w.member_id, 'name_public', coalesce(w.name_public, false), 'created_at', w.created_at) order by w.created_at)
         from public.wives w), '[]'::jsonb) else '[]'::jsonb end,
     'events', case when v_seen then coalesce((
       select jsonb_agg(jsonb_build_object('id', e.id, 'title', e.title, 'event_date', e.event_date,
@@ -852,6 +883,183 @@ begin
 end $$;
 
 grant execute on function public.secure_post_announcement(text, text, uuid, text, text) to anon, authenticated;
+grant execute on function public.get_announcements(text) to anon, authenticated;
+
+-- ============================================================
+-- القسم 10: رموز قراءة الفروع، سجل الدخول، إخفاء أسماء النساء،
+--          ربط الزوجات بسجلاتهن، وصور الأعضاء
+-- ============================================================
+create table if not exists public.branch_access_codes (
+  branch_root_id uuid primary key references public.members(id) on delete cascade,
+  code_hash text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.branch_access_codes enable row level security;
+revoke all on public.branch_access_codes from anon, authenticated;
+
+create table if not exists public.access_log (
+  id bigint generated always as identity primary key,
+  role text not null,
+  branch_root_id uuid,
+  ip text,
+  created_at timestamptz not null default now()
+);
+alter table public.access_log enable row level security;
+revoke all on public.access_log from anon, authenticated;
+
+create table if not exists public.member_photos (
+  member_id uuid primary key references public.members(id) on delete cascade,
+  photo text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.member_photos enable row level security;
+revoke all on public.member_photos from anon, authenticated;
+
+alter table public.members add column if not exists name_public boolean not null default false;
+alter table public.wives add column if not exists name_public boolean not null default false;
+alter table public.wives add column if not exists member_id uuid references public.members(id) on delete set null;
+alter table public.system_settings add column if not exists women_names_visible boolean not null default true;
+
+-- اسم امرأة كما يجب أن يصل لكل دور: مقنّع إن فُعّل الإخفاء ولا استثناء ولا نطاق
+create or replace function public._woman_name(p_real text, p_public boolean, p_scope_hit boolean, p_masked text, p_hide boolean)
+returns text language sql immutable as $$
+  select case when p_hide and not coalesce(p_public, false) and not coalesce(p_scope_hit, false) then p_masked else p_real end;
+$$;
+
+create or replace function public.secure_set_women_names_visible(p_passcode text, p_visible boolean)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text;
+begin
+  v_role := public._authenticate(p_passcode);
+  if v_role is distinct from 'owner' then return public._deny(v_role); end if;
+  update public.system_settings set women_names_visible = coalesce(p_visible, true) where id = 1;
+  return jsonb_build_object('success', true);
+end $$;
+
+create or replace function public.secure_set_branch_read_code(p_passcode text, p_root uuid, p_code text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text;
+begin
+  v_role := public._authenticate(p_passcode);
+  if v_role is distinct from 'owner' then return public._deny(v_role); end if;
+  if p_code is null or length(p_code) = 0 then
+    delete from public.branch_access_codes where branch_root_id = p_root;
+  else
+    if length(p_code) < 6 then return public._fail('الرمز قصير: 6 خانات فأكثر'); end if;
+    insert into public.branch_access_codes(branch_root_id, code_hash)
+    values (p_root, crypt(p_code, gen_salt('bf')))
+    on conflict (branch_root_id) do update set code_hash = excluded.code_hash, updated_at = now();
+  end if;
+  return jsonb_build_object('success', true);
+end $$;
+
+-- الزوجة: توقيع جديد (ربط بعضوة + استثناء الإظهار) — يُسقَط القديم أولًا
+drop function if exists public.secure_save_wife(uuid, text, text, text);
+create function public.secure_save_wife(
+  p_husband_id uuid, p_full_name text, p_family_name text, p_member_id uuid, p_name_public boolean, p_passcode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_wife_id uuid;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return public._deny(v_role); end if;
+  if p_full_name is null or length(trim(p_full_name)) = 0 then return public._fail('الاسم مطلوب'); end if;
+  if v_role = 'branch' and not public._in_branch(v_branch, p_husband_id) then
+    return public._fail('هذا الفرد خارج صلاحية فرعك');
+  end if;
+  perform set_config('app.actor', public._actor(v_role, v_branch), true);
+  insert into public.wives (husband_id, full_name, family_name, member_id, name_public)
+  values (p_husband_id, trim(p_full_name), p_family_name, p_member_id, coalesce(p_name_public, false)) returning id into v_wife_id;
+  return jsonb_build_object('success', true, 'id', v_wife_id);
+end $$;
+
+drop function if exists public.secure_update_member_extras(uuid, text, text, text, text);
+create function public.secure_update_member_extras(
+  p_id uuid, p_city text, p_achievement_badge text, p_audio_url text, p_passcode text, p_name_public boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return public._deny(v_role); end if;
+  if v_role = 'branch' and not public._in_branch(v_branch, p_id) then
+    return public._fail('هذا الفرد خارج صلاحية فرعك');
+  end if;
+  perform set_config('app.actor', public._actor(v_role, v_branch), true);
+  update public.members set city = p_city, achievement_badge = p_achievement_badge, audio_url = p_audio_url,
+    name_public = coalesce(p_name_public, false) where id = p_id;
+  return jsonb_build_object('success', true);
+end $$;
+
+create or replace function public.secure_set_photo(p_passcode text, p_member_id uuid, p_photo text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  if v_role = 'branch' and not public._in_branch(v_branch, p_member_id) then
+    return jsonb_build_object('ok', false, 'error', 'out_of_scope');
+  end if;
+  if p_photo is null then
+    delete from public.member_photos where member_id = p_member_id;
+  else
+    if length(p_photo) > 70000 then return jsonb_build_object('ok', false, 'error', 'too_large'); end if;
+    insert into public.member_photos(member_id, photo) values (p_member_id, p_photo)
+    on conflict (member_id) do update set photo = excluded.photo, updated_at = now();
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.get_photos(p_code text, p_ids uuid[])
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_priv boolean; v_wvis boolean; v_scope uuid[];
+begin
+  select * into v_role, v_branch from public._who(p_code);
+  if v_role is null or v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  v_priv := v_role in ('owner', 'editor');
+  select coalesce(women_names_visible, true) into v_wvis from public.system_settings where id = 1;
+  if v_role = 'branch' and v_branch is not null then
+    select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
+  end if;
+  return jsonb_build_object('ok', true, 'items', coalesce((
+    select jsonb_agg(jsonb_build_object('member_id', ph.member_id, 'photo', ph.photo))
+    from public.member_photos ph join public.members m on m.id = ph.member_id
+    where ph.member_id = any(p_ids)
+      and not (m.gender = 'female' and not v_wvis and not v_priv
+               and not coalesce(m.name_public, false)
+               and not (v_scope is not null and m.id = any(v_scope)))), '[]'::jsonb));
+end $$;
+
+-- إعلانات البطاقات: إخفاء أسماء النساء فيها أيضًا
+create or replace function public.get_announcements(p_code text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_priv boolean; v_wvis boolean; v_scope uuid[];
+begin
+  select * into v_role, v_branch from public._who(p_code);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if v_role is null then return jsonb_build_object('ok', false, 'error', 'code_required'); end if;
+  v_priv := v_role in ('owner', 'editor');
+  select coalesce(women_names_visible, true) into v_wvis from public.system_settings where id = 1;
+  if v_role = 'branch' and v_branch is not null then
+    select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
+  end if;
+  return jsonb_build_object('ok', true, 'items', coalesce((
+    select jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'member_id', a.member_id,
+      'member_name', case when mm.gender = 'female' and not v_wvis and not v_priv and not coalesce(mm.name_public, false)
+                               and not (v_scope is not null and mm.id = any(v_scope))
+                          then 'ابنة ' || coalesce(fm.full_name, 'الأسرة') else a.member_name end,
+      'gender', a.gender, 'created_at', a.created_at, 'expires_at', a.expires_at) order by a.created_at desc)
+    from public.announcements a
+    left join public.members mm on mm.id = a.member_id
+    left join public.members fm on fm.id = mm.father_id
+    where a.expires_at > now()), '[]'::jsonb));
+end $$;
+
+grant execute on function public.secure_set_women_names_visible(text, boolean) to anon, authenticated;
+grant execute on function public.secure_set_branch_read_code(text, uuid, text) to anon, authenticated;
+grant execute on function public.secure_save_wife(uuid, text, text, uuid, boolean, text) to anon, authenticated;
+grant execute on function public.secure_update_member_extras(uuid, text, text, text, text, boolean) to anon, authenticated;
+grant execute on function public.secure_set_photo(text, uuid, text) to anon, authenticated;
+grant execute on function public.get_photos(text, uuid[]) to anon, authenticated;
 grant execute on function public.get_announcements(text) to anon, authenticated;
 
 commit;
