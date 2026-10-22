@@ -1042,7 +1042,7 @@ begin
     where ph.member_id = any(p_ids)
       and not (not v_priv and (coalesce(m.name_hidden, false) or (m.gender = 'female' and not v_wvis
                and not coalesce(m.name_public, false)
-               and not (v_scope is not null and m.id = any(v_scope))))), '[]'::jsonb));
+               and not (v_scope is not null and m.id = any(v_scope)))))), '[]'::jsonb));
 end $$;
 
 -- إعلانات البطاقات: مرتبطة بالعضو فعليًا — حذفه يحذف إعلانه، واليتيمة لا تظهر أبدًا،
@@ -1069,7 +1069,7 @@ begin
     join public.members mm on mm.id = a.member_id
     where a.expires_at > now()
       and not (not v_priv and (coalesce(mm.name_hidden, false) or (mm.gender = 'female' and not v_wvis and not coalesce(mm.name_public, false)
-               and not (v_scope is not null and mm.id = any(v_scope))))), '[]'::jsonb));
+               and not (v_scope is not null and mm.id = any(v_scope)))))), '[]'::jsonb));
 end $$;
 
 grant execute on function public.secure_set_women_names_visible(text, boolean) to anon, authenticated;
