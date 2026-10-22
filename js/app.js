@@ -140,8 +140,63 @@ function evDetails() {
   $('#profile-body').innerHTML = `<h2>${esc(e.title)}</h2><p class="sub">${esc((e.description || '').split('\n')[0].split(' — ')[0])}</p>
     <dl>${row('الميلادي', esc(f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })))}${row('الهجري', esc(f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })))}
     ${row('المكان', esc(e.location_name || '') + (url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">الخريطة</a>` : ''))}</dl>
-    ${e.description ? `<div class="story">${esc(e.description)}</div>` : ''}`;
+    ${e.description ? `<div class="story">${esc(e.description)}</div>` : ''}<div id="evdoc"></div>`;
   $('#profile').showModal();
+  loadEvDoc(e);
+}
+/* توثيق المناسبة: صور داخل الموقع + روابط فيديو + حكاية — للمالك/المحرر أو صاحب المناسبة برمز توثيقها */
+const evDocCodes = new Map();
+async function loadEvDoc(e) {
+  const box = $('#evdoc'); if (!box) return;
+  const canDoc = () => canEdit() || evDocCodes.has(String(e.id));
+  const pass = () => canEdit() ? S.code : evDocCodes.get(String(e.id));
+  let items = [];
+  if (CFG.DEMO) items = e._media || [];
+  else { try { const r = await rpc('get_event_media', { p_code: S.code, p_event_id: e.id }); if (r.ok) items = r.items || []; } catch (_) {} }
+  const photos = items.filter(x => x.kind === 'photo'), vids = items.filter(x => x.kind === 'video');
+  box.innerHTML = `<h3 class="evdoch">📸 توثيق المناسبة</h3>
+    ${e.story ? `<div class="story">${esc(e.story)}</div>` : '<p class="sub">لا حكاية موثقة بعد.</p>'}
+    ${photos.length ? `<div class="evgrid">${photos.map(x => `<figure><img src="${x.url}" alt="${esc(x.caption || 'صورة من المناسبة')}" data-evzoom="${x.id}">${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف صورة">✕</button>` : ''}${x.caption ? `<figcaption>${esc(x.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
+    ${vids.map(x => `<div class="evvid">▶️ <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.caption || 'مشاهدة الفيديو')}</a>${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف فيديو">✕</button>` : ''}</div>`).join('')}
+    <div class="evdoc-tools">${canDoc() ? `<button data-evadd="photo">➕ صورة</button><button data-evadd="video">➕ فيديو (رابط)</button><button data-evadd="story">✏️ ${e.story ? 'تعديل الحكاية' : 'كتابة حكاية المناسبة'}</button>` : `<button data-evadd="code">🎟️ لديّ رمز توثيق هذه المناسبة</button>`}</div>`;
+  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const x = photos.find(z => z.id === im.dataset.evzoom); if (x) { $('#profile-body').innerHTML = `<button class="x" id="evback">→ رجوع</button><img class="evbig" src="${x.url}" alt="">${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`; $('#evback').onclick = () => evDetails(); } });
+  box.querySelectorAll('[data-evdel]').forEach(b => b.onclick = async () => {
+    if (!confirm('حذف هذا العنصر من التوثيق؟')) return;
+    try {
+      if (CFG.DEMO) e._media = (e._media || []).filter(z => z.id !== b.dataset.evdel);
+      else { const r = await rpc('secure_delete_event_media', { p_passcode: pass(), p_media_id: b.dataset.evdel }); if (!r.ok) throw new Error(); e.media_count = Math.max(0, (e.media_count || 1) - 1); }
+      loadEvDoc(e); toast('تم الحذف');
+    } catch (_) { toast('تعذر الحذف — تأكد من الرمز'); }
+  });
+  box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.evadd;
+    if (k === 'code') { const c = prompt('أدخل رمز توثيق هذه المناسبة (تحصل عليه من مالك الموقع):'); if (c) { evDocCodes.set(String(e.id), c.trim()); loadEvDoc(e); } return; }
+    if (k === 'photo') { const f = $('#ev-file'); f.dataset.eid = e.id; f.click(); return; }
+    if (k === 'video') {
+      const u = prompt('رابط الفيديو (يوتيوب/درايف…):'); if (!u) return;
+      const cap = prompt('عنوان الفيديو (اختياري):') || '';
+      try {
+        if (CFG.DEMO) (e._media = e._media || []).push({ id: 'v' + Date.now(), kind: 'video', url: u.trim(), caption: cap.trim() || null });
+        else { const r = await rpc('secure_add_event_media', { p_passcode: pass(), p_event_id: e.id, p_kind: 'video', p_url: u.trim(), p_caption: cap.trim() }); if (!r.ok) throw new Error(); e.media_count = (e.media_count || 0) + 1; }
+        loadEvDoc(e); toast('تمت إضافة الفيديو');
+      } catch (_) { toast('تعذر الإضافة — تأكد من الرابط أو الرمز'); }
+      return;
+    }
+    if (k === 'story') {
+      const s = prompt('حكاية المناسبة (وين كانت؟ أبرز ما صار؟):', e.story || ''); if (s === null) return;
+      try {
+        if (!CFG.DEMO) { const r = await rpc('secure_set_event_story', { p_passcode: pass(), p_event_id: e.id, p_story: s }); if (!r.ok) throw new Error(); }
+        e.story = s.trim() || null; evDetails(); toast('تم حفظ الحكاية');
+      } catch (_) { toast('تعذر الحفظ — تأكد من الرمز'); }
+    }
+  });
+}
+function compressEventPhoto(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(img.src); let w = img.width, h = img.height; const k = Math.min(1, 1280 / Math.max(w, h)); w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k)); const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); let q = 0.82, out = cv.toDataURL('image/jpeg', q); while (out.length > 560000 && q > 0.45) { q -= 0.1; out = cv.toDataURL('image/jpeg', q); } res(out); };
+    img.onerror = rej; img.src = URL.createObjectURL(file);
+  });
 }
 $('#event').addEventListener('click', ev => {
   const n = ev.target.closest('[data-evn]');
@@ -357,7 +412,7 @@ $('#form-x').onclick = () => $('#form').close();
 async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
     death_year_text: d.alive === '1' ? null : (d.dy.trim() || null), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
-    birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' };
+    birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.gender === 'female' && d.namepub === '1', name_hidden: d.gender === 'female' && d.namehid === '1' };
   const r = await op('secure_save_member', { p_id: m?.id ?? null, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: fid,
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
     p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code },
@@ -401,6 +456,8 @@ function memberForm(m, parentId) {
   }
   const alSel = document.querySelector('#form-fields [name=alive]'), dyInp = document.querySelector('#form-fields [name=dy]');
   if (alSel && dyInp) { const syncAlive = () => { dyInp.closest('.fl').style.display = alSel.value === '1' ? 'none' : ''; }; alSel.addEventListener('change', syncAlive); syncAlive(); }
+  const gSel = document.querySelector('#form-fields [name=gender]');
+  if (gSel) { const syncGender = () => { const fem = gSel.value === 'female'; for (const n of ['namepub', 'namehid']) { const inp = document.querySelector(`#form-fields [name=${n}]`); if (inp) inp.closest('.fl').style.display = fem ? '' : 'none'; } }; gSel.addEventListener('change', syncGender); syncGender(); }
 }
 function wifeForm(m) {
   const women = S.members.filter(x => x.gender === 'female').sort(byName);
@@ -487,7 +544,7 @@ const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', 
 function eventsList() {
   const now = Date.now(), past = e => new Date(e.event_date).getTime() < now;
   const L = [...(S.events || [])].sort((a, b) => (past(a) ? 1 : 0) - (past(b) ? 1 : 0) || new Date(a.event_date) - new Date(b.event_date));
-  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}<small>${esc(evWhen(e))} · ${esc(hijriShort(new Date(e.event_date)))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
+  showInfo(`<h2>مناسبات الأسرة</h2>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}${e.media_count ? ` <span class="evmed">📸 ${e.media_count}</span>` : ''}<small>${esc(evWhen(e))} · ${esc(hijriShort(new Date(e.event_date)))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
 }
 function eventForm(e) {
   const cur = e ? new Date(e.event_date) : new Date(), hj = gregToHijri(cur);
@@ -497,7 +554,8 @@ function eventForm(e) {
     { k: 'date', label: 'الموعد (ميلادي)', val: e ? localDT(e.event_date) : '', type: 'datetime-local' },
     { type: 'raw', html: `<div class="hjrow" hidden><span class="hjlab">الموعد (هجري)</span><select name="hd">${Array.from({ length: 30 }, (_, i) => `<option value="${i + 1}"${hj.d === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select><select name="hm">${HJ_MONTHS.map((t, i) => `<option value="${i + 1}"${hj.m === i + 1 ? ' selected' : ''}>${t}</option>`).join('')}</select><input name="hy" type="number" value="${hj.y}" min="1300" max="1600" aria-label="السنة الهجرية"><input name="ht" type="time" value="${pad(cur.getHours())}:${pad(cur.getMinutes())}" aria-label="الوقت"></div>` },
     { k: 'place', label: 'المكان', val: e?.location_name }, { k: 'url', label: 'رابط الخريطة (اختياري)', val: e?.location_url, type: 'url' },
-    { k: 'desc', label: 'النوع والتفاصيل (السطر الأول: النوع — المستضيف)', val: e?.description, type: 'area' }], async d => {
+    { k: 'desc', label: 'النوع والتفاصيل (السطر الأول: النوع — المستضيف)', val: e?.description, type: 'area' },
+    { k: 'doccode', label: 'رمز توثيق المناسبة (اختياري — يُعطى لصاحبها ليضيف الصور والفيديو والحكاية بنفسه)', val: e?.doc_code || '' }], async d => {
     const url = d.url.trim(); if (url && !/^https?:\/\//.test(url)) throw new Error('رابط الخريطة يجب أن يبدأ بـ http');
     let when;
     if (d.cal === 'h') {
@@ -512,7 +570,7 @@ function eventForm(e) {
       when = new Date(d.date);
     }
     const v = { title: d.title.trim(), event_date: when.toISOString(), location_name: d.place.trim() || null, location_url: url || null, description: d.desc.trim() || null };
-    await op('secure_save_event', { p_id: e?.id ?? null, p_title: v.title, p_event_date: v.event_date, p_location_name: v.location_name, p_location_url: v.location_url, p_description: v.description, p_passcode: S.code },
+    await op('secure_save_event', { p_id: e?.id ?? null, p_title: v.title, p_event_date: v.event_date, p_location_name: v.location_name, p_location_url: v.location_url, p_description: v.description, p_doc_code: d.doccode.trim(), p_passcode: S.code },
       () => { if (e) Object.assign(e, v); else S.events.push({ id: 'e' + Date.now(), ...v }); });
     if (!CFG.DEMO) await refresh(); showEvent(); eventsList();
   });
@@ -834,6 +892,18 @@ function compressPhoto(file) {
     img.src = URL.createObjectURL(file);
   });
 }
+$('#ev-file').addEventListener('change', async e => {
+  const file = e.target.files[0], eid = e.target.dataset.eid; e.target.value = '';
+  if (!file || !eid) return;
+  const ev = S.events.find(x => String(x.id) === String(eid)); if (!ev) return;
+  try {
+    const data = await compressEventPhoto(file);
+    const cap = prompt('تعليق على الصورة (اختياري):') || '';
+    if (CFG.DEMO) (ev._media = ev._media || []).push({ id: 'p' + Date.now(), kind: 'photo', url: data, caption: cap.trim() || null });
+    else { const pc = canEdit() ? S.code : evDocCodes.get(String(eid)); const r = await rpc('secure_add_event_media', { p_passcode: pc, p_event_id: eid, p_kind: 'photo', p_url: data, p_caption: cap.trim() }); if (!r.ok) throw new Error(); ev.media_count = (ev.media_count || 0) + 1; }
+    toast('تمت إضافة الصورة'); if ($('#evdoc')) loadEvDoc(ev);
+  } catch (_) { toast('تعذر رفع الصورة'); }
+});
 $('#photo-file').addEventListener('change', async e => {
   const file = e.target.files[0], mid = e.target.dataset.mid; e.target.value = '';
   if (!file || !mid) return;

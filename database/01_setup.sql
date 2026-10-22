@@ -372,7 +372,9 @@ begin
     'events', case when v_seen then coalesce((
       select jsonb_agg(jsonb_build_object('id', e.id, 'title', e.title, 'event_date', e.event_date,
                                           'location_name', e.location_name, 'location_url', e.location_url,
-                                          'description', e.description) order by e.event_date)
+                                          'description', e.description, 'story', e.story,
+                                          'doc_code', case when v_priv then e.doc_code else null end,
+                                          'media_count', (select count(*) from public.event_media em where em.event_id = e.id)) order by e.event_date)
         from public.family_events e), '[]'::jsonb) else '[]'::jsonb end
   );
 end $$;
@@ -1092,6 +1094,125 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 grant execute on function public.secure_delete_announcement(text, uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- توثيق المناسبات للأجيال: صور داخل الموقع + روابط فيديو + حكاية،
+-- وصلاحية لصاحب المناسبة عبر «رمز توثيق» خاص بمناسبته (طلب المالك 2026-10-22)
+-- ---------------------------------------------------------------------
+alter table public.family_events add column if not exists doc_code text;
+alter table public.family_events add column if not exists story text;
+create table if not exists public.event_media (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.family_events(id) on delete cascade,
+  kind text not null check (kind in ('photo', 'video')),
+  url text not null,
+  caption text,
+  created_at timestamptz not null default now()
+);
+alter table public.event_media enable row level security;
+revoke all on public.event_media from anon, authenticated;
+
+create or replace function public._event_doc_ok(p_passcode text, p_event_id uuid) returns boolean
+language sql security definer set search_path = public, extensions as $$
+  select exists (select 1 from public.family_events e
+                  where e.id = p_event_id and e.doc_code is not null
+                    and length(e.doc_code) >= 4 and e.doc_code = p_passcode);
+$$;
+revoke execute on function public._event_doc_ok(text, uuid) from public, anon, authenticated;
+
+create or replace function public.get_event_media(p_code text, p_event_id uuid)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text;
+begin
+  v_role := public._authenticate(p_code);
+  if v_role is null or v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  return jsonb_build_object('ok', true, 'items', coalesce((
+    select jsonb_agg(jsonb_build_object('id', em.id, 'kind', em.kind, 'url', em.url, 'caption', em.caption) order by em.created_at)
+      from public.event_media em where em.event_id = p_event_id), '[]'::jsonb));
+end $$;
+grant execute on function public.get_event_media(text, uuid) to anon, authenticated;
+
+create or replace function public.secure_add_event_media(p_passcode text, p_event_id uuid, p_kind text, p_url text, p_caption text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_id uuid;
+begin
+  v_role := public._authenticate(p_passcode);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if not (coalesce(v_role, '') in ('owner', 'editor') or public._event_doc_ok(p_passcode, p_event_id)) then
+    return jsonb_build_object('ok', false, 'error', 'denied');
+  end if;
+  if p_kind not in ('photo', 'video') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+  if p_kind = 'video' and coalesce(p_url, '') !~* '^https?://' then return jsonb_build_object('ok', false, 'error', 'bad_url'); end if;
+  if p_kind = 'photo' and (coalesce(p_url, '') !~ '^data:image/' or length(p_url) > 600000) then return jsonb_build_object('ok', false, 'error', 'bad_photo'); end if;
+  if (select count(*) from public.event_media where event_id = p_event_id) >= 60 then return jsonb_build_object('ok', false, 'error', 'full'); end if;
+  insert into public.event_media (event_id, kind, url, caption)
+  values (p_event_id, p_kind, p_url, nullif(trim(coalesce(p_caption, '')), '')) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+grant execute on function public.secure_add_event_media(text, uuid, text, text, text) to anon, authenticated;
+
+create or replace function public.secure_delete_event_media(p_passcode text, p_media_id uuid)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_event uuid;
+begin
+  select event_id into v_event from public.event_media where id = p_media_id;
+  if v_event is null then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  v_role := public._authenticate(p_passcode);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if not (coalesce(v_role, '') in ('owner', 'editor') or public._event_doc_ok(p_passcode, v_event)) then
+    return jsonb_build_object('ok', false, 'error', 'denied');
+  end if;
+  delete from public.event_media where id = p_media_id;
+  return jsonb_build_object('ok', true);
+end $$;
+grant execute on function public.secure_delete_event_media(text, uuid) to anon, authenticated;
+
+create or replace function public.secure_set_event_story(p_passcode text, p_event_id uuid, p_story text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text;
+begin
+  v_role := public._authenticate(p_passcode);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if not (coalesce(v_role, '') in ('owner', 'editor') or public._event_doc_ok(p_passcode, p_event_id)) then
+    return jsonb_build_object('ok', false, 'error', 'denied');
+  end if;
+  update public.family_events set story = nullif(trim(coalesce(p_story, '')), '') where id = p_event_id;
+  return jsonb_build_object('ok', true);
+end $$;
+grant execute on function public.secure_set_event_story(text, uuid, text) to anon, authenticated;
+
+-- حفظ المناسبة: توقيع جديد يضيف رمز التوثيق
+drop function if exists public.secure_save_event(uuid, text, timestamptz, text, text, text, text);
+create function public.secure_save_event(
+  p_id uuid, p_title text, p_event_date timestamptz, p_location_name text,
+  p_location_url text, p_description text, p_doc_code text, p_passcode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_id uuid;
+begin
+  v_role := public._authenticate(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor') then return public._deny(v_role); end if;
+  if p_title is null or length(trim(p_title)) = 0 or p_event_date is null then
+    return public._fail('العنوان والموعد مطلوبان');
+  end if;
+  if p_location_url is not null and p_location_url !~* '^https?://' then
+    return public._fail('رابط الخريطة غير صالح');
+  end if;
+  perform set_config('app.actor', public._actor(v_role, null), true);
+  if p_id is not null and exists (select 1 from public.family_events where id = p_id) then
+    update public.family_events
+       set title = trim(p_title), event_date = p_event_date, location_name = p_location_name,
+           location_url = p_location_url, description = p_description,
+           doc_code = nullif(trim(coalesce(p_doc_code, '')), '')
+     where id = p_id;
+    v_id := p_id;
+  else
+    insert into public.family_events (title, event_date, location_name, location_url, description, doc_code)
+    values (trim(p_title), p_event_date, p_location_name, p_location_url, p_description, nullif(trim(coalesce(p_doc_code, '')), ''))
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('success', true, 'id', v_id);
+end $$;
+
 
 commit;
 
