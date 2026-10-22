@@ -96,6 +96,13 @@ const shortName = m => {
   return m.full_name;
 };
 const cardName = m => gen(m) <= 2 ? m.full_name : shortName(m);
+/* اسم بطاقات التهاني والتعازي وإعلاناتها: ثلاثي أو رباعي — الاسم الأول + الأب + الجد + أبو الجد عبر سلسلة الآباء (طلب المالك 2026-10-22) */
+const cardLongName = m => {
+  if (!m) return '';
+  let out = shortName(m), cur = m, p = S.byId.get(m.father_id), n = 1;
+  while (p && n < 4) { out += (cur.gender === 'female' ? ' بنت ' : ' بن ') + shortName(p); cur = p; p = S.byId.get(p.father_id); n++; }
+  return out;
+};
 function stats() {
   const n = f => S.members.filter(f).length, gens = S.members.reduce((x, m) => Math.max(x, gen(m)), 0);
   const c = [['👥', 'الإجمالي', S.members.length], ['👨', 'الذكور', n(m => m.gender === 'male')], ['👩', 'الإناث', n(m => m.gender === 'female')],
@@ -358,8 +365,8 @@ async function saveMember(m, fid, d) {
   const ym = (String(v.birth_year_text || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).match(/\d{4}/) || [''])[0];
   const yr = new Date().getFullYear(), hj = +new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' }).format(new Date()).replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
   const newborn = !ym || Math.abs(+ym - yr) <= 1 || Math.abs(+ym - hj) <= 1;
-  if (!m && v.is_alive && newborn) { setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: fid }, 'birth'), 80); postAnnouncement('birth', { id: r.id, full_name: v.full_name, gender: v.gender }); }
-  else if (m && m.is_alive !== false && !v.is_alive) { setTimeout(() => openCard({ full_name: v.full_name, gender: v.gender, father_id: m.father_id }, 'condolence'), 80); postAnnouncement('condolence', { id: m.id, full_name: v.full_name, gender: v.gender }); }
+  if (!m && v.is_alive && newborn) { const ln = cardLongName({ full_name: v.full_name, gender: v.gender, father_id: fid }); setTimeout(() => openCard({ full_name: ln, gender: v.gender, father_id: fid }, 'birth'), 80); postAnnouncement('birth', { id: r.id, full_name: ln, gender: v.gender }); }
+  else if (m && m.is_alive !== false && !v.is_alive) { const ln = cardLongName({ full_name: v.full_name, gender: v.gender, father_id: m.father_id }); setTimeout(() => openCard({ full_name: ln, gender: v.gender, father_id: m.father_id }, 'condolence'), 80); postAnnouncement('condolence', { id: m.id, full_name: ln, gender: v.gender }); }
 }
 const CITIES = ['المدينة المنورة', 'ينبع', 'العلا', 'خيبر', 'الحناكية', 'المهد', 'بدر', 'وادي الفرع', 'العيص', 'مكة المكرمة', 'جدة', 'الطائف', 'رابغ', 'الليث', 'القنفذة', 'الجموم', 'الرياض', 'الخرج', 'الدوادمي', 'المجمعة', 'الزلفي', 'شقراء', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الدمام', 'الخبر', 'الظهران', 'الجبيل', 'الأحساء', 'القطيف', 'حفر الباطن', 'تبوك', 'ضباء', 'الوجه', 'أملج', 'تيماء', 'حائل', 'بريدة', 'عنيزة', 'الرس', 'عرعر', 'سكاكا', 'القريات', 'أبها', 'خميس مشيط', 'بيشة', 'جازان', 'صبيا', 'نجران', 'الباحة', 'بلجرشي', 'خارج المملكة'];
 function memberForm(m, parentId) {
@@ -700,7 +707,7 @@ $('#m-cards').onclick = menuClose(() => {
   openForm('إنشاء بطاقة', [
     { k: 'who', label: 'الاسم', type: 'select', opts: S.members.slice().sort(byName).map(m => [m.id, m.full_name]) },
     { k: 'kind', label: 'نوع البطاقة', type: 'select', opts: [['birth', 'تهنئة بمولود'], ['condolence', 'تعزية بوفاة']] }], d => {
-    const mm = S.byId.get(d.who); if (mm) { openCard({ full_name: mm.full_name, gender: mm.gender, father_id: mm.father_id }, d.kind); postAnnouncement(d.kind, mm); }
+    const mm = S.byId.get(d.who); if (mm) { const ln = cardLongName(mm); openCard({ full_name: ln, gender: mm.gender, father_id: mm.father_id }, d.kind); postAnnouncement(d.kind, { ...mm, full_name: ln }); }
   });
 });
 
