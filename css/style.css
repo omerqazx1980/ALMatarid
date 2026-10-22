@@ -73,7 +73,7 @@ main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;width:
 #lines{position:absolute;inset:0;overflow:visible;pointer-events:none}
 #lines path{fill:none;stroke:var(--gold);stroke-width:2.2;opacity:.8}
 
-.gn{position:absolute;width:170px;height:104px;padding:15px 8px 17px;text-align:center;display:flex;flex-direction:column;justify-content:center;cursor:pointer;border-radius:12px;
+.gn{position:absolute;width:170px;height:120px;padding:15px 8px 17px;text-align:center;display:flex;flex-direction:column;justify-content:center;cursor:pointer;border-radius:12px;
   border:1px solid color-mix(in srgb,var(--ac,#f59e0b) 55%,transparent);
   background:linear-gradient(160deg,color-mix(in srgb,var(--ac,#f59e0b) 11%,var(--panel)),var(--panel) 62%);
   box-shadow:0 0 14px color-mix(in srgb,var(--ac,#f59e0b) 16%,transparent);transition:transform .2s,box-shadow .2s,border-color .15s}
@@ -89,7 +89,7 @@ main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;width:
 .gn small{font-size:.7rem;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* منع تظليل/تحديد نص البطاقات أثناء السحب والتنقل واللمس المطوّل (طلب المالك 2026-10-22) */
 .gn,.nm{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.gn .bd{position:absolute;top:-9px;inset-inline-end:8px;font-size:.62rem}
+.gn .bd{display:block;width:max-content;max-width:94%;margin:2px auto 0;font-size:.66rem;overflow:hidden;text-overflow:ellipsis}
 .gn .al{position:absolute;bottom:9px;inset-inline-end:9px;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2.4s infinite}
 .gn .tg{position:absolute;bottom:-11px;inset-inline:0;margin:auto;width:max-content;min-width:42px;height:22px;border-radius:99px;padding:0 10px;font-size:.72rem;background:var(--bg);color:var(--gold);border:1px solid var(--gold)}
 .gn .tg[aria-expanded=true]{background:var(--gold);color:#1c1204}
