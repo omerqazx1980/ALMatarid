@@ -151,7 +151,12 @@ $('#event').addEventListener('click', ev => {
 document.addEventListener('click', e => { const d = $('.more'); if (!d.contains(e.target)) d.open = false; });
 setInterval(showEvent, 60000);
 function collapseAll() { S.open = new Set(); for (const r of S.roots) { S.open.add(r.id); for (const k of S.kids.get(r.id) || []) S.open.add(k.id); } }
-const kidsOf = m => S.open.has(m.id) ? (S.kids.get(m.id) || []) : [];
+/* أبناء العرض: نتجاوز العضوات المخفيات (لا بطاقة لهن عند الزوار بطلب المالك) ونُظهر أبناءهن إن وُجدوا في مكانهن */
+const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
+const dispRoots = () => { const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
+/* نص عدد الأبناء والبنات محسوبًا من كامل الأبناء (يشمل المخفيات) ليظهر في بطاقة الأب */
+const kidsTxt = m => { const ks = S.kids.get(m.id) || []; if (!ks.length) return ''; const s = ks.filter(c => c.gender === 'male').length, d = ks.length - s; return [s ? `👦 ${s}` : '', d ? `👧 ${d}` : ''].filter(Boolean).join(' · '); };
+const kidsOf = m => S.open.has(m.id) ? dispKids(m) : [];
 
 /* ---------- المخطط ---------- */
 function layout() {
@@ -162,7 +167,7 @@ function layout() {
     else { ks.forEach(c => walk(c, d + 1)); x = (pos.get(ks[0].id).x + pos.get(ks[ks.length - 1].id).x) / 2; }
     pos.set(m.id, { x, y: d * (H + GY), m });
   };
-  S.roots.forEach(r => walk(r, 0));
+  dispRoots().forEach(r => walk(r, 0));
   return pos;
 }
 function renderGraph(fitView) {
@@ -170,11 +175,11 @@ function renderGraph(fitView) {
   for (const p of pos.values()) { mw = Math.max(mw, p.x + W); mh = Math.max(mh, p.y + H); }
   const X = x => mw - x - W; S._pos = pos; S._X = X; let nodes = '', lines = '', k = 0;
   for (const { x, y, m } of pos.values()) {
-    const all = S.kids.get(m.id) || [], ks = kidsOf(m), o = ks.length > 0, hit = S.hit?.has(m.id);
+    const all = dispKids(m), ks = kidsOf(m), o = ks.length > 0, hit = S.hit?.has(m.id);
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
       <i>الجيل ${gen(m)}</i>${S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
-      <b>${esc(cardName(m))}</b><small>${esc(m.nickname || (m.is_alive === false ? 'رحمه الله' : ''))}</small>
+      <b>${esc(cardName(m))}</b><small>${esc([m.nickname || (m.is_alive === false ? 'رحمه الله' : ''), kidsTxt(m)].filter(Boolean).join(' · '))}</small>
       ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'} ${all.length}</button>` : ''}</div>`;
   }
   const st = $('#stage'); st.style.width = mw + 'px'; st.style.height = mh + 'px';
@@ -220,11 +225,11 @@ $('#z-fit').onclick = fit;
 
 /* ---------- القائمة (للجوال) ---------- */
 function node(m) {
-  const k = S.kids.get(m.id) || [], o = S.open.has(m.id), hit = S.hit?.has(m.id);
+  const k = dispKids(m), o = S.open.has(m.id), hit = S.hit?.has(m.id);
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
     ${k.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'فتح'} فرع ${esc(m.full_name)}">${o ? '−' : '+'}</button>` : '<span class="tg dot"></span>'}
     <div class="nm" data-p="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</div>
-    ${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${k.length ? `<span class="ct">${k.length}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
+    ${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${kidsTxt(m) ? `<span class="ct">${kidsTxt(m)}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
 }
 
@@ -240,7 +245,7 @@ function render(fitView) {
       renderGraph(fitView);
       if (S.hit) S.order = [...S.hit].filter(id => S._pos.has(id)).sort((a, b) => S._pos.get(a).y - S._pos.get(b).y || S._X(S._pos.get(b).x) - S._X(S._pos.get(a).x));
     } else {
-      $('#tree').innerHTML = S.roots.map(node).join('');
+      $('#tree').innerHTML = dispRoots().map(node).join('');
       if (S.hit) S.order = [...$('#tree').querySelectorAll('.card.hit .nm')].map(el => el.dataset.p);
     }
   }
@@ -257,7 +262,7 @@ $('#q').addEventListener('input', e => {
   S.curId = null;
   if (!q) { if (S.saved) S.open = S.saved; S.saved = S.hit = null; return render(true); }
   if (!S.saved) S.saved = new Set(S.open);
-  S.hit = new Set(S.members.filter(m => norm(m.full_name).includes(q) || norm(m.nickname).includes(q)).map(m => m.id));
+  S.hit = new Set(S.members.filter(m => !m.name_masked && (norm(m.full_name).includes(q) || norm(m.nickname).includes(q))).map(m => m.id));
   S.open = new Set();  // تُفتح آباء النتائج فقط، وتبقى أزرار الطي والفتح تعمل
   for (const id of S.hit) for (let a = S.byId.get(S.byId.get(id)?.father_id), i = 0; a && i < 30; a = S.byId.get(a.father_id), i++) S.open.add(a.id);
   render('hit');
@@ -521,7 +526,7 @@ $('#m-inbox').onclick = inbox;
 $('#empty').addEventListener('click', e => { if (e.target.id === 'add-root') memberForm(null, null); });
 
 /* ---------- أقسام الاستعراض: الأسماء، المدن، الشرف، القرابة، التصدير ---------- */
-const nameBtn = m => `<button class="nl" data-so="${esc(m.id)}">${esc(m.full_name)}<small>الجيل ${gen(m)}${m.city ? ' · ' + esc(m.city) : ''}</small></button>`;
+const nameBtn = m => m.name_masked ? '' : `<button class="nl" data-so="${esc(m.id)}">${esc(m.full_name)}<small>الجيل ${gen(m)}${m.city ? ' · ' + esc(m.city) : ''}</small></button>`;
 const byName = (a, b) => a.full_name.localeCompare(b.full_name, 'ar');
 const menuClose = fn => () => { $('.more').open = false; fn(); };
 

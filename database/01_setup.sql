@@ -348,6 +348,7 @@ begin
       select jsonb_agg(
         jsonb_build_object(
           'id', m.id, 'full_name', public._woman_name(m.full_name, coalesce(m.name_public, false), (v_scope is not null and m.id = any(v_scope)), 'ابنة ' || coalesce((select f.full_name from public.members f where f.id = m.father_id), 'الأسرة'), (m.gender = 'female' and not v_wvis and not v_priv)),
+          'name_masked', (m.gender = 'female' and not v_wvis and not v_priv and not coalesce(m.name_public, false) and not (v_scope is not null and m.id = any(v_scope))),
           'nickname', case when m.gender = 'female' and not v_wvis and not v_priv and not coalesce(m.name_public, false) and not (v_scope is not null and m.id = any(v_scope)) then null else m.nickname end,
           'name_public', coalesce(m.name_public, false), 'gender', m.gender,
           'father_id', m.father_id, 'wife_mother_id', m.wife_mother_id,
@@ -839,7 +840,7 @@ end $$;
 create table if not exists public.announcements (
   id uuid primary key default gen_random_uuid(),
   kind text not null check (kind in ('birth','condolence')),
-  member_id uuid references public.members(id) on delete set null,
+  member_id uuid references public.members(id) on delete cascade,
   member_name text not null,
   gender text not null default 'male',
   created_at timestamptz not null default now(),
@@ -847,6 +848,16 @@ create table if not exists public.announcements (
 );
 alter table public.announcements enable row level security;
 revoke all on public.announcements from anon, authenticated;
+
+-- ربط فعلي بالعضو (طلب المالك 2026-10-22): حذف العضو يحذف إعلانه فورًا بدل بقائه بلا صاحب،
+-- مع تنظيف أي إعلانات يتيمة موجودة من عمليات حذف سابقة (كانت العلاقة on delete set null).
+do $$ begin
+  alter table public.announcements drop constraint if exists announcements_member_id_fkey;
+  alter table public.announcements add constraint announcements_member_id_fkey
+    foreign key (member_id) references public.members(id) on delete cascade;
+exception when others then null; end $$;
+delete from public.announcements where member_id is null
+   or member_id not in (select id from public.members);
 
 create or replace function public.secure_post_announcement(p_passcode text, p_kind text, p_member_id uuid, p_member_name text, p_gender text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
@@ -1029,7 +1040,8 @@ begin
                and not (v_scope is not null and m.id = any(v_scope)))), '[]'::jsonb));
 end $$;
 
--- إعلانات البطاقات: إخفاء أسماء النساء فيها أيضًا
+-- إعلانات البطاقات: مرتبطة بالعضو فعليًا — حذفه يحذف إعلانه، واليتيمة لا تظهر أبدًا،
+-- والمخفية اسمها لا يظهر إعلانها للزوار أصلًا (طلب المالك 2026-10-22 بدل «ابنة فلان»)
 create or replace function public.get_announcements(p_code text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v_role text; v_branch uuid; v_priv boolean; v_wvis boolean; v_scope uuid[];
@@ -1042,16 +1054,17 @@ begin
   if v_role = 'branch' and v_branch is not null then
     select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
   end if;
+  delete from public.announcements a where a.member_id is null
+     or not exists (select 1 from public.members m where m.id = a.member_id);
   return jsonb_build_object('ok', true, 'items', coalesce((
     select jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'member_id', a.member_id,
-      'member_name', case when mm.gender = 'female' and not v_wvis and not v_priv and not coalesce(mm.name_public, false)
-                               and not (v_scope is not null and mm.id = any(v_scope))
-                          then 'ابنة ' || coalesce(fm.full_name, 'الأسرة') else a.member_name end,
+      'member_name', a.member_name,
       'gender', a.gender, 'created_at', a.created_at, 'expires_at', a.expires_at) order by a.created_at desc)
     from public.announcements a
-    left join public.members mm on mm.id = a.member_id
-    left join public.members fm on fm.id = mm.father_id
-    where a.expires_at > now()), '[]'::jsonb));
+    join public.members mm on mm.id = a.member_id
+    where a.expires_at > now()
+      and not (mm.gender = 'female' and not v_wvis and not v_priv and not coalesce(mm.name_public, false)
+               and not (v_scope is not null and mm.id = any(v_scope)))), '[]'::jsonb));
 end $$;
 
 grant execute on function public.secure_set_women_names_visible(text, boolean) to anon, authenticated;
