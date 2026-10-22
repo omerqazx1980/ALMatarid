@@ -356,7 +356,7 @@ $('#form-x').onclick = () => $('#form').close();
 
 async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
-    death_year_text: d.dy.trim() || null, city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
+    death_year_text: d.alive === '1' ? null : (d.dy.trim() || null), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
     birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' };
   const r = await op('secure_save_member', { p_id: m?.id ?? null, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: fid,
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
@@ -399,6 +399,8 @@ function memberForm(m, parentId) {
     document.querySelector('#cv-by').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=by]').value = cvText; };
     document.querySelector('#cv-dy').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=dy]').value = cvText; };
   }
+  const alSel = document.querySelector('#form-fields [name=alive]'), dyInp = document.querySelector('#form-fields [name=dy]');
+  if (alSel && dyInp) { const syncAlive = () => { dyInp.closest('.fl').style.display = alSel.value === '1' ? 'none' : ''; }; alSel.addEventListener('change', syncAlive); syncAlive(); }
 }
 function wifeForm(m) {
   const women = S.members.filter(x => x.gender === 'female').sort(byName);
