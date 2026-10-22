@@ -84,6 +84,8 @@ main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;width:
 .gn i{position:absolute;top:3px;inset-inline-start:8px;font-size:.62rem;font-style:normal;color:var(--ac,var(--mut))}
 .gn b{font-size:.82rem;font-weight:600;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .gn small{font-size:.7rem;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* منع تظليل/تحديد نص البطاقات أثناء السحب والتنقل واللمس المطوّل (طلب المالك 2026-10-22) */
+.gn,.nm{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .gn .bd{position:absolute;top:-9px;inset-inline-end:8px;font-size:.62rem}
 .gn .al{position:absolute;bottom:9px;inset-inline-end:9px;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2.4s infinite}
 .gn .tg{position:absolute;bottom:-11px;inset-inline:0;margin:auto;width:max-content;min-width:42px;height:22px;border-radius:99px;padding:0 10px;font-size:.72rem;background:var(--bg);color:var(--gold);border:1px solid var(--gold)}
