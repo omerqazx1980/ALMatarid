@@ -210,7 +210,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 
 /* ---------- 9) الأقسام المُبرزة بالشريط العلوي (ann25) ---------- */
 header{flex-wrap:wrap}
-#feat{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;order:-1;flex-basis:100%;margin-bottom:6px}
+#feat{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center}
 #feat[hidden]{display:none}
 .feat-btn{flex:0 0 auto;white-space:nowrap;background:rgba(245,158,11,.13);border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:.85rem;padding:5px 12px;border-radius:99px}
 .feat-btn:hover{background:rgba(245,158,11,.25)}
