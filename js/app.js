@@ -65,7 +65,7 @@ const delegateName = b => S.byId.get(b?.delegate_id)?.full_name || b?.label || '
 const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.father_id), i++) if (p.id === S.branch?.root_id) return true; return false; };
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
-  $('#btn-login').textContent = (S.role === 'visitor' || S.role === 'family') ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
+  $('#btn-login').textContent = ['visitor', 'family', 'reader'].includes(S.role) ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
   $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = !['owner', 'editor', 'branch'].includes(S.role); $('#m-family').hidden = !canEdit();
   $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
   initFeatToggles();
