@@ -29,6 +29,7 @@ async function load(code) {
   if (!b.ok) { S.locked = b.error === 'locked'; return false; }
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
   S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
+  S.featured = Array.isArray(b.featured_sections) ? b.featured_sections : ['events', 'honor'];
   const day = n => new Date(Date.now() + n * 864e5 + 2 * 36e5).toISOString();
   S.events = CFG.DEMO ? [
     { id: 'e1', title: 'حفل زواج (تجريبي)', event_date: day(33), location_name: 'قاعة المناسبات الكبرى', location_url: 'https://maps.google.com', description: 'عقد قران وزواج 💍 — المستضيف: أسرة تجريبية\nالدعوة عامة للعائلة.' },
@@ -36,7 +37,7 @@ async function load(code) {
     { id: 'e3', title: 'ملتقى الأبناء (تجريبي)', event_date: day(100), location_name: 'مركز الأحياء', description: 'ملتقى 🎓 — المستضيف: لجنة الشباب' }
   ] : (b.events || []);
   index(); collapseInitial(); render(true); showEvent();
-  applyRole();
+  applyRole(); renderFeat();
   checkAnnouncements();
   inboxBadge();
   setTimeout(fetchPhotos, 400);
@@ -66,6 +67,7 @@ const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
   $('#btn-login').textContent = S.role === 'visitor' ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : '');
   $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = !['owner', 'editor', 'branch'].includes(S.role); $('#m-family').hidden = !canEdit();
+  initFeatToggles();
 }
 $('#btn-login').onclick = () => {
   if (CFG.DEMO) {  // تجربة الأدوار: زائر ثم مالك ثم مسؤول فرع
@@ -162,30 +164,7 @@ async function loadEvDoc(e) {
     ${photos.length ? `<div class="evgrid">${photos.map(x => `<figure><img src="${x.url}" alt="${esc(x.caption || 'صورة من المناسبة')}" data-evzoom="${x.id}">${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف صورة">✕</button>` : ''}${x.caption ? `<figcaption>${esc(x.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
     ${vids.map(x => `<div class="evvid">▶️ <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.caption || 'مشاهدة الفيديو')}</a>${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف فيديو">✕</button>` : ''}</div>`).join('')}
     <div class="evdoc-tools">${canDoc() ? `<button data-evadd="photo">➕ صورة</button><button data-evadd="video">➕ فيديو (رابط)</button><button data-evadd="story">✏️ ${e.story ? 'تعديل الحكاية' : 'كتابة حكاية المناسبة'}</button>` : `<button data-evadd="code">🎟️ لديّ رمز توثيق هذه المناسبة</button>`}</div>`;
-  /* عارض الصور مع تنقّل (ann25، بطلب المالك): أسهم يمين/يسار + عدّاد + مفاتيح الأسهم + سحب بالإصبع، دون الخروج للشبكة */
-  const showPhoto = i => {
-    const n = photos.length; if (!n) return;
-    i = ((i % n) + n) % n;
-    const x = photos[i];
-    $('#profile-body').innerHTML = `<button class="x" id="evback">→ رجوع</button><div class="evview"><img class="evbig" id="evbigimg" src="${x.url}" alt="">${n > 1 ? `<button class="evnav next" id="evnext" title="التالي" aria-label="الصورة التالية">❮</button><button class="evnav prev" id="evprev" title="السابق" aria-label="الصورة السابقة">❯</button>` : ''}</div>${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}${n > 1 ? `<p class="evcount">${i + 1} / ${n}</p>` : ''}`;
-    const back = () => { document.onkeydown = null; evDetails(); };
-    $('#evback').onclick = back;
-    if (n > 1) {
-      $('#evnext').onclick = () => showPhoto(i + 1);
-      $('#evprev').onclick = () => showPhoto(i - 1);
-      $('#evbigimg').onclick = () => showPhoto(i + 1);
-      [photos[i + 1] || photos[0], photos[i - 1] || photos[n - 1]].forEach(p => { const im = new Image(); im.src = p.url; });
-      document.onkeydown = e => {
-        if (!document.getElementById('evbigimg')) { document.onkeydown = null; return; }
-        if (e.key === 'ArrowLeft') showPhoto(i + 1); else if (e.key === 'ArrowRight') showPhoto(i - 1); else if (e.key === 'Escape') back();
-      };
-      let tx = null;
-      const vw = $('#profile-body').querySelector('.evview');
-      vw.ontouchstart = e => { tx = e.touches[0].clientX; };
-      vw.ontouchend = e => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; tx = null; if (dx < -40) showPhoto(i + 1); else if (dx > 40) showPhoto(i - 1); };
-    }
-  };
-  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const i = photos.findIndex(z => z.id === im.dataset.evzoom); if (i >= 0) showPhoto(i); });
+  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const x = photos.find(z => z.id === im.dataset.evzoom); if (x) { $('#profile-body').innerHTML = `<button class="x" id="evback">→ رجوع</button><img class="evbig" src="${x.url}" alt="">${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`; $('#evback').onclick = () => evDetails(); } });
   box.querySelectorAll('[data-evdel]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذا العنصر من التوثيق؟')) return;
     try {
@@ -1045,7 +1024,8 @@ async function silentRefresh() {
     if (!b.ok) return;
     S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.role = b.role; S.branches = b.branches || []; S.branch = b.branch || null;
     S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
-    index(); render(); showEvent(); applyRole(); inboxBadge();
+    if (Array.isArray(b.featured_sections)) S.featured = b.featured_sections;
+    index(); render(); showEvent(); applyRole(); renderFeat(); inboxBadge();
     checkAnnouncements(true);
     fetchPhotos();
   } catch (_) {}
@@ -1106,3 +1086,46 @@ $('#m-family').onclick = menuClose(() => familyEditor(null));
     if (!(await load(sessionStorage.getItem('code')))) { sessionStorage.removeItem('code'); $('#chips').textContent = 'الشجرة محمية برمز العائلة'; showGate(S.locked ? 'محاولات خاطئة كثيرة. انتظر 15 دقيقة ثم حاول من جديد.' : ''); }
   } catch { $('#chips').textContent = 'تعذر الاتصال بالخادم'; }
 })();
+
+
+/* ---------- الأقسام المُبرزة بالشريط العلوي (ann25) ---------- */
+/* المالك والمحرر يفعّلان ⭐ من قائمة الأقسام نفسها، فتظهر كأزرار بارزة أعلى الصفحة لكل الزوار */
+const FEAT = [
+  ['cities', '📍 المدن والمحافظات', '#m-cities'], ['names', '📋 جميع الأسماء', '#m-names'],
+  ['events', '🎉 مناسبات الأسرة', '#m-events'], ['honor', '🏅 لوحة الشرف', '#m-honor'],
+  ['cards', '💌 بطاقات التهاني والتعازي', '#m-cards'], ['kin', '🧭 مستكشف القرابة', '#m-kin'],
+  ['suggest', '📝 اقتراح وتصحيح', '#m-suggest'], ['csv', '📊 تصدير إكسل', '#m-csv']
+];
+function renderFeat() {
+  const nav = $('#feat'); if (!nav) return;
+  const list = FEAT.filter(([k]) => (S.featured || []).includes(k));
+  nav.hidden = !list.length;
+  nav.innerHTML = list.map(([k, label, sel]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${label}</button>`).join('');
+  nav.querySelectorAll('[data-feat-go]').forEach(b => b.onclick = () => { const t = $(FEAT.find(([k]) => k === b.dataset.featGo)[2]); if (t) t.click(); });
+  document.querySelectorAll('.feat-tg').forEach(s => {
+    const on = (S.featured || []).includes(s.dataset.featTg);
+    s.textContent = on ? '⭐' : '☆'; s.classList.toggle('on', on);
+    s.title = on ? 'مُبرز بالصفحة — اضغط للإخفاء' : 'إبراز بالصفحة';
+  });
+}
+async function toggleFeat(key) {
+  const cur = new Set(S.featured || []);
+  cur.has(key) ? cur.delete(key) : cur.add(key);
+  S.featured = FEAT.map(([k]) => k).filter(k => cur.has(k));
+  renderFeat();
+  try {
+    await op('secure_set_featured_sections', { p_passcode: S.code, p_sections: S.featured }, () => {});
+    toast('تم حفظ الأقسام المُبرزة');
+  } catch (_) { toast('تعذر الحفظ — شغّل قسم 10 في SQL أولًا إن لم تفعل'); }
+}
+function initFeatToggles() {
+  if (!canEdit()) return;
+  FEAT.forEach(([key, , sel]) => {
+    const btn = $(sel); if (!btn || btn.querySelector('.feat-tg')) return;
+    const s = document.createElement('span');
+    s.className = 'feat-tg'; s.dataset.featTg = key; s.setAttribute('role', 'button'); s.setAttribute('aria-label', 'إبراز بالصفحة');
+    s.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); toggleFeat(key); });
+    btn.appendChild(s);
+  });
+  renderFeat();
+}
