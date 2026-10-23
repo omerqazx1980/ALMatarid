@@ -18,8 +18,8 @@ button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt
 #demo{background:rgba(245,158,11,.14);color:var(--gold);text-align:center;font-size:.72rem;padding:2px}
 header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,rgba(245,158,11,.10),transparent 45%)}
 .logo{border-radius:50%;border:2px solid var(--gold);padding:2px;object-fit:cover;box-shadow:0 0 14px rgba(245,158,11,.35);animation:glow 3.5s ease-in-out infinite alternate}
-.ttl{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
-.ttl .beta{flex:none}
+.ttl{flex:1;min-width:0}
+@media(max-width:520px){.ttl .beta{display:none}}
 h1{font-size:clamp(.95rem,3.6vw,1.25rem);font-weight:800;white-space:nowrap}
 .ttl p{font-size:.72rem;color:var(--mut);letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
