@@ -209,10 +209,10 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 
 /* ---------- 9) الأقسام المُبرزة بالشريط العلوي (ann25) ---------- */
 header{flex-wrap:wrap}
-#feat{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center}
+#feat{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;order:-1;flex-basis:100%;margin-bottom:6px}
 #feat[hidden]{display:none}
 .feat-btn{flex:0 0 auto;white-space:nowrap;background:rgba(245,158,11,.13);border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:.85rem;padding:5px 12px;border-radius:99px}
 .feat-btn:hover{background:rgba(245,158,11,.25)}
 .feat-tg{cursor:pointer;font-size:1.35rem;line-height:1;padding:5px 10px;border-radius:8px;opacity:.65;filter:grayscale(1);background:rgba(148,163,184,.14);border:1px solid var(--line)}
 .feat-tg.on{opacity:1;filter:none;background:rgba(245,158,11,.16);border-color:var(--gold)}
-@media(max-width:640px){#feat{order:9;flex-basis:100%;margin-top:6px}}
+@media(max-width:640px){#feat{margin-top:0}}
