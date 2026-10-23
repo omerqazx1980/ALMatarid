@@ -110,9 +110,9 @@ const cardLongName = m => {
 };
 function stats() {
   const n = f => S.members.filter(f).length, gens = S.members.reduce((x, m) => Math.max(x, gen(m)), 0);
-  const c = [['👥', 'الإجمالي', S.members.length], ['👨', 'الذكور', n(m => m.gender === 'male')], ['👩', 'الإناث', n(m => m.gender === 'female')],
-    ['🟢', 'الأحياء', n(m => m.is_alive)], ['⚪', 'المتوفون', n(m => m.is_alive === false)], ['📜', 'الأجيال', gens]];
-  $('#chips').innerHTML = c.map(([i, l, v]) => `<span class="chip">${i} <span class="chl">${l}</span> <b>${v}</b></span>`).join(''); /* ann48: بالجوال رموز وأرقام فقط */
+  const c = [['👥', 'الإجمالي', S.members.length, 'total'], ['👨', 'الذكور', n(m => m.gender === 'male'), 'male'], ['👩', 'الإناث', n(m => m.gender === 'female'), 'female'],
+    ['🟢', 'الأحياء', n(m => m.is_alive), 'alive'], ['⚪', 'المتوفون', n(m => m.is_alive === false), 'dead'], ['📜', 'الأجيال', gens, 'gens']];
+  $('#chips').innerHTML = c.map(([i, l, v, k]) => `<span class="chip" data-k="${k}">${i} <span class="chl">${l}</span> <b>${v}</b></span>`).join(''); /* ann48: بالجوال رموز وأرقام فقط · ann54: الأحياء/المتوفون مخفيان بالجوال */
 }
 const evList = () => (S.events || []).map(e => ({ ...e, t: new Date(e.event_date).getTime() })).filter(e => e.t > Date.now()).sort((a, b) => a.t - b.t);
 let evRot = null, evTick = null, evHold = false;

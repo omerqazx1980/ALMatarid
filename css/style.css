@@ -316,3 +316,8 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .ev-pg{font-size:.75rem;padding:0 1px}
   .ev-pg button{font-size:.95rem;padding:0 6px}
 }
+
+/* ---------- 19) إخفاء إحصائيتَي الأحياء والمتوفون بالجوال (ann54، طلب المالك 2026-10-24) ---------- */
+@media(max-width:640px){
+  .chip[data-k="alive"],.chip[data-k="dead"]{display:none}
+}
