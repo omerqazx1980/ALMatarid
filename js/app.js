@@ -65,7 +65,7 @@ const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.fat
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
   $('#btn-login').textContent = S.role === 'visitor' ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : '');
-  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-inbox').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-family').hidden = !canEdit();
+  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = !['owner', 'editor', 'branch'].includes(S.role); $('#m-family').hidden = !canEdit();
 }
 $('#btn-login').onclick = () => {
   if (CFG.DEMO) {  // تجربة الأدوار: زائر ثم مالك ثم مسؤول فرع
@@ -597,46 +597,127 @@ async function delEvent(id) {
   try { await op('secure_delete_event', { event_id: id, passcode: S.code }, () => { S.events = S.events.filter(x => String(x.id) !== id); }); if (!CFG.DEMO) await refresh(); showEvent(); eventsList(); }
   catch (err) { alert(err.message); }
 }
+const CORR_FIELDS = [['full_name', 'الاسم الكامل'], ['nickname', 'الكنية'], ['gender', 'الجنس'], ['is_alive', 'الحالة'], ['birth_year_text', 'سنة الميلاد'], ['death_year_text', 'سنة الوفاة'], ['city', 'المدينة'], ['biography_story', 'النبذة']];
+const corrFieldLabel = k => (CORR_FIELDS.find(([v]) => v === k) || [, k])[1];
+function memberFieldText(m, k) {
+  if (!m) return '—';
+  if (k === 'gender') return m.gender === 'female' ? 'أنثى' : 'ذكر';
+  if (k === 'is_alive') return m.is_alive === false ? 'متوفى' : 'حي';
+  const v = m[k];
+  return v == null || v === '' ? '—' : String(v);
+}
+function corrValueText(field, val) {
+  if (field === 'gender') return val === 'female' ? 'أنثى' : 'ذكر';
+  if (field === 'is_alive') return val ? 'حي' : 'متوفى';
+  return val == null || val === '' ? '—' : String(val);
+}
 function suggestForm(targetId) {
-  const who = S.byId.get(targetId)?.full_name;
-  openForm(who ? 'اقتراح تصحيح بخصوص ' + who : 'اقتراح أو ملاحظة', [
-    { k: 'note', label: 'ما التصحيح أو المعلومة المقترحة؟', type: 'area', req: true }, { k: 'from', label: 'اسمك (اختياري)' }], async d => {
-    const data = { note: d.note.trim(), from: d.from.trim() || null };
-    await op('submit_suggestion', { p_code: S.code || null, p_target_member_id: targetId, p_request_type: 'correction', p_proposed_data: data },
-      () => { (S.demoSug ||= []).push({ id: 's' + Date.now(), target_member_id: targetId, proposed_data: data, created_at: new Date().toISOString() }); });
-    alert('شكرًا لك، وصل اقتراحك وسيراجعه المسؤول.');
+  const fixed = S.byId.get(targetId) || null;
+  const memOpts = [...S.members].filter(m => !m.name_masked).sort(byName).map(m => [m.id, m.full_name]);
+  openForm(fixed ? 'رسالة بخصوص ' + fixed.full_name : 'مقترح / استفسار / طلب تعديل', [
+    { k: 'rtype', label: 'نوع الرسالة', type: 'select', opts: [['suggestion', '💡 مقترح'], ['inquiry', '❓ استفسار'], ['correction', '✏️ طلب تعديل معلومة']] },
+    ...(fixed ? [] : [{ k: 'member', label: 'العضو المقصود (لطلب التعديل)', type: 'select', opts: [['', '— اختر العضو —'], ...memOpts] }]),
+    { k: 'cfield', label: 'الحقل المراد تعديله', type: 'select', opts: CORR_FIELDS },
+    { type: 'raw', html: '<p class="sub" id="sg-cur"></p>' },
+    { k: 'newval', label: 'القيمة الجديدة' },
+    { k: 'newgender', label: 'القيمة الجديدة', type: 'select', opts: [['male', 'ذكر'], ['female', 'أنثى']] },
+    { k: 'newalive', label: 'القيمة الجديدة', type: 'select', opts: [['1', 'حي'], ['0', 'متوفى']] },
+    { k: 'note', label: 'التفاصيل (نص الرسالة، أو سبب التعديل)', type: 'area' },
+    { k: 'from', label: 'اسمك الكامل (إلزامي — لا تُقبل الرسائل مجهولة الاسم)', req: true },
+    { k: 'frommember', label: 'هل اسمك موجود بالشجرة؟ اختره لتوثيق هويتك (اختياري)', type: 'select', opts: [['', '—'], ...memOpts] }], async d => {
+    const from = (d.from || '').trim();
+    if (from.length < 2) throw new Error('اكتب اسمك الكامل — لا تُقبل الرسائل بدون اسم المُرسل');
+    const fm = d.frommember ? S.byId.get(d.frommember) : null;
+    const base = { from, from_member_id: fm?.id || null, from_member_name: fm?.full_name || null };
+    const note = (d.note || '').trim() || null;
+    let type = d.rtype, target = fixed?.id || null, data;
+    if (type === 'correction') {
+      target = fixed?.id || d.member || null;
+      if (!target) throw new Error('اختر العضو المقصود بطلب التعديل');
+      const field = d.cfield;
+      const new_value = field === 'gender' ? d.newgender : field === 'is_alive' ? (d.newalive === '1') : (d.newval || '').trim();
+      if (field !== 'gender' && field !== 'is_alive' && !new_value && !['nickname', 'city', 'biography_story', 'death_year_text'].includes(field))
+        throw new Error('اكتب القيمة الجديدة');
+      data = { ...base, field, field_label: corrFieldLabel(field), new_value, note };
+    } else {
+      if (!note) throw new Error('اكتب نص الرسالة');
+      data = { ...base, note };
+    }
+    await op('submit_suggestion', { p_code: S.code || null, p_target_member_id: target, p_request_type: type, p_proposed_data: data },
+      () => { (S.demoSug ||= []).push({ id: 's' + Date.now(), target_member_id: target, request_type: type, proposed_data: data, created_at: new Date().toISOString() }); });
+    alert('شكرًا لك، وصلت رسالتك وسيراجعها المسؤول.');
   });
+  const F = n => document.querySelector(`#form-fields [name=${n}]`);
+  const row = n => F(n)?.closest('.fl');
+  const typeSel = F('rtype'), fldSel = F('cfield'), memSel = F('member'), cur = document.querySelector('#sg-cur');
+  const sync = () => {
+    const corr = typeSel.value === 'correction';
+    [['member', !!memSel], ['cfield', 1], ['newval', 1], ['newgender', 1], ['newalive', 1]].forEach(([n, has]) => { if (!has) return; const el = F(n); el.disabled = !corr; if (row(n)) row(n).style.display = corr ? '' : 'none'; });
+    if (cur) cur.style.display = corr ? '' : 'none';
+    if (!corr) return;
+    const fld = fldSel.value;
+    const show = fld === 'gender' ? 'newgender' : fld === 'is_alive' ? 'newalive' : 'newval';
+    ['newval', 'newgender', 'newalive'].forEach(n => { if (row(n)) row(n).style.display = n === show ? '' : 'none'; F(n).disabled = n !== show; });
+    const m = S.byId.get(fixed?.id || memSel?.value || '');
+    if (cur) cur.textContent = m ? `القيمة الحالية لـ«${corrFieldLabel(fld)}»: ${memberFieldText(m, fld)}` : '';
+  };
+  typeSel.addEventListener('change', sync); fldSel.addEventListener('change', sync); if (memSel) memSel.addEventListener('change', sync); sync();
 }
 async function inboxBadge() {
   const b = $('#inbox-badge'), d = $('#menu-dot');
   if (!b) return;
-  if (CFG.DEMO || S.role !== 'owner' || !S.code) { b.hidden = true; if (d) d.hidden = true; return; }
+  if (CFG.DEMO || !['owner', 'editor', 'branch'].includes(S.role) || !S.code) { b.hidden = true; if (d) d.hidden = true; return; }
   try {
     const r = await rpc('list_suggestions', { p_passcode: S.code });
     const n = r.success ? (r.items || []).length : 0;
     b.textContent = n; b.hidden = !n; if (d) d.hidden = !n;
   } catch (_) { b.hidden = true; if (d) d.hidden = true; }
 }
+const REQ_TYPES = { suggestion: '💡 مقترح', inquiry: '❓ استفسار', correction: '✏️ طلب تعديل معلومة' };
 async function inbox() {
   $('.more').open = false;
   let items;
-  if (CFG.DEMO) items = S.demoSug ||= [{ id: 's0', target_member_id: S.members[3]?.id, proposed_data: { note: 'مثال: يرجى تصحيح اسم الجد.', from: 'زائر' } }];
+  if (CFG.DEMO) items = S.demoSug ||= [{ id: 's0', target_member_id: S.members[3]?.id, request_type: 'correction', proposed_data: { field: 'birth_year_text', field_label: 'سنة الميلاد', new_value: '1370هـ (الموافق 1950–1951م)', note: 'مثال: تصحيح سنة الميلاد.', from: 'زائر تجريبي' } }];
   else { const r = await rpc('list_suggestions', { p_passcode: S.code }); if (!r.success) return alert(r.message); items = r.items; }
-  showInfo(`<h2>صندوق الاقتراحات (${items.length})</h2>${items.map(s => { const m = S.byId.get(s.target_member_id), pd = s.proposed_data || {};
-    return `<div class="evrow"><div><b>${esc(m ? m.full_name : 'اقتراح عام')}</b><small>${esc(pd.note || JSON.stringify(pd))}${pd.from ? ' — ' + esc(pd.from) : ''}</small></div><span>${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sd="${esc(s.id)}">تم ✓</button></span></div>`; }).join('') || '<p class="sub">لا توجد اقتراحات.</p>'}`);
+  const rowHtml = s => {
+    const m = S.byId.get(s.target_member_id), pd = s.proposed_data || {};
+    const structured = s.request_type === 'correction' && !!pd.field;
+    let detail = '';
+    if (structured) detail += `<small>الحقل: ${esc(pd.field_label || corrFieldLabel(pd.field))} — الحالي: «${esc(memberFieldText(m, pd.field))}» ← المقترح: «${esc(corrValueText(pd.field, pd.new_value))}»</small>`;
+    if (pd.note) detail += `<small>${esc(pd.note)}</small>`;
+    detail += pd.from ? `<small>المُرسل: ${esc(pd.from)}${pd.from_member_name ? ' (بالشجرة: ' + esc(pd.from_member_name) + ')' : ''}</small>` : '<small>المُرسل: غير معروف (رسالة قديمة)</small>';
+    const btns = structured
+      ? `${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sa="${esc(s.id)}">اعتماد وتطبيق ✅</button><button class="x" data-sd="${esc(s.id)}">رفض</button>`
+      : `${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sd="${esc(s.id)}">تم ✓</button>`;
+    return `<div class="evrow"><div><b>${REQ_TYPES[s.request_type] || '💡 مقترح'}${m ? ' — ' + esc(m.full_name) : ''}</b>${detail}</div><span>${btns}</span></div>`;
+  };
+  showInfo(`<h2>صندوق الاقتراحات (${items.length})</h2>${items.map(rowHtml).join('') || '<p class="sub">لا توجد اقتراحات.</p>'}`);
+}
+async function applySuggestion(id) {
+  if (!confirm('اعتماد هذا التعديل وتطبيقه مباشرة على بيانات العضو؟')) return;
+  try {
+    await op('secure_apply_suggestion', { p_suggestion_id: id, p_passcode: S.code }, () => {
+      const s = (S.demoSug || []).find(x => String(x.id) === String(id));
+      if (s?.proposed_data?.field) { const m = S.byId.get(s.target_member_id); if (m) m[s.proposed_data.field] = s.proposed_data.new_value; }
+      S.demoSug = (S.demoSug || []).filter(x => String(x.id) !== String(id));
+    });
+    if (!CFG.DEMO) await refresh();
+    await inbox(); inboxBadge(); alert('تم اعتماد التعديل وتطبيقه ✅');
+  } catch (err) { alert(err.message); }
 }
 async function delSuggestion(id) {
   try { await op('secure_delete_suggestion', { suggestion_id: id, passcode: S.code }, () => { S.demoSug = S.demoSug.filter(s => s.id !== id); }); await inbox(); inboxBadge(); }
   catch (err) { alert(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
-  const b = e.target.closest('[data-ee],[data-ed],[data-ea],[data-sg],[data-sd],[data-so]'); if (!b) return;
+  const b = e.target.closest('[data-ee],[data-ed],[data-ea],[data-sg],[data-sd],[data-so],[data-sa]'); if (!b) return;
   const D = b.dataset, cur = $('#profile-body').dataset.id;
   if ('ea' in D) { $('#profile').close(); eventForm(); }
   else if ('ee' in D) { $('#profile').close(); eventForm(S.events.find(x => String(x.id) === D.ee)); }
   else if ('ed' in D) delEvent(D.ed);
   else if ('sg' in D) { $('#profile').close(); suggestForm(cur || null); }
   else if ('sd' in D) delSuggestion(D.sd);
+  else if ('sa' in D) applySuggestion(D.sa);
   else if ('so' in D) profile(D.so);
 });
 $('#m-events').onclick = () => { $('.more').open = false; eventsList(); };

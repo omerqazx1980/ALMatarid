@@ -1285,3 +1285,126 @@ commit;
 -- ثم من Supabase: Authentication ← Providers ← Email ← عطّل Allow new users to sign up
 -- (لا نستخدم حسابات Supabase، ولا نريد أن يسجّل أحد حسابًا بالمفتاح العام).
 -- =====================================================================
+
+-- ============================================================
+-- القسم 9: صندوق الرسائل v2 — مقترح / استفسار / طلب تعديل معلومة
+--   • اسم المقدِّم شرط أساسي في كل الأنواع (لا طلبات مجهولة).
+--   • طلب التعديل منظّم (عضو + حقل + قيمة جديدة) ويُعرض «الحالي ← المقترح».
+--   • الاعتماد من المالك أو المحرر أو مسؤول الفرع (ضمن فرعه فقط)
+--     يطبّق التعديل مباشرة بضغطة «اعتماد وتطبيق».
+-- ============================================================
+create or replace function public.submit_suggestion(
+  p_code text, p_target_member_id uuid, p_request_type text, p_proposed_data jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_mode text; v_role text; v_from text; v_type text; v_field text;
+begin
+  select access_mode into v_mode from public.system_settings where id = 1;
+  v_role := public._authenticate(p_code);
+  if v_role = '__locked__' then return public._deny(v_role); end if;
+  if v_mode = 'family_code' and v_role is null then return public._fail('رمز العائلة مطلوب'); end if;
+  if p_proposed_data is null or length(p_proposed_data::text) > 4000 then
+    return public._fail('نص الطلب طويل جدًا');
+  end if;
+  v_from := trim(coalesce(p_proposed_data ->> 'from', ''));
+  if length(v_from) < 2 then return public._fail('اسم المقدِّم مطلوب — لا تُقبل الطلبات مجهولة الاسم'); end if;
+  v_type := coalesce(nullif(p_request_type, ''), 'suggestion');
+  if v_type not in ('suggestion', 'inquiry', 'correction') then v_type := 'suggestion'; end if;
+  if v_type = 'correction' then
+    if p_target_member_id is null then return public._fail('طلب التعديل يتطلب تحديد العضو'); end if;
+    v_field := coalesce(p_proposed_data ->> 'field', '');
+    if v_field not in ('full_name','nickname','gender','is_alive','birth_year_text','death_year_text','city','biography_story') then
+      return public._fail('حقل التعديل غير مدعوم');
+    end if;
+    if not (p_proposed_data ? 'new_value') then return public._fail('القيمة الجديدة مطلوبة'); end if;
+    if v_field = 'full_name' and length(trim(coalesce(p_proposed_data ->> 'new_value', ''))) = 0 then
+      return public._fail('الاسم الجديد لا يمكن أن يكون فارغًا');
+    end if;
+  else
+    if length(trim(coalesce(p_proposed_data ->> 'note', ''))) = 0 then return public._fail('اكتب نص الرسالة'); end if;
+  end if;
+  insert into public.change_requests (target_member_id, request_type, proposed_data)
+  values (p_target_member_id, v_type, p_proposed_data);
+  return jsonb_build_object('success', true);
+end $$;
+
+create or replace function public.list_suggestions(p_passcode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if v_role in ('owner', 'editor') then
+    return jsonb_build_object('success', true, 'items', coalesce((
+      select jsonb_agg(to_jsonb(c) order by c.created_at desc) from public.change_requests c), '[]'::jsonb));
+  elsif v_role = 'branch' then
+    return jsonb_build_object('success', true, 'items', coalesce((
+      select jsonb_agg(to_jsonb(c) order by c.created_at desc) from public.change_requests c
+      where c.target_member_id is not null and public._in_branch(v_branch, c.target_member_id)), '[]'::jsonb));
+  end if;
+  return public._deny(v_role);
+end $$;
+
+create or replace function public.secure_delete_suggestion(suggestion_id uuid, passcode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_target uuid;
+begin
+  select * into v_role, v_branch from public._who(passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return public._deny(v_role); end if;
+  select target_member_id into v_target from public.change_requests where id = suggestion_id;
+  if v_role = 'branch' and (v_target is null or not public._in_branch(v_branch, v_target)) then
+    return public._fail('هذا الطلب خارج صلاحية فرعك');
+  end if;
+  delete from public.change_requests where id = suggestion_id;
+  return jsonb_build_object('success', true);
+end $$;
+
+create or replace function public.secure_apply_suggestion(p_suggestion_id uuid, p_passcode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_role text; v_branch uuid; v_req public.change_requests%rowtype;
+  v_field text; v_text text; v_gender public.members.gender%type;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return public._deny(v_role); end if;
+  select * into v_req from public.change_requests where id = p_suggestion_id;
+  if v_req.id is null then return public._fail('الطلب غير موجود'); end if;
+  if v_req.request_type is distinct from 'correction' or (v_req.proposed_data ->> 'field') is null then
+    return public._fail('هذا الطلب ليس طلب تعديل منظّمًا قابلًا للتطبيق المباشر');
+  end if;
+  if v_req.target_member_id is null or not exists (select 1 from public.members where id = v_req.target_member_id) then
+    return public._fail('العضو المستهدف غير موجود');
+  end if;
+  if v_role = 'branch' and not public._in_branch(v_branch, v_req.target_member_id) then
+    return public._fail('هذا الفرد خارج صلاحية فرعك');
+  end if;
+  v_field := v_req.proposed_data ->> 'field';
+  v_text := v_req.proposed_data ->> 'new_value';
+  perform set_config('app.actor', public._actor(v_role, v_branch), true);
+  if v_field = 'full_name' then
+    if length(trim(coalesce(v_text, ''))) = 0 then return public._fail('الاسم الجديد فارغ'); end if;
+    update public.members set full_name = trim(v_text) where id = v_req.target_member_id;
+  elsif v_field = 'nickname' then
+    update public.members set nickname = nullif(trim(coalesce(v_text, '')), '') where id = v_req.target_member_id;
+  elsif v_field = 'gender' then
+    begin
+      v_gender := (jsonb_populate_record(null::public.members, jsonb_build_object('gender', v_text))).gender;
+    exception when others then return public._fail('قيمة الجنس غير صالحة'); end;
+    update public.members set gender = v_gender where id = v_req.target_member_id;
+  elsif v_field = 'is_alive' then
+    update public.members set is_alive = (v_text = 'true'),
+      death_year_text = case when v_text = 'true' then null else death_year_text end
+      where id = v_req.target_member_id;
+  elsif v_field = 'birth_year_text' then
+    update public.members set birth_year_text = nullif(trim(coalesce(v_text, '')), '') where id = v_req.target_member_id;
+  elsif v_field = 'death_year_text' then
+    update public.members set death_year_text = nullif(trim(coalesce(v_text, '')), '') where id = v_req.target_member_id;
+  elsif v_field = 'city' then
+    update public.members set city = nullif(trim(coalesce(v_text, '')), '') where id = v_req.target_member_id;
+  elsif v_field = 'biography_story' then
+    update public.members set biography_story = nullif(trim(coalesce(v_text, '')), '') where id = v_req.target_member_id;
+  else
+    return public._fail('حقل غير مدعوم للتطبيق المباشر');
+  end if;
+  delete from public.change_requests where id = p_suggestion_id;
+  return jsonb_build_object('success', true, 'member_id', v_req.target_member_id);
+end $$;
+grant execute on function public.secure_apply_suggestion(uuid, text) to anon, authenticated;
