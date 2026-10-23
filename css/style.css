@@ -221,3 +221,28 @@ header{flex-wrap:wrap}
 /* ---------- 10) عارض صور المناسبات: شريط التنقّل (ann30) ---------- */
 .evzoombar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .evzoombar .x:disabled{opacity:.35;cursor:default}
+
+/* ---------- 11) إصلاحات شاشة الجوال (ann42، طلب المالك 2026-10-24) ---------- */
+html,body{overflow-x:clip}
+h1{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:640px){
+  /* الترويسة: العنوان بسطر، والأقسام المُبرزة بسطر مستقل تحتها بدل زحمة سطر واحد */
+  header{gap:8px;padding:8px 10px}
+  #feat{order:5;flex-basis:100%;justify-content:flex-start;margin-top:2px}
+  .feat-btn{font-size:.8rem;padding:4px 10px}
+  /* الإحصائيات: تلتف لأسطر بدل قصّ الأطراف */
+  .stats{flex-wrap:wrap;padding:8px 10px 2px}
+  #chips{flex-wrap:wrap;overflow:visible;justify-content:flex-start}
+  .chip{font-size:.75rem;padding:2px 8px}
+  .ctl{margin-inline-start:auto}
+  /* شريط الإعلانات: الاسم يلتف لسطرين بدل القصّ وسط الكلمة */
+  #newsbar{height:98px;width:94vw}
+  .nbcard{gap:8px;padding:8px 10px}
+  .nbcard img{width:48px;height:48px}
+  .nbcard span{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.4;font-size:.92rem}
+  /* شريط المناسبة (الدعوات): عنوان أقصر حدّ أدنى حتى لا يدفع الزر خارج الشاشة */
+  #event{padding:7px 10px;gap:8px}
+  .ev-title{min-width:100px}
+  /* شريط البحث: يلتف عند الضيق الشديد */
+  .bar{flex-wrap:wrap;padding:8px 10px}
+}
