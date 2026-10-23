@@ -917,7 +917,7 @@ async function drawCard(data, kind) {
   const F = (s, w = 800) => `${w} ${s}px Cairo, Tahoma, sans-serif`;
   const fit = (t, s) => { x.font = F(s); while (x.measureText(t).width > 920 && s > 28) { s -= 4; x.font = F(s); } };
   await new Promise(res => { const im = new Image(); im.onload = () => { try { x.save(); x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.clip(); x.drawImage(im, 448, 113, 184, 184); x.restore(); x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.stroke(); } catch (_) {} res(); }; im.onerror = () => res(); im.src = 'logo.jpg'; });
-  x.fillStyle = accent; x.font = F(46); x.fillText('أسرة آل مطارد-بني عمرو', 540, 395);
+  x.fillStyle = accent; x.font = F(46); x.fillText('أسرة آل مطارد - بنو عمرو', 540, 395);
   x.fillStyle = '#f1f5f9';
   const title = celeb ? 'بُشرى سارّة' : 'إنا لله وإنا إليه راجعون';
   fit(title, celeb ? 88 : 64); x.fillText(title, 540, 505);
