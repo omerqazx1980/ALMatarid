@@ -260,7 +260,7 @@ const setT = () => { $('#stage').style.transform = `translate(${V.x}px,${V.y}px)
 function fit() {
   const vp = $('#vp'), st = $('#stage'), w = vp.clientWidth, h = vp.clientHeight;
   V.k = Math.max(.3, Math.min(1, (w - 130) / (st.offsetWidth + 40), h / (st.offsetHeight + 60)));
-  V.x = (w - st.offsetWidth * V.k) / 2; V.y = 24; setT();
+  V.x = (w - st.offsetWidth * V.k) / 2; V.y = Math.max(12, (h - st.offsetHeight * V.k) / 2); setT(); // ann23: توسيط عمودي أيضًا (طلب المالك: الفتح والملاءمة بالتوسيط)
 }
 function focusHits(pos, X) {  // تعرض كل نتائج البحث معًا (بحدّ أدنى للتصغير)
   const hs = [...S.hit].map(id => pos.get(id)).filter(Boolean);
