@@ -67,6 +67,7 @@ const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
   $('#btn-login').textContent = S.role === 'visitor' ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : '');
   $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = !['owner', 'editor', 'branch'].includes(S.role); $('#m-family').hidden = !canEdit();
+  $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
   initFeatToggles();
 }
 $('#btn-login').onclick = () => {
@@ -986,6 +987,7 @@ $('#m-annpost').onclick = menuClose(() => {
   });
 });
 $('#m-cards').onclick = menuClose(() => {
+  if (!['owner', 'editor', 'branch'].includes(S.role)) { toast('صفحة البطاقات للمالك والمحرر ومسؤولي الفروع فقط'); return; } /* ann44 */
   openForm('إنشاء بطاقة', [
     { k: 'who', label: 'الاسم', type: 'select', opts: S.members.slice().sort(byName).map(m => [m.id, m.full_name]) },
     { k: 'kind', label: 'نوع البطاقة', type: 'select', opts: [['birth', 'تهنئة بمولود'], ['engagement', 'تهنئة بخطبة'], ['aqd', 'تهنئة بعقد قران (ملكة)'], ['wedding', 'تهنئة بزواج'], ['graduation', 'تهنئة بتخرج'], ['job', 'تهنئة بوظيفة'], ['promotion', 'تهنئة بترقية'], ['success', 'تهنئة بنجاح وتفوق'], ['recovery', 'بطاقة سلامة وشفاء'], ['newhome', 'تهنئة بمنزل جديد'], ['condolence', 'تعزية بوفاة']] }], d => {
@@ -1174,7 +1176,7 @@ const FEAT = [
 function renderFeat() {
   const nav = $('#feat');
   if (nav) {
-    const list = FEAT.filter(([k]) => (S.featured || []).includes(k));
+    const list = FEAT.filter(([k]) => (S.featured || []).includes(k) && (k !== 'cards' || ['owner', 'editor', 'branch'].includes(S.role))); /* ann44 */
     nav.hidden = !list.length;
     nav.innerHTML = list.map(([k, label, sel]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${label}</button>`).join('');
     nav.querySelectorAll('[data-feat-go]').forEach(b => b.onclick = () => { const t = $(FEAT.find(([k]) => k === b.dataset.featGo)[2]); if (t) t.click(); });
