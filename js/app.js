@@ -35,7 +35,7 @@ async function load(code) {
     { id: 'e2', title: 'اجتماع العائلة السنوي (تجريبي)', event_date: day(60), location_name: 'استراحة العائلة', description: 'اجتماع عائلي 🤝 — المستضيف: كبير العائلة' },
     { id: 'e3', title: 'ملتقى الأبناء (تجريبي)', event_date: day(100), location_name: 'مركز الأحياء', description: 'ملتقى 🎓 — المستضيف: لجنة الشباب' }
   ] : (b.events || []);
-  index(); collapseAll(); render(true); showEvent();
+  index(); collapseInitial(); render(true); showEvent();
   applyRole();
   checkAnnouncements();
   inboxBadge();
@@ -219,6 +219,8 @@ $('#event').addEventListener('click', ev => {
 document.addEventListener('click', e => { const d = $('.more'); if (!d.contains(e.target)) d.open = false; });
 setInterval(showEvent, 60000);
 function collapseAll() { S.open = new Set(); for (const r of S.roots) { S.open.add(r.id); for (const k of S.kids.get(r.id) || []) S.open.add(k.id); } }
+/* ann24: على الجوال يبدأ العرض بالمؤسس فقط مطويًا (طلب المالك) */
+function collapseInitial() { if (window.matchMedia('(max-width: 640px)').matches) S.open = new Set(); else collapseAll(); }
 /* أبناء العرض: نتجاوز العضوات المخفيات (لا بطاقة لهن عند الزوار بطلب المالك) ونُظهر أبناءهن إن وُجدوا في مكانهن */
 const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
 const dispRoots = () => { const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
