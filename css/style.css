@@ -321,3 +321,11 @@ h1{overflow:hidden;text-overflow:ellipsis}
 @media(max-width:640px){
   .chip[data-k="alive"],.chip[data-k="dead"]{display:none}
 }
+
+/* ---------- 20) ➕/➖ بجانب الإحصائيات بسطر واحد (ann55، طلب المالك 2026-10-24) ---------- */
+@media(max-width:640px){
+  .stats{flex-wrap:nowrap}
+  #chips{flex:1 1 auto}
+  .ctl{margin-inline-start:auto}
+  .lnk{padding:6px 10px}
+}
