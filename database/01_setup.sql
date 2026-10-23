@@ -1581,3 +1581,71 @@ begin
 end $$;
 
 grant execute on function public.secure_post_announcement(text, text, uuid, text, text, text) to anon, authenticated;
+
+-- ===== القسم 12: بطاقات مناسبات موسّعة + رقم الجوال في التهنئة (طلب المالك 2026-10-24) =====
+-- نفّذ هذا القسم مرة واحدة في SQL Editor
+-- أنواع جديدة: خطبة، عقد قران (ملكة)، تخرج، وظيفة، ترقية، نجاح، سلامة، منزل جديد
+-- ويرجع رقم جوال العضو مع إعلانات البطاقات ليظهر في نافذة التهنئة (للمسجلين برمز فقط)
+
+alter table public.announcements drop constraint if exists announcements_kind_check;
+alter table public.announcements add constraint announcements_kind_check
+  check (kind in ('birth','condolence','wedding','engagement','aqd','graduation','job','promotion','success','recovery','newhome','general'));
+
+drop function if exists public.secure_post_announcement(text, text, uuid, text, text, text);
+create or replace function public.secure_post_announcement(p_passcode text, p_kind text, p_member_id uuid, p_member_name text, p_gender text, p_body text default null)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_id uuid;
+begin
+  v_role := public._authenticate(p_passcode);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if v_role is null or v_role not in ('owner', 'editor', 'branch') then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  if p_kind not in ('birth','condolence','wedding','engagement','aqd','graduation','job','promotion','success','recovery','newhome','general') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+  if p_kind = 'general' then
+    if v_role = 'branch' then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+    if coalesce(trim(p_member_name), '') = '' or coalesce(trim(p_body), '') = '' then
+      return jsonb_build_object('ok', false, 'error', 'empty');
+    end if;
+    insert into public.announcements(kind, member_id, member_name, gender, body)
+    values ('general', null, left(trim(p_member_name), 200), 'male', left(trim(p_body), 4000))
+    returning id into v_id;
+    return jsonb_build_object('ok', true, 'id', v_id);
+  end if;
+  if v_role = 'branch' then
+    v_branch := public._branch_of(p_passcode);
+    if p_member_id is null or not public._in_branch(v_branch, p_member_id) then
+      return jsonb_build_object('ok', false, 'error', 'out_of_scope');
+    end if;
+  end if;
+  insert into public.announcements(kind, member_id, member_name, gender)
+  values (p_kind, p_member_id, left(coalesce(p_member_name, ''), 120), case when p_gender = 'female' then 'female' else 'male' end)
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+create or replace function public.get_announcements(p_code text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_priv boolean; v_wvis boolean; v_scope uuid[];
+begin
+  select * into v_role, v_branch from public._who(p_code);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if v_role is null then return jsonb_build_object('ok', false, 'error', 'code_required'); end if;
+  v_priv := v_role in ('owner', 'editor');
+  select coalesce(women_names_visible, true) into v_wvis from public.system_settings where id = 1;
+  if v_role = 'branch' and v_branch is not null then
+    select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
+  end if;
+  delete from public.announcements a where a.kind <> 'general'
+     and (a.member_id is null or not exists (select 1 from public.members m where m.id = a.member_id));
+  return jsonb_build_object('ok', true, 'items', coalesce((
+    select jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'member_id', a.member_id,
+      'member_name', a.member_name, 'body', a.body, 'phone', mm.phone,
+      'gender', a.gender, 'created_at', a.created_at, 'expires_at', a.expires_at) order by a.created_at desc)
+    from public.announcements a
+    left join public.members mm on mm.id = a.member_id
+    where a.expires_at > now()
+      and (a.kind = 'general' or mm.id is not null)
+      and not (a.kind <> 'general' and not v_priv and (coalesce(mm.name_hidden, false) or (mm.gender = 'female' and not v_wvis and not coalesce(mm.name_public, false)
+               and not (v_scope is not null and mm.id = any(v_scope)))))), '[]'::jsonb));
+end $$;
+
+grant execute on function public.secure_post_announcement(text, text, uuid, text, text, text) to anon, authenticated;
