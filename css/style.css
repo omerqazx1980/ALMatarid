@@ -203,3 +203,6 @@ button.danger{background:#7f1d1d;color:#fecaca}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%,100%{box-shadow:0 0 0 7px rgba(52,211,153,0)}}
 @keyframes glow{from{box-shadow:0 0 8px rgba(245,158,11,.25)}to{box-shadow:0 0 20px rgba(245,158,11,.6)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- 8) خلفية الشعار المائية (ann18) ---------- */
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:url('../logo.jpg') center center/min(76vmin,640px) auto no-repeat;opacity:.06;filter:invert(1) grayscale(1);mix-blend-mode:screen}
