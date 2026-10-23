@@ -286,3 +286,12 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .chip b{font-size:.9rem}
   .stats{flex-wrap:nowrap}
 }
+
+/* ---------- 16) أزرار العرض وفتح/طي الكل: رموز فقط بالجوال (ann49، طلب المالك 2026-10-24) ---------- */
+.ic{font-style:normal;margin-inline-end:5px}
+@media(max-width:640px){
+  .seg button{font-size:0;padding:7px 14px}
+  .seg button .ic{font-size:1.1rem;margin:0}
+  .lnk{font-size:0;padding:6px 9px}
+  .lnk .ic{font-size:1.05rem;margin:0}
+}
