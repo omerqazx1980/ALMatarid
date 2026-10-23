@@ -206,3 +206,10 @@ button.danger{background:#7f1d1d;color:#fecaca}
 
 /* ---------- 8) خلفية الشعار المائية (ann18، كُبّرت وقُوّيت ann19، وضوح 24 وموضع أسفل الوسط ann22) ---------- */
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:url('../logo.jpg') center 96%/min(95vmin,880px) auto no-repeat;opacity:.24;filter:invert(1) grayscale(1);mix-blend-mode:screen}
+
+/* عارض صور المناسبة: أزرار تنقّل وعدّاد (ann25) */
+.evview{position:relative}
+.evnav{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(8,18,14,.55);color:#fff;font-size:19px;line-height:1;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center}
+.evnav.next{left:8px}
+.evnav.prev{right:8px}
+.evcount{text-align:center;color:var(--mut);margin-top:6px;font-size:.85rem}

@@ -162,7 +162,30 @@ async function loadEvDoc(e) {
     ${photos.length ? `<div class="evgrid">${photos.map(x => `<figure><img src="${x.url}" alt="${esc(x.caption || 'صورة من المناسبة')}" data-evzoom="${x.id}">${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف صورة">✕</button>` : ''}${x.caption ? `<figcaption>${esc(x.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
     ${vids.map(x => `<div class="evvid">▶️ <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.caption || 'مشاهدة الفيديو')}</a>${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف فيديو">✕</button>` : ''}</div>`).join('')}
     <div class="evdoc-tools">${canDoc() ? `<button data-evadd="photo">➕ صورة</button><button data-evadd="video">➕ فيديو (رابط)</button><button data-evadd="story">✏️ ${e.story ? 'تعديل الحكاية' : 'كتابة حكاية المناسبة'}</button>` : `<button data-evadd="code">🎟️ لديّ رمز توثيق هذه المناسبة</button>`}</div>`;
-  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const x = photos.find(z => z.id === im.dataset.evzoom); if (x) { $('#profile-body').innerHTML = `<button class="x" id="evback">→ رجوع</button><img class="evbig" src="${x.url}" alt="">${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`; $('#evback').onclick = () => evDetails(); } });
+  /* عارض الصور مع تنقّل (ann25، بطلب المالك): أسهم يمين/يسار + عدّاد + مفاتيح الأسهم + سحب بالإصبع، دون الخروج للشبكة */
+  const showPhoto = i => {
+    const n = photos.length; if (!n) return;
+    i = ((i % n) + n) % n;
+    const x = photos[i];
+    $('#profile-body').innerHTML = `<button class="x" id="evback">→ رجوع</button><div class="evview"><img class="evbig" id="evbigimg" src="${x.url}" alt="">${n > 1 ? `<button class="evnav next" id="evnext" title="التالي" aria-label="الصورة التالية">❮</button><button class="evnav prev" id="evprev" title="السابق" aria-label="الصورة السابقة">❯</button>` : ''}</div>${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}${n > 1 ? `<p class="evcount">${i + 1} / ${n}</p>` : ''}`;
+    const back = () => { document.onkeydown = null; evDetails(); };
+    $('#evback').onclick = back;
+    if (n > 1) {
+      $('#evnext').onclick = () => showPhoto(i + 1);
+      $('#evprev').onclick = () => showPhoto(i - 1);
+      $('#evbigimg').onclick = () => showPhoto(i + 1);
+      [photos[i + 1] || photos[0], photos[i - 1] || photos[n - 1]].forEach(p => { const im = new Image(); im.src = p.url; });
+      document.onkeydown = e => {
+        if (!document.getElementById('evbigimg')) { document.onkeydown = null; return; }
+        if (e.key === 'ArrowLeft') showPhoto(i + 1); else if (e.key === 'ArrowRight') showPhoto(i - 1); else if (e.key === 'Escape') back();
+      };
+      let tx = null;
+      const vw = $('#profile-body').querySelector('.evview');
+      vw.ontouchstart = e => { tx = e.touches[0].clientX; };
+      vw.ontouchend = e => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; tx = null; if (dx < -40) showPhoto(i + 1); else if (dx > 40) showPhoto(i - 1); };
+    }
+  };
+  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const i = photos.findIndex(z => z.id === im.dataset.evzoom); if (i >= 0) showPhoto(i); });
   box.querySelectorAll('[data-evdel]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذا العنصر من التوثيق؟')) return;
     try {
