@@ -338,3 +338,11 @@ h1{overflow:hidden;text-overflow:ellipsis}
   header .more summary,header #btn-login{padding:6px 12px;font-size:.9rem;border-radius:9px}
   #feat{margin-top:42px}
 }
+
+/* ---------- 22) توحيد مقاس زرّي الأقسام والدخول وموازاة حبة المناسبات لزر الدخول (ann57، طلب المالك 2026-10-24) ---------- */
+@media(max-width:640px){
+  header .more{width:96px}
+  header .more summary{display:block;width:96px;text-align:center;padding:6px 0}
+  header #btn-login{width:96px;text-align:center;padding:6px 0}
+  #feat{margin-top:2px;padding-inline-end:104px}
+}
