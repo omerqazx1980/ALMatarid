@@ -440,9 +440,18 @@ async function refresh() {
 function openForm(title, fields, onSubmit) {
   $('#form-title').textContent = title; $('#form-err').hidden = true; S.onForm = onSubmit;
   $('#form-fields').innerHTML = fields.map(f => f.type === 'raw' ? f.html : `<label class="fl">${esc(f.label)}${
-    f.type === 'select' ? `<select name="${f.k}">${f.opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(f.val ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`
+    f.type === 'select' ? `${f.opts.length > 12 ? `<input class="selfilter" type="search" placeholder="🔍 ابحث في القائمة…" data-tg="${f.k}">` : ''}<select name="${f.k}">${f.opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(f.val ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`
     : f.type === 'area' ? `<textarea name="${f.k}" rows="4"${f.req ? ' required' : ''}>${esc(f.val)}</textarea>`
     : `<input name="${f.k}" type="${f.type || 'text'}" value="${esc(f.val)}"${f.req ? ' required' : ''} autocomplete="off">`}</label>`).join('');
+  /* ann41: بحث داخل القوائم الطويلة (رأس فرع/مسؤول/عضو…) */
+  document.querySelectorAll('.selfilter').forEach(inp => {
+    const sel = document.querySelector(`select[name="${inp.dataset.tg}"]`); if (!sel) return;
+    const all = [...sel.options].map(o => [o.value, o.textContent]);
+    inp.addEventListener('input', () => {
+      const q = inp.value.trim();
+      sel.innerHTML = all.filter(([v, t], i) => (i === 0 && v === '') || t.includes(q)).map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+    });
+  });
   $('#form').showModal();
 }
 $('#form-el').addEventListener('submit', async e => {
