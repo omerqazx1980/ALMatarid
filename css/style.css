@@ -295,3 +295,12 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .lnk{font-size:0;padding:6px 9px}
   .lnk .ic{font-size:1.05rem;margin:0}
 }
+
+/* ---------- 17) إعادة ترتيب ➕/➖ بالجوال: سطر مستقل ظاهر (ann52، طلب المالك 2026-10-24) ---------- */
+@media(max-width:640px){
+  .stats{flex-wrap:wrap;row-gap:6px}
+  #chips{flex:1 1 100%}
+  .ctl{margin-inline-start:auto;display:flex;gap:6px}
+  .lnk{background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:7px 12px}
+  .lnk .ic{font-size:1.1rem}
+}
