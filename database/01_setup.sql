@@ -1649,3 +1649,44 @@ begin
 end $$;
 
 grant execute on function public.secure_post_announcement(text, text, uuid, text, text, text) to anon, authenticated;
+
+-- ===== القسم 13: بطاقة شكر (طلب المالك 2026-10-24) =====
+-- نفّذ هذا القسم مرة واحدة في SQL Editor
+-- يضيف نوع شكر (بطاقة شكر من صاحب المناسبة — نص ثابت أو حر عبر p_body) لقيد الأنواع ودالة النشر
+
+alter table public.announcements drop constraint if exists announcements_kind_check;
+alter table public.announcements add constraint announcements_kind_check
+  check (kind in ('birth','condolence','wedding','engagement','aqd','graduation','job','promotion','success','recovery','newhome','general','thanks'));
+
+drop function if exists public.secure_post_announcement(text, text, uuid, text, text, text);
+create or replace function public.secure_post_announcement(p_passcode text, p_kind text, p_member_id uuid, p_member_name text, p_gender text, p_body text default null)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_id uuid;
+begin
+  v_role := public._authenticate(p_passcode);
+  if v_role = '__locked__' then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  if v_role is null or v_role not in ('owner', 'editor', 'branch') then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+  if p_kind not in ('birth','condolence','wedding','engagement','aqd','graduation','job','promotion','success','recovery','newhome','general','thanks') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+  if p_kind = 'general' then
+    if v_role = 'branch' then return jsonb_build_object('ok', false, 'error', 'denied'); end if;
+    if coalesce(trim(p_member_name), '') = '' or coalesce(trim(p_body), '') = '' then
+      return jsonb_build_object('ok', false, 'error', 'empty');
+    end if;
+    insert into public.announcements(kind, member_id, member_name, gender, body)
+    values ('general', null, left(trim(p_member_name), 200), 'male', left(trim(p_body), 4000))
+    returning id into v_id;
+    return jsonb_build_object('ok', true, 'id', v_id);
+  end if;
+  if v_role = 'branch' then
+    v_branch := public._branch_of(p_passcode);
+    if p_member_id is null or not public._in_branch(v_branch, p_member_id) then
+      return jsonb_build_object('ok', false, 'error', 'out_of_scope');
+    end if;
+  end if;
+  insert into public.announcements(kind, member_id, member_name, gender)
+  values (p_kind, p_member_id, left(coalesce(p_member_name, ''), 120), case when p_gender = 'female' then 'female' else 'male' end)
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+grant execute on function public.secure_post_announcement(text, text, uuid, text, text, text) to anon, authenticated;
