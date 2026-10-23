@@ -1013,12 +1013,13 @@ async function checkAnnouncements(popups = true) {
 }
 let nbTimer = null;
 function stopNbCycle() { if (nbTimer) { clearInterval(nbTimer); nbTimer = null; } }
-function startNbCycle(n) { stopNbCycle(); if (n < 2) return; let i = 0; nbTimer = setInterval(() => { const cs = document.querySelectorAll('#newsbar .nbcard'); if (cs.length < 2) return stopNbCycle(); cs[i % cs.length].classList.remove('on'); i++; cs[i % cs.length].classList.add('on'); }, 4000); }
+function startNbCycle(n) { stopNbCycle(); if (n < 2) return; let i = 0; nbTimer = setInterval(() => { const cs = document.querySelectorAll('#newsbar .nbcard'); if (cs.length < 2) return stopNbCycle(); cs[i % cs.length].classList.remove('on'); i++; cs[i % cs.length].classList.add('on'); }, 5000); }
 async function renderNewsbar() {
   const bar = $('#newsbar'); if (!bar) return;
   const items = S.ann || [];
   if (!items.length) { bar.hidden = true; bar.innerHTML = ''; stopNbCycle(); return; }
   bar.hidden = false;
+  bar.onpointerenter = () => stopNbCycle(); bar.onpointerleave = () => startNbCycle(items.length); /* ann43: إيقاف الحركة عند التمرير/اللمس */
   bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'general' ? '📢 إعلان' : (CARDS[a.kind] ? CARDS[a.kind].nb : '🕊️ تعزية')}: ${esc(a.member_name)}</span>${canEdit() ? `<span class="nbdel" data-andel="${a.id}" role="button" aria-label="حذف الإعلان" title="حذف الإعلان">✕</span>` : ''}</button>`).join('');
   for (const a of items) {
     const img = bar.querySelector(`[data-ann="${a.id}"] img`);

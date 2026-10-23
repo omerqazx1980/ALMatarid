@@ -246,3 +246,12 @@ h1{overflow:hidden;text-overflow:ellipsis}
   /* شريط البحث: يلتف عند الضيق الشديد */
   .bar{flex-wrap:wrap;padding:8px 10px}
 }
+
+/* ---------- 12) بطاقة الإعلانات أصغر وحركة أنعم (ann43، طلب المالك 2026-10-24) ---------- */
+#newsbar{height:64px;width:min(680px,94vw)}
+.nbcard{border-radius:99px;padding:6px 12px;gap:9px;transform:translateY(14px) scale(.97);transition:opacity .7s ease,transform .7s cubic-bezier(.22,.8,.3,1)}
+.nbcard.on{transform:none}
+.nbcard img{width:42px;height:42px;border-radius:50%}
+.nbcard span{font-size:.92rem}
+.nbdel{width:24px;height:24px;font-size:.72rem}
+@media(max-width:640px){#newsbar{height:88px}.nbcard{border-radius:18px}.nbcard img{width:40px;height:40px}}
