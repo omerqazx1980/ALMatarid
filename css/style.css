@@ -329,3 +329,12 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .ctl{margin-inline-start:auto}
   .lnk{padding:6px 10px}
 }
+
+/* ---------- 21) زرّا الأقسام والدخول بالجوال: فوق بعض ومصغّرة (ann56، طلب المالك 2026-10-24) ---------- */
+@media(max-width:640px){
+  header{position:relative}
+  header .more{position:absolute;inset-inline-end:10px;top:6px;z-index:70}
+  header #btn-login{position:absolute;inset-inline-end:10px;top:47px;z-index:70}
+  header .more summary,header #btn-login{padding:6px 12px;font-size:.9rem;border-radius:9px}
+  #feat{margin-top:42px}
+}
