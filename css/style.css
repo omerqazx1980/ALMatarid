@@ -277,3 +277,12 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .more summary{border:1px solid rgba(245,158,11,.55);background:rgba(245,158,11,.10);color:var(--gold);font-weight:700}
   header .ghost{border:1px solid rgba(245,158,11,.55);background:rgba(245,158,11,.10);color:var(--gold);font-weight:700}
 }
+
+/* ---------- 15) إحصائيات الجوال: رموز وأرقام فقط، صغيرة ومرتبة بسطر واحد (ann48، طلب المالك 2026-10-24) ---------- */
+@media(max-width:640px){
+  .chl{display:none}
+  #chips{flex-wrap:nowrap;justify-content:space-between;gap:5px}
+  .chip{font-size:.82rem;padding:2px 8px;gap:3px}
+  .chip b{font-size:.9rem}
+  .stats{flex-wrap:nowrap}
+}

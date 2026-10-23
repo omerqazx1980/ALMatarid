@@ -112,7 +112,7 @@ function stats() {
   const n = f => S.members.filter(f).length, gens = S.members.reduce((x, m) => Math.max(x, gen(m)), 0);
   const c = [['👥', 'الإجمالي', S.members.length], ['👨', 'الذكور', n(m => m.gender === 'male')], ['👩', 'الإناث', n(m => m.gender === 'female')],
     ['🟢', 'الأحياء', n(m => m.is_alive)], ['⚪', 'المتوفون', n(m => m.is_alive === false)], ['📜', 'الأجيال', gens]];
-  $('#chips').innerHTML = c.map(([i, l, v]) => `<span class="chip">${i} ${l} <b>${v}</b></span>`).join('');
+  $('#chips').innerHTML = c.map(([i, l, v]) => `<span class="chip">${i} <span class="chl">${l}</span> <b>${v}</b></span>`).join(''); /* ann48: بالجوال رموز وأرقام فقط */
 }
 const evList = () => (S.events || []).map(e => ({ ...e, t: new Date(e.event_date).getTime() })).filter(e => e.t > Date.now()).sort((a, b) => a.t - b.t);
 let evRot = null, evTick = null, evHold = false;
@@ -251,7 +251,7 @@ document.addEventListener('click', e => { const d = $('.more'); if (!d.contains(
 setInterval(showEvent, 60000);
 function collapseAll() { S.open = new Set(); for (const r of S.roots) { S.open.add(r.id); for (const k of S.kids.get(r.id) || []) S.open.add(k.id); } }
 /* ann24: على الجوال يبدأ العرض بالمؤسس فقط مطويًا (طلب المالك) */
-function collapseInitial() { if (window.matchMedia('(max-width: 640px)').matches) S.open = new Set(); else collapseAll(); }
+function collapseInitial() { if (window.matchMedia('(max-width: 640px)').matches) S.open = new Set(S.roots.map(r => r.id)); else collapseAll(); } /* ann48: المؤسس مفتوح بالجوال فتظهر الشجرة */
 /* أبناء العرض: نتجاوز العضوات المخفيات (لا بطاقة لهن عند الزوار بطلب المالك) ونُظهر أبناءهن إن وُجدوا في مكانهن */
 const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
 const dispRoots = () => { const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
