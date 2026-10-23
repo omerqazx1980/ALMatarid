@@ -212,6 +212,6 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 #feat[hidden]{display:none}
 .feat-btn{flex:0 1 calc((100% - 16px)/3);max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(245,158,11,.13);border:1px solid var(--gold);color:var(--gold);font-weight:700;padding:7px 10px}
 .feat-btn:hover{background:rgba(245,158,11,.25)}
-.feat-tg{cursor:pointer;font-size:1.05rem;line-height:1;padding:4px 8px;border-radius:8px;opacity:.35;filter:grayscale(1)}
-.feat-tg.on{opacity:1;filter:none}
+.feat-tg{cursor:pointer;font-size:1.35rem;line-height:1;padding:5px 10px;border-radius:8px;opacity:.65;filter:grayscale(1);background:rgba(148,163,184,.14);border:1px solid var(--line)}
+.feat-tg.on{opacity:1;filter:none;background:rgba(245,158,11,.16);border-color:var(--gold)}
 @media(max-width:640px){header{flex-wrap:wrap}#feat{order:9;flex-basis:100%;max-width:none}.feat-btn{flex-basis:calc((100% - 8px)/2);max-width:none}}

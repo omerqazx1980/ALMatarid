@@ -1097,11 +1097,13 @@ const FEAT = [
   ['suggest', '📝 اقتراح وتصحيح', '#m-suggest'], ['csv', '📊 تصدير إكسل', '#m-csv']
 ];
 function renderFeat() {
-  const nav = $('#feat'); if (!nav) return;
-  const list = FEAT.filter(([k]) => (S.featured || []).includes(k));
-  nav.hidden = !list.length;
-  nav.innerHTML = list.map(([k, label, sel]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${label}</button>`).join('');
-  nav.querySelectorAll('[data-feat-go]').forEach(b => b.onclick = () => { const t = $(FEAT.find(([k]) => k === b.dataset.featGo)[2]); if (t) t.click(); });
+  const nav = $('#feat');
+  if (nav) {
+    const list = FEAT.filter(([k]) => (S.featured || []).includes(k));
+    nav.hidden = !list.length;
+    nav.innerHTML = list.map(([k, label, sel]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${label}</button>`).join('');
+    nav.querySelectorAll('[data-feat-go]').forEach(b => b.onclick = () => { const t = $(FEAT.find(([k]) => k === b.dataset.featGo)[2]); if (t) t.click(); });
+  }
   document.querySelectorAll('.feat-tg').forEach(s => {
     const on = (S.featured || []).includes(s.dataset.featTg);
     s.textContent = on ? '⭐' : '☆'; s.classList.toggle('on', on);
@@ -1123,7 +1125,7 @@ function initFeatToggles() {
   FEAT.forEach(([key, , sel]) => {
     const btn = $(sel); if (!btn || btn.querySelector('.feat-tg')) return;
     const s = document.createElement('span');
-    s.className = 'feat-tg'; s.dataset.featTg = key; s.setAttribute('role', 'button'); s.setAttribute('aria-label', 'إبراز بالصفحة');
+    s.className = 'feat-tg'; s.dataset.featTg = key; s.textContent = '☆'; s.setAttribute('role', 'button'); s.setAttribute('aria-label', 'إبراز بالصفحة');
     s.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); toggleFeat(key); });
     btn.appendChild(s);
   });
