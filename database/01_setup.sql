@@ -1683,8 +1683,8 @@ begin
       return jsonb_build_object('ok', false, 'error', 'out_of_scope');
     end if;
   end if;
-  insert into public.announcements(kind, member_id, member_name, gender)
-  values (p_kind, p_member_id, left(coalesce(p_member_name, ''), 120), case when p_gender = 'female' then 'female' else 'male' end)
+  insert into public.announcements(kind, member_id, member_name, gender, body)
+  values (p_kind, p_member_id, left(coalesce(p_member_name, ''), 120), case when p_gender = 'female' then 'female' else 'male' end, nullif(left(trim(coalesce(p_body, '')), 2000), ''))
   returning id into v_id;
   return jsonb_build_object('ok', true, 'id', v_id);
 end $$;
