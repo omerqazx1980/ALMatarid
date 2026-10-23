@@ -901,13 +901,13 @@ $('#m-snap').onclick = async () => {
 
 /* ---------- بطاقات التهنئة والتعزية: تُنشأ تلقائيًا عند الإضافة/الوفاة، أو يدويًا من القائمة ---------- */
 async function drawCard(data, kind) {
-  const birth = kind === 'birth', gram = data.gender === 'female';
+  const birth = kind === 'birth', wed = kind === 'wedding', celeb = birth || wed, gram = data.gender === 'female';
   const cv = document.createElement('canvas'); cv.width = cv.height = 1080;
   const x = cv.getContext('2d');
   const g = x.createLinearGradient(0, 0, 0, 1080);
-  g.addColorStop(0, birth ? '#162033' : '#111827'); g.addColorStop(1, birth ? '#0b1120' : '#030712');
+  g.addColorStop(0, celeb ? '#162033' : '#111827'); g.addColorStop(1, celeb ? '#0b1120' : '#030712');
   x.fillStyle = g; x.fillRect(0, 0, 1080, 1080);
-  const accent = birth ? '#f59e0b' : '#9ca3af';
+  const accent = celeb ? '#f59e0b' : '#9ca3af';
   x.strokeStyle = accent; x.lineWidth = 6; x.strokeRect(36, 36, 1008, 1008);
   x.lineWidth = 2; x.strokeRect(56, 56, 968, 968);
   x.textAlign = 'center';
@@ -917,15 +917,16 @@ async function drawCard(data, kind) {
   await new Promise(res => { const im = new Image(); im.onload = () => { try { x.save(); x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.clip(); x.drawImage(im, 448, 113, 184, 184); x.restore(); x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.stroke(); } catch (_) {} res(); }; im.onerror = () => res(); im.src = 'logo.jpg'; });
   x.fillStyle = accent; x.font = F(46); x.fillText('أسرة آل مطارد', 540, 395);
   x.fillStyle = '#f1f5f9';
-  const title = birth ? 'بُشرى سارّة' : 'إنا لله وإنا إليه راجعون';
-  fit(title, birth ? 88 : 64); x.fillText(title, 540, 505);
+  const title = celeb ? 'بُشرى سارّة' : 'إنا لله وإنا إليه راجعون';
+  fit(title, celeb ? 88 : 64); x.fillText(title, 540, 505);
   x.fillStyle = accent; x.font = F(38, 600);
-  x.fillText(birth ? (gram ? 'مولودة جديدة' : 'مولود جديد') : (gram ? 'فقيدتنا الغالية' : 'فقيدنا الغالي'), 540, 580);
+  x.fillText(birth ? (gram ? 'مولودة جديدة' : 'مولود جديد') : wed ? (gram ? 'عروستنا الغالية' : 'عريسنا الغالي') : (gram ? 'فقيدتنا الغالية' : 'فقيدنا الغالي'), 540, 580);
   x.fillStyle = '#f1f5f9'; fit(data.full_name, 68); x.fillText(data.full_name, 540, 665);
   x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.moveTo(390, 715); x.lineTo(690, 715); x.stroke();
   x.fillStyle = '#cbd5e1'; x.font = F(40, 600);
   const lines = birth
     ? ['بارك الله لكم في الموهوب وشكرتم الواهب', (gram ? 'جعلها' : 'جعله') + ' الله من مواليد السعادة وقرة عين لوالديه']
+    : wed ? ['بارك الله لهما وبارك عليهما وجمع بينهما في خير', 'أطيب التهاني وأجمل التبريكات للعروسين وأهليهما']
     : [(gram ? 'رحمها الله وغفر لها وأسكنها فسيح جناته' : 'رحمه الله وغفر له وأسكنه فسيح جناته'), 'وألهم أهله وذويه الصبر والسلوان'];
   x.fillText(lines[0], 540, 790); x.fillText(lines[1], 540, 855);
   x.fillStyle = '#94a3b8'; x.font = F(32, 400);
@@ -935,15 +936,28 @@ async function drawCard(data, kind) {
 async function openCard(data, kind, waitClose = false) {
   try {
     const cv = await drawCard(data, kind), url = cv.toDataURL('image/png');
-    showInfo(`<h2>${kind === 'birth' ? '💌 بطاقة تهنئة' : '🕊️ بطاقة تعزية'}</h2><img class="cardimg" src="${url}" alt="البطاقة"><div class="row adm"><button id="card-dl">⬇️ تنزيل البطاقة</button></div>`);
+    showInfo(`<h2>${kind === 'birth' ? '💌 بطاقة تهنئة' : kind === 'wedding' ? '💍 بطاقة تهنئة بالزواج' : '🕊️ بطاقة تعزية'}</h2><img class="cardimg" src="${url}" alt="البطاقة"><div class="row adm"><button id="card-dl">⬇️ تنزيل البطاقة</button></div>`);
     $('#card-dl').onclick = () => { const a = Object.assign(document.createElement('a'), { href: url, download: 'al-matarid-card.png' }); a.click(); };
     if (waitClose) await new Promise(r => { const p = $('#profile'); if (!p.open) return r(); p.addEventListener('close', r, { once: true }); setTimeout(r, 20000); });
   } catch (e) { toast('تعذر إنشاء البطاقة تلقائيًا — تقدر تنشئها من قائمة «بطاقات التهاني والتعازي»'); }
 }
+/* ann31: نشر إعلان عام بنص حر (مالك/محرر) */
+$('#m-annpost').onclick = menuClose(() => {
+  openForm('نشر إعلان عام للزوار', [
+    { k: 'title', label: 'عنوان الإعلان', req: 1 },
+    { k: 'text', label: 'نص الإعلان', type: 'area', req: 1 }], async d => {
+    if (CFG.DEMO) { toast('الوضع التجريبي: لن يُنشر فعليًا'); return; }
+    try {
+      const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: 'general', p_member_id: null, p_member_name: d.title.trim(), p_gender: 'male', p_body: d.text.trim() });
+      if (!r || !r.ok) throw new Error();
+      toast('تم نشر الإعلان'); checkAnnouncements(false);
+    } catch (_) { toast('تعذر النشر — تأكد أنك شغّلت القسم 11 من ملف الإعداد'); }
+  });
+});
 $('#m-cards').onclick = menuClose(() => {
   openForm('إنشاء بطاقة', [
     { k: 'who', label: 'الاسم', type: 'select', opts: S.members.slice().sort(byName).map(m => [m.id, m.full_name]) },
-    { k: 'kind', label: 'نوع البطاقة', type: 'select', opts: [['birth', 'تهنئة بمولود'], ['condolence', 'تعزية بوفاة']] }], d => {
+    { k: 'kind', label: 'نوع البطاقة', type: 'select', opts: [['birth', 'تهنئة بمولود'], ['wedding', 'تهنئة بزواج'], ['condolence', 'تعزية بوفاة']] }], d => {
     const mm = S.byId.get(d.who); if (mm) { const ln = cardLongName(mm); openCard({ full_name: ln, gender: mm.gender, father_id: mm.father_id }, d.kind); postAnnouncement(d.kind, { ...mm, full_name: ln }); }
   });
 });
@@ -953,9 +967,9 @@ const ANN_KEY = 'alm_seen_ann';
 const seenAnn = () => { try { return JSON.parse(localStorage.getItem(ANN_KEY) || '[]'); } catch (_) { return []; } };
 function markSeenAnn(id) { if (!id) return; const s = seenAnn(); if (!s.includes(id)) { s.push(id); try { localStorage.setItem(ANN_KEY, JSON.stringify(s.slice(-60))); } catch (_) {} } }
 async function postAnnouncement(kind, member) {
-  if (CFG.DEMO || !member) return;
+  if (CFG.DEMO || !member) return; /* ann31: أنواع جديدة wedding/general عبر member.body */
   if (!canEdit()) { toast('البطاقة ظهرت لك فقط — نشرها للزوار يحتاج دخول المالك أو المحرر'); return; }
-  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male' }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } else toast('تعذر نشر البطاقة للزوار'); } catch (_) { toast('تعذر نشر البطاقة للزوار'); }
+  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male', p_body: member.body || null }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } else toast('تعذر نشر البطاقة للزوار'); } catch (_) { toast('تعذر نشر البطاقة للزوار'); }
 }
 async function checkAnnouncements(popups = true) {
   if (CFG.DEMO || !S.code) return;
@@ -964,7 +978,7 @@ async function checkAnnouncements(popups = true) {
   S.ann = items; renderNewsbar();
   if (!popups) return;
   const seen = seenAnn();
-  for (const a of items.filter(z => !seen.includes(z.id))) { markSeenAnn(a.id); await openCard({ full_name: a.member_name, gender: a.gender }, a.kind, true); }
+  for (const a of items.filter(z => !seen.includes(z.id))) { markSeenAnn(a.id); if (a.kind === 'general') { showInfo(`<h2>📢 ${esc(a.member_name)}</h2><div class="story">${esc(a.body || '').replace(/\n/g, '<br>')}</div>`); await new Promise(r => { const p = $('#profile'); if (!p.open) return r(); p.addEventListener('close', r, { once: true }); setTimeout(r, 20000); }); } else await openCard({ full_name: a.member_name, gender: a.gender }, a.kind, true); }
 }
 let nbTimer = null;
 function stopNbCycle() { if (nbTimer) { clearInterval(nbTimer); nbTimer = null; } }
@@ -974,12 +988,13 @@ async function renderNewsbar() {
   const items = S.ann || [];
   if (!items.length) { bar.hidden = true; bar.innerHTML = ''; stopNbCycle(); return; }
   bar.hidden = false;
-  bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'birth' ? '💌 تهنئة' : '🕊️ تعزية'}: ${esc(a.member_name)}</span>${canEdit() ? `<span class="nbdel" data-andel="${a.id}" role="button" aria-label="حذف الإعلان" title="حذف الإعلان">✕</span>` : ''}</button>`).join('');
+  bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'birth' ? '💌 تهنئة' : a.kind === 'wedding' ? '💍 زفاف' : a.kind === 'general' ? '📢 إعلان' : '🕊️ تعزية'}: ${esc(a.member_name)}</span>${canEdit() ? `<span class="nbdel" data-andel="${a.id}" role="button" aria-label="حذف الإعلان" title="حذف الإعلان">✕</span>` : ''}</button>`).join('');
   for (const a of items) {
     const img = bar.querySelector(`[data-ann="${a.id}"] img`);
+    if (a.kind === 'general') { img.style.display = 'none'; continue; }
     try { img.src = (await drawCard({ full_name: a.member_name, gender: a.gender }, a.kind)).toDataURL('image/png'); } catch (_) {}
   }
-  bar.querySelectorAll('[data-ann]').forEach(b => b.onclick = () => { const a = items.find(z => z.id === b.dataset.ann); if (a) { markSeenAnn(a.id); openCard({ full_name: a.member_name, gender: a.gender }, a.kind); } });
+  bar.querySelectorAll('[data-ann]').forEach(b => b.onclick = () => { const a = items.find(z => z.id === b.dataset.ann); if (!a) return; markSeenAnn(a.id); if (a.kind === 'general') showInfo(`<h2>📢 ${esc(a.member_name)}</h2><div class="story">${esc(a.body || '').replace(/\n/g, '<br>')}</div>`); else openCard({ full_name: a.member_name, gender: a.gender }, a.kind); });
   bar.querySelectorAll('[data-andel]').forEach(x => x.onclick = async e => {
     e.stopPropagation();
     if (!confirm('حذف هذا الإعلان نهائيًا؟')) return;
