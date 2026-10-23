@@ -245,7 +245,7 @@ function compressEventPhoto(file) {
 $('#event').addEventListener('click', ev => {
   const n = ev.target.closest('[data-evn]');
   if (n) { const L = evList(); S.ev = ((S.ev || 0) + +n.dataset.evn + L.length) % L.length; showEvent(); }
-  else if (ev.target.closest('.ev-more')) evDetails();
+  else if (ev.target.closest('.ev-more') || ev.target.closest('.evslide')) evDetails(); /* ann53: الضغط على الشريط كله يفتح التفاصيل */
 });
 document.addEventListener('click', e => { const d = $('.more'); if (!d.contains(e.target)) d.open = false; });
 setInterval(showEvent, 60000);
