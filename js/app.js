@@ -151,26 +151,42 @@ function evDetails(e) {
 }
 /* توثيق المناسبة: صور داخل الموقع + روابط فيديو + حكاية — للمالك/المحرر أو صاحب المناسبة برمز توثيقها */
 const evDocCodes = new Map();
-async function loadEvDoc(e) {
+async function loadEvDoc(e, force) {
+  const box = $('#evdoc'); if (!box) return;
+  if (CFG.DEMO) { renderEvDoc(e, e._media || []); return; }
+  if (!force && e._items) { renderEvDoc(e, e._items); return; }
+  /* ann30: حالة تحميل فورية + زر استدعاء مباشر (طلب المالك) */
+  box.innerHTML = `<h3 class="evdoch">📸 توثيق المناسبة</h3>
+    ${e.story ? `<div class="story">${esc(e.story)}</div>` : '<p class="sub">لا حكاية موثقة بعد.</p>'}
+    <div class="evdoc-tools"><button data-evload="1">📸 تحميل صور وفيديو المناسبة${e.media_count ? ` (${e.media_count})` : ''}</button></div>
+    <p class="sub" id="evloadmsg">جارٍ التحميل…</p>`;
+  const lb = box.querySelector('[data-evload]'); if (lb) lb.onclick = () => loadEvDoc(e, true);
+  try {
+    const r = await rpc('get_event_media', { p_code: S.code, p_event_id: e.id });
+    if (!r.ok) throw new Error();
+    e._items = r.items || [];
+    if (S.evDetail === e && $('#evdoc')) renderEvDoc(e, e._items);
+  } catch (_) {
+    const m = $('#evloadmsg'); if (m && S.evDetail === e) m.textContent = 'تعذّر تحميل الصور — اضغط الزر أعلاه للمحاولة مرة أخرى';
+  }
+}
+function renderEvDoc(e, items) {
   const box = $('#evdoc'); if (!box) return;
   const canDoc = () => canEdit() || evDocCodes.has(String(e.id));
   const pass = () => canEdit() ? S.code : evDocCodes.get(String(e.id));
-  let items = [];
-  if (CFG.DEMO) items = e._media || [];
-  else { try { const r = await rpc('get_event_media', { p_code: S.code, p_event_id: e.id }); if (r.ok) items = r.items || []; } catch (_) {} }
   const photos = items.filter(x => x.kind === 'photo'), vids = items.filter(x => x.kind === 'video');
   box.innerHTML = `<h3 class="evdoch">📸 توثيق المناسبة</h3>
     ${e.story ? `<div class="story">${esc(e.story)}</div>` : '<p class="sub">لا حكاية موثقة بعد.</p>'}
     ${photos.length ? `<div class="evgrid">${photos.map(x => `<figure><img src="${x.url}" alt="${esc(x.caption || 'صورة من المناسبة')}" data-evzoom="${x.id}">${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف صورة">✕</button>` : ''}${x.caption ? `<figcaption>${esc(x.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
     ${vids.map(x => `<div class="evvid">▶️ <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.caption || 'مشاهدة الفيديو')}</a>${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف فيديو">✕</button>` : ''}</div>`).join('')}
     <div class="evdoc-tools">${canDoc() ? `<button data-evadd="photo">➕ صورة</button><button data-evadd="video">➕ فيديو (رابط)</button><button data-evadd="story">✏️ ${e.story ? 'تعديل الحكاية' : 'كتابة حكاية المناسبة'}</button>` : `<button data-evadd="code">🎟️ لديّ رمز توثيق هذه المناسبة</button>`}</div>`;
-  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const x = photos.find(z => z.id === im.dataset.evzoom); if (x) { $('#profile-body').innerHTML = `<button class="x" id="evback">→ رجوع</button><img class="evbig" src="${x.url}" alt="">${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`; $('#evback').onclick = () => evDetails(); } });
+  box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const i = photos.findIndex(z => z.id === im.dataset.evzoom); if (i >= 0) evZoom(e, photos, i); });
   box.querySelectorAll('[data-evdel]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذا العنصر من التوثيق؟')) return;
     try {
       if (CFG.DEMO) e._media = (e._media || []).filter(z => z.id !== b.dataset.evdel);
       else { const r = await rpc('secure_delete_event_media', { p_passcode: pass(), p_media_id: b.dataset.evdel }); if (!r.ok) throw new Error(); e.media_count = Math.max(0, (e.media_count || 1) - 1); }
-      loadEvDoc(e); toast('تم الحذف');
+      loadEvDoc(e, true); toast('تم الحذف');
     } catch (_) { toast('تعذر الحذف — تأكد من الرمز'); }
   });
   box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
@@ -193,7 +209,7 @@ async function loadEvDoc(e) {
       try {
         if (CFG.DEMO) (e._media = e._media || []).push({ id: 'v' + Date.now(), kind: 'video', url: u.trim(), caption: cap.trim() || null });
         else { const r = await rpc('secure_add_event_media', { p_passcode: pass(), p_event_id: e.id, p_kind: 'video', p_url: u.trim(), p_caption: cap.trim() }); if (!r.ok) throw new Error(); e.media_count = (e.media_count || 0) + 1; }
-        loadEvDoc(e); toast('تمت إضافة الفيديو');
+        loadEvDoc(e, true); toast('تمت إضافة الفيديو');
       } catch (_) { toast('تعذر الإضافة — تأكد من الرابط أو الرمز'); }
       return;
     }
@@ -205,6 +221,18 @@ async function loadEvDoc(e) {
       } catch (_) { toast('تعذر الحفظ — تأكد من الرمز'); }
     }
   });
+}
+/* عارض الصور: تنقّل سابق/تالي بين صور المناسبة (ann30) */
+function evZoom(e, photos, idx) {
+  const x = photos[idx]; if (!x) return;
+  $('#profile-body').innerHTML = `<div class="evzoombar"><button class="x" id="evback">→ رجوع</button><span class="sub">${idx + 1} / ${photos.length}</span>
+    <span><button class="x" id="evprev" ${idx === 0 ? 'disabled' : ''} aria-label="الصورة السابقة">‹ سابقة</button>
+    <button class="x" id="evnext" ${idx === photos.length - 1 ? 'disabled' : ''} aria-label="الصورة التالية">تالية ›</button></span></div>
+    <img class="evbig" src="${x.url}" alt="">${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`;
+  $('#evback').onclick = () => evDetails();
+  const pv = $('#evprev'), nx = $('#evnext');
+  if (pv) pv.onclick = () => evZoom(e, photos, idx - 1);
+  if (nx) nx.onclick = () => evZoom(e, photos, idx + 1);
 }
 function compressEventPhoto(file) {
   return new Promise((res, rej) => {
@@ -1000,7 +1028,7 @@ $('#ev-file').addEventListener('change', async e => {
     const cap = prompt('تعليق على الصورة (اختياري):') || '';
     if (CFG.DEMO) (ev._media = ev._media || []).push({ id: 'p' + Date.now(), kind: 'photo', url: data, caption: cap.trim() || null });
     else { const pc = canEdit() ? S.code : evDocCodes.get(String(eid)); const r = await rpc('secure_add_event_media', { p_passcode: pc, p_event_id: eid, p_kind: 'photo', p_url: data, p_caption: cap.trim() }); if (!r.ok) throw new Error(); ev.media_count = (ev.media_count || 0) + 1; }
-    toast('تمت إضافة الصورة'); if ($('#evdoc')) loadEvDoc(ev);
+    toast('تمت إضافة الصورة'); if ($('#evdoc')) loadEvDoc(ev, true);
   } catch (_) { toast('تعذر رفع الصورة'); }
 });
 $('#photo-file').addEventListener('change', async e => {

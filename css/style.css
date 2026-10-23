@@ -216,3 +216,7 @@ header{flex-wrap:wrap}
 .feat-tg{cursor:pointer;font-size:1.35rem;line-height:1;padding:5px 10px;border-radius:8px;opacity:.65;filter:grayscale(1);background:rgba(148,163,184,.14);border:1px solid var(--line)}
 .feat-tg.on{opacity:1;filter:none;background:rgba(245,158,11,.16);border-color:var(--gold)}
 @media(max-width:640px){#feat{margin-top:0}}
+
+/* ---------- 10) عارض صور المناسبات: شريط التنقّل (ann30) ---------- */
+.evzoombar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.evzoombar .x:disabled{opacity:.35;cursor:default}
