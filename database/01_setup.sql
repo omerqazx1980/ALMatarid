@@ -1813,3 +1813,136 @@ end $$;
 grant execute on function public.secure_reject_suggestion(uuid, text) to anon, authenticated;
 grant execute on function public.list_suggestions(text) to anon, authenticated;
 grant execute on function public.submit_suggestion(text, uuid, text, jsonb) to anon, authenticated;
+
+-- ===== القسم 15: الزوجة السابقة (الطلاق) — مخفية عن الجميع إلا المالك، والأبناء مرتبطون بها (قرار المالك 2026-10-24) =====
+-- نفّذ هذا القسم مرة واحدة في SQL Editor
+--   • حالة زواج لكل زوجة: current (حالية) / divorced (سابقة بالطلاق).
+--   • المطلّقة لا تصل بياناتها إلا للمالك: تُستبعد من حزمة الزوجات لغيره،
+--     ويُصفّى ربط الأم (wife_mother_id) عن غير المالك — الأبناء يبقون بفرع أبيهم دائمًا.
+
+alter table public.wives add column if not exists marriage_status text not null default 'current';
+alter table public.wives drop constraint if exists wives_marriage_status_check;
+alter table public.wives add constraint wives_marriage_status_check check (marriage_status in ('current', 'divorced'));
+
+create or replace function public.get_bundle(p_code text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_mode text; v_role text; v_priv boolean; v_seen boolean; v_branch uuid; v_scope uuid[]; v_wvis boolean; v_feat text[];
+begin
+  select access_mode into v_mode from public.system_settings where id = 1;
+  v_role := public._authenticate(p_code);
+
+  if v_role = '__locked__' then
+    return jsonb_build_object('ok', false, 'error', 'locked', 'mode', v_mode);
+  end if;
+  if v_mode = 'family_code' and v_role is null then
+    return jsonb_build_object('ok', false, 'error', 'code_required', 'mode', v_mode);
+  end if;
+
+  v_priv := coalesce(v_role in ('owner', 'editor'), false);
+  select coalesce(women_names_visible, true) into v_wvis from public.system_settings where id = 1;
+  select coalesce(featured_sections, array['events','honor']) into v_feat from public.system_settings where id = 1;
+  v_seen := v_role is not null;
+
+  if v_role in ('branch', 'reader') then
+    v_branch := public._branch_of(p_code);
+    if v_role = 'branch' then
+      select coalesce(array_agg(b.id), '{}') into v_scope from public._branch_members(v_branch) b;
+    end if;
+  end if;
+
+  if v_role in ('family', 'branch', 'reader') and p_code is not null then
+    insert into public.access_log(role, branch_root_id, ip)
+    select v_role, v_branch, public._client_ip()
+    where not exists (select 1 from public.access_log a where a.ip = public._client_ip() and a.role = v_role
+      and a.branch_root_id is not distinct from v_branch and a.created_at > now() - interval '30 minutes');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'mode', v_mode,
+    'role', coalesce(v_role, 'visitor'),
+    'women_names_visible', v_wvis,
+    'featured_sections', coalesce(to_jsonb(v_feat), '[]'::jsonb),
+    'access_stats', case when v_role = 'owner' then (select jsonb_build_object(
+      'family', (select count(*) from public.access_log where role = 'family' and created_at > now() - interval '30 days'),
+      'by_branch', coalesce((select jsonb_object_agg(branch_root_id::text, c) from (select branch_root_id, count(*) c from public.access_log where branch_root_id is not null and created_at > now() - interval '30 days' group by branch_root_id) t), '{}'::jsonb))) end,
+    'branch', case when v_branch is not null then
+        (select jsonb_build_object('root_id', e.branch_root_id, 'delegate_id', e.delegate_member_id, 'label', e.label)
+           from public.branch_editors e where e.branch_root_id = v_branch) end,
+    'branches', case when v_role = 'owner' then
+        coalesce((select jsonb_agg(jsonb_build_object('root_id', e.branch_root_id, 'delegate_id', e.delegate_member_id, 'label', e.label, 'reader_set', exists(select 1 from public.branch_access_codes c where c.branch_root_id = e.branch_root_id)) order by e.created_at)
+                    from public.branch_editors e), '[]'::jsonb) end,
+    'members', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', m.id, 'full_name', case when (not v_priv and (coalesce(m.name_hidden, false) or (m.gender = 'female' and not v_wvis and not coalesce(m.name_public, false) and not (v_scope is not null and m.id = any(v_scope))))) then 'ابنة الأسرة' else m.full_name end,
+          'name_masked', (not v_priv and (coalesce(m.name_hidden, false) or (m.gender = 'female' and not v_wvis and not coalesce(m.name_public, false) and not (v_scope is not null and m.id = any(v_scope))))), 'name_hidden', coalesce(m.name_hidden, false),
+          'nickname', case when (not v_priv and (coalesce(m.name_hidden, false) or (m.gender = 'female' and not v_wvis and not coalesce(m.name_public, false) and not (v_scope is not null and m.id = any(v_scope))))) then null else m.nickname end,
+          'name_public', coalesce(m.name_public, false), 'gender', m.gender,
+          'father_id', m.father_id, 'wife_mother_id', case when v_role <> 'owner' and exists (select 1 from public.wives dw where dw.id = m.wife_mother_id and coalesce(dw.marriage_status, 'current') = 'divorced') then null else m.wife_mother_id end,
+          'birth_date', m.birth_date, 'death_date', m.death_date, 'is_alive', m.is_alive,
+          'birth_year_text', m.birth_year_text, 'death_year_text', m.death_year_text,
+          'birth_order', m.birth_order, 'city', m.city, 'photo_url', m.photo_url, 'audio_url', m.audio_url,
+          'achievement_badge', m.achievement_badge, 'bio', m.bio, 'biography_story', m.biography_story,
+          'created_at', m.created_at)
+        || case when v_priv or m.id = any(v_scope) then jsonb_build_object('phone', m.phone) else '{}'::jsonb end
+        order by m.created_at)
+        from public.members m), '[]'::jsonb),
+    'wives', case when v_seen then coalesce((
+      select jsonb_agg(jsonb_build_object('id', w.id, 'husband_id', w.husband_id, 'full_name', case when (not v_priv and (coalesce(w.name_hidden, false) or coalesce((select lm.name_hidden from public.members lm where lm.id = w.member_id), false) or (not v_wvis and not (coalesce(w.name_public, false) or coalesce((select lm.name_public from public.members lm where lm.id = w.member_id), false)) and not (v_scope is not null and (w.husband_id = any(v_scope) or w.member_id = any(v_scope)))))) then 'زوجة' else public._woman_name(coalesce((select lm.full_name from public.members lm where lm.id = w.member_id), w.full_name),
+            coalesce(w.name_public, false) or coalesce((select lm.name_public from public.members lm where lm.id = w.member_id), false),
+            (v_scope is not null and (w.husband_id = any(v_scope) or w.member_id = any(v_scope))),
+            'زوجة ' || coalesce((select h.full_name from public.members h where h.id = w.husband_id), 'أحد أفراد الأسرة'), (not v_wvis and not v_priv)) end,
+                                          'name_masked', (not v_priv and (coalesce(w.name_hidden, false) or coalesce((select lm.name_hidden from public.members lm where lm.id = w.member_id), false) or (not v_wvis and not (coalesce(w.name_public, false) or coalesce((select lm.name_public from public.members lm where lm.id = w.member_id), false)) and not (v_scope is not null and (w.husband_id = any(v_scope) or w.member_id = any(v_scope)))))),
+                                          'family_name', case when (not v_priv and (coalesce(w.name_hidden, false) or coalesce((select lm.name_hidden from public.members lm where lm.id = w.member_id), false) or (not v_wvis and not (coalesce(w.name_public, false) or coalesce((select lm.name_public from public.members lm where lm.id = w.member_id), false)) and not (v_scope is not null and (w.husband_id = any(v_scope) or w.member_id = any(v_scope)))))) then null else w.family_name end,
+                                          'member_id', w.member_id, 'name_public', coalesce(w.name_public, false), 'marriage_status', coalesce(w.marriage_status, 'current'), 'created_at', w.created_at) order by w.created_at)
+        from public.wives w where v_role = 'owner' or coalesce(w.marriage_status, 'current') <> 'divorced'), '[]'::jsonb) else '[]'::jsonb end,
+    'events', case when v_seen then coalesce((
+      select jsonb_agg(jsonb_build_object('id', e.id, 'title', e.title, 'event_date', e.event_date,
+                                          'location_name', e.location_name, 'location_url', e.location_url,
+                                          'description', e.description, 'story', e.story,
+                                          'doc_code', case when v_priv then e.doc_code else null end,
+                                          'media_count', (select count(*) from public.event_media em where em.event_id = e.id)) order by e.event_date)
+        from public.family_events e), '[]'::jsonb) else '[]'::jsonb end
+  );
+end $$;
+
+grant execute on function public.get_bundle(text) to anon, authenticated;
+
+drop function if exists public.secure_save_wife(uuid, text, text, uuid, boolean, boolean, text);
+create or replace function public.secure_save_wife(
+  p_husband_id uuid, p_full_name text, p_family_name text, p_member_id uuid, p_name_public boolean, p_name_hidden boolean, p_passcode text, p_marriage_status text default 'current') returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_wife_id uuid;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return public._deny(v_role); end if;
+  if p_full_name is null or length(trim(p_full_name)) = 0 then return public._fail('الاسم مطلوب'); end if;
+  if v_role = 'branch' and not public._in_branch(v_branch, p_husband_id) then
+    return public._fail('هذا الفرد خارج صلاحية فرعك');
+  end if;
+  perform set_config('app.actor', public._actor(v_role, v_branch), true);
+  insert into public.wives (husband_id, full_name, family_name, member_id, name_public, name_hidden, marriage_status)
+  values (p_husband_id, trim(p_full_name), p_family_name, p_member_id, coalesce(p_name_public, false), coalesce(p_name_hidden, false), case when p_marriage_status = 'divorced' then 'divorced' else 'current' end) returning id into v_wife_id;
+  return jsonb_build_object('success', true, 'id', v_wife_id);
+end $$;
+grant execute on function public.secure_save_wife(uuid, text, text, uuid, boolean, boolean, text, text) to anon, authenticated;
+
+create or replace function public.secure_set_wife_status(p_wife_id uuid, p_status text, p_passcode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_role text; v_branch uuid; v_husband uuid;
+begin
+  select * into v_role, v_branch from public._who(p_passcode);
+  if coalesce(v_role, '') not in ('owner', 'editor', 'branch') then return public._deny(v_role); end if;
+  if p_status not in ('current', 'divorced') then return public._fail('حالة غير صالحة'); end if;
+  select husband_id into v_husband from public.wives where id = p_wife_id;
+  if v_husband is null then return public._fail('الزوجة غير موجودة'); end if;
+  if v_role = 'branch' and not public._in_branch(v_branch, v_husband) then
+    return public._fail('هذا الفرد خارج صلاحية فرعك');
+  end if;
+  perform set_config('app.actor', public._actor(v_role, v_branch), true);
+  update public.wives set marriage_status = p_status where id = p_wife_id;
+  return jsonb_build_object('success', true);
+end $$;
+grant execute on function public.secure_set_wife_status(uuid, text, text) to anon, authenticated;

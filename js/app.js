@@ -415,8 +415,8 @@ function profile(id) {
     <p class="sub">${m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · رحمه الله' : ''}</p>
     ${m.achievement_badge ? `<p><span class="bd">${esc(m.achievement_badge)}</span></p>` : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
-      ${row('الزوج', husband ? esc(husband.full_name) : '')}
-      ${row('الزوجات', wives.map(w => esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : '')).join('، '))}
+      ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
+      ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
       ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
@@ -495,7 +495,7 @@ function memberForm(m, parentId) {
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
     f('order', 'ترتيب الميلاد بين إخوته', m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1, 'number'),
-    ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name])] })] : []),
+    ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name + (w.marriage_status === 'divorced' ? ' (زوجة سابقة)' : '')])] })] : []),
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('story', 'نبذة', m?.biography_story || m?.bio, 'area')], d => saveMember(m, fid, d));
@@ -521,16 +521,24 @@ function wifeForm(m) {
     { k: 'member', label: 'اخترها من نساء الشجرة (عند الربط)', type: 'select', opts: [['', '—'], ...women.map(w => [w.id, w.full_name])] },
     { k: 'name', label: 'اسم الزوجة (عند عدم الربط)' }, { k: 'fam', label: 'اسم عائلتها' },
     { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] },
-    { k: 'namehid', label: 'إخفاء اسمها برغبتها', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] }], async d => {
+    { k: 'namehid', label: 'إخفاء اسمها برغبتها', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] },
+    { k: 'mstatus', label: 'حالة الزواج', type: 'select', val: 'current', opts: [['current', 'زوجة حالية'], ['divorced', 'زوجة سابقة — انتهى الزواج بالطلاق (تظهر للمالك فقط)']] }], async d => {
     const linked = d.mode === 'link' && d.member ? S.byId.get(d.member) : null;
     if (d.mode === 'link' && !linked) throw new Error('اختر الزوجة من قائمة نساء الأسرة');
     const name = linked ? linked.full_name : d.name.trim();
     if (!name) throw new Error('الاسم مطلوب');
     const fam = linked ? null : (d.fam.trim() || null);
-    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code },
-      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' }));
+    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code, p_marriage_status: d.mstatus },
+      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1', marriage_status: d.mstatus }));
     if (!CFG.DEMO) await refresh(); profile(m.id);
   });
+}
+async function setWifeStatus(id, status) {
+  const w = S.wives.find(x => x.id === id); if (!w) return;
+  const msg = status === 'divorced' ? `إنهاء زواج «${w.full_name}» بالطلاق؟ ستصبح «زوجة سابقة»: تختفي عن جميع الزوار والمحررين ومسؤولي الفروع، وتبقى ظاهرة لك وحدك مع بقاء أبنائها مرتبطين بها.` : `إعادة «${w.full_name}» كزوجة حالية؟`;
+  if (!confirm(msg)) return;
+  try { await op('secure_set_wife_status', { p_wife_id: id, p_status: status, p_passcode: S.code }, () => { w.marriage_status = status; }); if (!CFG.DEMO) await refresh(); profile(w.husband_id); }
+  catch (err) { alert(err.message); }
 }
 async function delWife(id) {
   const w = S.wives.find(x => x.id === id); if (!w) return;
@@ -549,8 +557,9 @@ async function delMember(m) {
   } catch (err) { alert(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
-  const b = e.target.closest('[data-act],[data-wd]'); if (!b) return;
+  const b = e.target.closest('[data-act],[data-wd],[data-ws]'); if (!b) return;
   const m = S.byId.get($('#profile-body').dataset.id);
+  if (b.dataset.ws) return setWifeStatus(b.dataset.ws, b.dataset.wst);
   if (b.dataset.wd) return delWife(b.dataset.wd);
   ({ edit: () => { $('#profile').close(); memberForm(m); }, child: () => { $('#profile').close(); memberForm(null, m.id); },
      wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m),
