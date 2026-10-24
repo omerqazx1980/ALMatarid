@@ -456,9 +456,3 @@ h1{overflow:hidden;text-overflow:ellipsis}
   #profile[open]{background:#1e2c47;border-top:3px solid var(--gold);box-shadow:0 -12px 40px rgba(0,0,0,.65),0 0 0 1px rgba(245,158,11,.35)}
   #profile-body .sub{color:#cbd5e1}
 }
-
-/* ---------- 33) زر اقتراح تصحيح بارز بعرض كامل (ann72، طلب المالك 2026-10-24) ---------- */
-/* زر الزائر الوحيد كان زر شبح صغيرًا بعرض المحتوى ومايلًا على جنب، بينما زر «إغلاق»
-   تحته بعرض كامل — فيبدو الفعل الحقيقي أضعف من الإغلاق. صار الزر أساسيًا ذهبيًا
-   بعرض كامل فوق زر الإغلاق؛ أزرار المحررين (صف .adm) بلا تغيير */
-#profile-body button[data-sg]{width:100%;padding:12px 14px;font-size:1rem;background:var(--gold);color:#1c1204;font-weight:700;border:0}
