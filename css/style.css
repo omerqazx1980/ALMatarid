@@ -440,3 +440,10 @@ h1{overflow:hidden;text-overflow:ellipsis}
   main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(104px + env(safe-area-inset-bottom))}
 }
+
+/* ---------- 31) أزرار السابق/التالي بنتائج البحث بالجوال (ann70، طلب المالك 2026-10-24) ---------- */
+/* أزرار السابق/التالي كانت صغيرة للمس (padding ‏2px) — بالجوال فقط تصبح بهدف لمس ~46px
+   مثل بقية أزرار الجوال؛ سطح المكتب بلا تغيير */
+@media(max-width:640px){
+  #qn button{padding:10px 14px;min-height:46px;font-size:1.25rem}
+}
