@@ -12,7 +12,7 @@ async function rpc(name, args) {
     });
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('انتهت مهلة الاتصال بالخادم، حاول مرة أخرى');
-    throw e;
+    throw new Error('تعذر الاتصال بالخادم، تحقق من اتصال الإنترنت وحاول مجددًا'); /* ann61: ترجمة خطأ الشبكة بدل TypeError الإنجليزي */
   } finally { clearTimeout(timer); }
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `${name}: ${res.status}`); }
   return res.json();

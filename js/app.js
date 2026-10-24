@@ -416,7 +416,7 @@ function profile(id) {
     ${m.achievement_badge ? `<p><span class="bd">${esc(m.achievement_badge)}</span></p>` : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
-      ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
+      ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
       ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
@@ -514,24 +514,35 @@ function memberForm(m, parentId) {
   const gSel = document.querySelector('#form-fields [name=gender]');
   if (gSel) { const syncGender = () => { const fem = gSel.value === 'female'; for (const n of ['namepub', 'namehid']) { const inp = document.querySelector(`#form-fields [name=${n}]`); if (inp) inp.closest('.fl').style.display = fem ? '' : 'none'; } }; gSel.addEventListener('change', syncGender); syncGender(); }
 }
-function wifeForm(m) {
+function wifeForm(m, existing) { /* ann61: existing = تعديل زوجة موجودة (كان مستحيلًا مع وجود أبناء) */
   const women = S.members.filter(x => x.gender === 'female').sort(byName);
-  openForm('إضافة زوجة لـ ' + m.full_name, [
-    { k: 'mode', label: 'نوع الزوجة', type: 'select', val: 'new', opts: [['new', 'من خارج الأسرة (اسم نصي)'], ['link', 'من نساء الأسرة (ربط بسجلها)']] },
-    { k: 'member', label: 'اخترها من نساء الشجرة (عند الربط)', type: 'select', opts: [['', '—'], ...women.map(w => [w.id, w.full_name])] },
-    { k: 'name', label: 'اسم الزوجة (عند عدم الربط)' }, { k: 'fam', label: 'اسم عائلتها' },
-    { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] },
-    { k: 'namehid', label: 'إخفاء اسمها برغبتها', type: 'select', val: '0', opts: [['0', 'لا'], ['1', 'نعم']] },
-    { k: 'mstatus', label: 'حالة الزواج', type: 'select', val: 'current', opts: [['current', 'زوجة حالية'], ['divorced', 'زوجة سابقة — انتهى الزواج بالطلاق (تظهر للمالك فقط)']] }], async d => {
+  const fields = [
+    { k: 'mode', label: 'نوع الزوجة', type: 'select', val: existing?.member_id ? 'link' : 'new', opts: [['new', 'من خارج الأسرة (اسم نصي)'], ['link', 'من نساء الأسرة (ربط بسجلها)']] },
+    { k: 'member', label: 'اخترها من نساء الشجرة (عند الربط)', type: 'select', val: existing?.member_id || '', opts: [['', '—'], ...women.map(w => [w.id, w.full_name])] },
+    { k: 'name', label: 'اسم الزوجة (عند عدم الربط)', val: existing && !existing.member_id ? existing.full_name : '' }, { k: 'fam', label: 'اسم عائلتها', val: existing?.family_name || '' },
+    { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: existing?.name_public ? '1' : '0', opts: [['0', 'لا'], ['1', 'نعم']] },
+    { k: 'namehid', label: 'إخفاء اسمها برغبتها', type: 'select', val: existing?.name_hidden ? '1' : '0', opts: [['0', 'لا'], ['1', 'نعم']] }];
+  if (!existing) fields.push({ k: 'mstatus', label: 'حالة الزواج', type: 'select', val: 'current', opts: [['current', 'زوجة حالية'], ['divorced', 'زوجة سابقة — انتهى الزواج بالطلاق (تظهر للمالك فقط)']] });
+  openForm(existing ? 'تعديل بيانات زوجة' : 'إضافة زوجة لـ ' + m.full_name, fields, async d => {
     const linked = d.mode === 'link' && d.member ? S.byId.get(d.member) : null;
     if (d.mode === 'link' && !linked) throw new Error('اختر الزوجة من قائمة نساء الأسرة');
     const name = linked ? linked.full_name : d.name.trim();
     if (!name) throw new Error('الاسم مطلوب');
     const fam = linked ? null : (d.fam.trim() || null);
-    await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code, p_marriage_status: d.mstatus },
-      () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1', marriage_status: d.mstatus }));
+    if (existing) {
+      await op('secure_update_wife', { p_wife_id: existing.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code },
+        () => Object.assign(existing, { full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' }));
+    } else {
+      await op('secure_save_wife', { p_husband_id: m.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code, p_marriage_status: d.mstatus },
+        () => S.wives.push({ id: 'w' + Date.now(), husband_id: m.id, full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1', marriage_status: d.mstatus }));
+    }
     if (!CFG.DEMO) await refresh(); profile(m.id);
   });
+}
+async function editWife(id) {
+  const w = S.wives.find(x => x.id === id); if (!w) return;
+  const m = S.byId.get(w.husband_id); if (!m) return;
+  wifeForm(m, w);
 }
 async function setWifeStatus(id, status) {
   const w = S.wives.find(x => x.id === id); if (!w) return;
@@ -557,8 +568,9 @@ async function delMember(m) {
   } catch (err) { alert(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
-  const b = e.target.closest('[data-act],[data-wd],[data-ws]'); if (!b) return;
+  const b = e.target.closest('[data-act],[data-wd],[data-ws],[data-we]'); if (!b) return;
   const m = S.byId.get($('#profile-body').dataset.id);
+  if (b.dataset.we) return editWife(b.dataset.we);
   if (b.dataset.ws) return setWifeStatus(b.dataset.ws, b.dataset.wst);
   if (b.dataset.wd) return delWife(b.dataset.wd);
   ({ edit: () => { $('#profile').close(); memberForm(m); }, child: () => { $('#profile').close(); memberForm(null, m.id); },
@@ -1026,7 +1038,7 @@ const seenAnn = () => { try { return JSON.parse(localStorage.getItem(ANN_KEY) ||
 function markSeenAnn(id) { if (!id) return; const s = seenAnn(); if (!s.includes(id)) { s.push(id); try { localStorage.setItem(ANN_KEY, JSON.stringify(s.slice(-60))); } catch (_) {} } }
 async function postAnnouncement(kind, member) {
   if (CFG.DEMO || !member) return; /* ann31: أنواع جديدة wedding/general عبر member.body */
-  if (!canEdit()) { toast('البطاقة ظهرت لك فقط — نشرها للزوار يحتاج دخول المالك أو المحرر'); return; }
+  if (!canEdit() && S.role !== 'branch') { toast('البطاقة ظهرت لك فقط — نشرها للزوار يحتاج دخول المالك أو المحرر أو مسؤول الفرع'); return; } /* ann61: الخادم يسمح للفرع داخل فرعه أصلًا */
   try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male', p_body: member.body || null }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } else toast('تعذر نشر البطاقة للزوار'); } catch (_) { toast('تعذر نشر البطاقة للزوار'); }
 }
 async function checkAnnouncements(popups = true) {
@@ -1051,7 +1063,12 @@ async function renderNewsbar() {
   for (const a of items) {
     const img = bar.querySelector(`[data-ann="${a.id}"] img`);
     if (a.kind === 'general') { img.style.display = 'none'; continue; }
-    try { img.src = (await drawCard({ full_name: a.member_name, gender: a.gender }, a.kind)).toDataURL('image/png'); } catch (_) {}
+    try { /* ann61: توليد صورة البطاقة مرة واحدة لكل إعلان بدل كل 90 ثانية */
+      if (!S.thumbCache) S.thumbCache = new Map();
+      for (const k of [...S.thumbCache.keys()]) if (!items.some(z => z.id === k)) S.thumbCache.delete(k);
+      if (!S.thumbCache.has(a.id)) S.thumbCache.set(a.id, (await drawCard({ full_name: a.member_name, gender: a.gender }, a.kind)).toDataURL('image/png'));
+      img.src = S.thumbCache.get(a.id);
+    } catch (_) {}
   }
   bar.querySelectorAll('[data-ann]').forEach(b => b.onclick = () => { const a = items.find(z => z.id === b.dataset.ann); if (!a) return; markSeenAnn(a.id); if (a.kind === 'general') showInfo(`<h2>📢 ${esc(a.member_name)}</h2><div class="story">${esc(a.body || '').replace(/\n/g, '<br>')}</div>`); else openCard({ full_name: a.member_name, gender: a.gender, phone: a.phone, body: a.body || undefined }, a.kind); });
   bar.querySelectorAll('[data-andel]').forEach(x => x.onclick = async e => {
@@ -1127,7 +1144,12 @@ async function silentRefresh() {
     S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.role = b.role; S.branches = b.branches || []; S.branch = b.branch || null;
     S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
     if (Array.isArray(b.featured_sections)) S.featured = b.featured_sections;
-    index(); render(); showEvent(); applyRole(); renderFeat(); inboxBadge();
+    /* ann61: لا تعيد رسم الشجرة إذا لم تتغير البيانات (كان التحديث كل 90 ثانية يضيّع البحث وموضع التصفح) */
+    const sig = JSON.stringify([b.role, b.women_names_visible, b.featured_sections,
+      (b.members || []).map(m => [m.id, m.full_name, m.nickname, m.is_alive, m.father_id, m.city, m.achievement_badge]),
+      (b.wives || []).map(w => [w.id, w.full_name, w.family_name, w.marriage_status, w.member_id]),
+      (b.events || []).map(e => [e.id, e.title, e.event_date])]);
+    if (sig !== S._sig) { S._sig = sig; index(); render(); showEvent(); applyRole(); renderFeat(); inboxBadge(); }
     checkAnnouncements(true);
     fetchPhotos();
   } catch (_) {}
