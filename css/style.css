@@ -392,3 +392,32 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .genstep{padding:4px 0}
   .bar{padding:6px 10px}
 }
+
+/* ---------- 28) الشريط السفلي ولوحة الملف (ann66، طلب المالك 2026-10-24) ---------- */
+/* الشريط السفلي: يظهر بالجوال فقط (≤640px) ويحل محل زر الأقسام بالترويسة —
+   قائمة الأقسام نفسها تُنقل إليه بجافا سكربت (لا نسخة مكررة)، وقائمتها تفتح للأعلى.
+   لوحة الملف: نافذة الملف الحالية (dialog#profile) تصبح لوحة سفلية بالجوال
+   ولوحة جانبية بسطح المكتب — بلا تغيير بسلوك فتحها (showModal) ولا ببياناتها */
+#bbar{display:none}
+@media(max-width:640px){
+  #bbar{display:flex;position:fixed;inset-inline:0;bottom:0;z-index:80;background:var(--panel);border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  #bbar>button,#bbar #bb-more-slot{flex:1}
+  #bbar #bb-more-slot{display:flex}
+  #bbar>button{display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;color:var(--txt);font-size:.82rem;font-weight:600;padding:6px 2px}
+  #bbar .bb-ic{font-size:1.15rem;line-height:1}
+  #bbar .more{flex:1;position:relative}
+  #bbar .more summary{display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:0;color:var(--txt);font-size:.82rem;font-weight:600;padding:6px 2px}
+  #bbar .more summary::before{content:"⋯";font-size:1.15rem;line-height:1}
+  #bbar .more .menu{top:auto;bottom:calc(100% + 10px);inset-inline-end:6px;width:min(230px,92vw)}
+  /* لا يغطي الشريط المحتوى: مساحة تمرير أسفل الصفحة + رفع التنبيه فوقه */
+  main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+  #toast{bottom:calc(92px + env(safe-area-inset-bottom))}
+  /* لوحة سفلية: تملأ العرض وترتفع من الأسفل، وزر الإغلاق ثابت أسفلها */
+  #profile[open]{display:flex;flex-direction:column;position:fixed;inset-inline:0;bottom:0;top:auto;margin:0;width:100%;max-width:100%;max-height:88dvh;border-radius:18px 18px 0 0;overflow:hidden}
+  #profile-body{flex:1;min-height:0;overflow:auto}
+}
+@media(min-width:641px){
+  /* لوحة جانبية: ملتصقة بجهة البداية (اليمين بالعربية)، والشجرة ظاهرة بجانبها مع تعتيم */
+  #profile[open]{display:flex;flex-direction:column;margin:0;inset-inline-start:0;inset-inline-end:auto;top:0;bottom:0;height:100dvh;max-height:100dvh;width:min(430px,94vw);border-radius:0;overflow:hidden}
+  #profile-body{flex:1;min-height:0;overflow:auto}
+}

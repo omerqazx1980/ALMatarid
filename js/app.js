@@ -1302,3 +1302,22 @@ function initFeatToggles() {
   });
   renderFeat();
 }
+
+/* ---------- ann66: الشريط السفلي بالجوال + لوحة الملف ---------- */
+/* نقل قائمة الأقسام نفسها (details.more) بين الترويسة والشريط السفلي حسب العرض —
+   لا نسخة مكررة، والمستمعات المرتبطة بالعنصر تنتقل معه */
+const bbarSlot = $('#bb-more-slot');
+function placeMore() {
+  const moreEl = document.querySelector('.more'), hbtns = document.querySelector('.hbtns');
+  if (!moreEl || !hbtns || !bbarSlot) return;
+  if (window.matchMedia('(max-width: 640px)').matches) {
+    if (moreEl.parentElement !== bbarSlot) bbarSlot.appendChild(moreEl);
+  } else if (moreEl.parentElement !== hbtns) {
+    hbtns.insertBefore(moreEl, $('#btn-login'));
+  }
+}
+placeMore();
+window.matchMedia('(max-width: 640px)').addEventListener('change', placeMore);
+$('#bb-graph').onclick = () => { $('#v-graph').click(); document.querySelector('main').scrollTo({ top: 0 }); };
+$('#bb-search').onclick = () => { $('#q').focus(); };
+$('#bb-events').onclick = () => { $('#m-events').click(); };
