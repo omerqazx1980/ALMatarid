@@ -427,8 +427,13 @@ function syncToggles() {
   }
   const chips = $('#chips');
   if (chips) chips.hidden = prefHidden('alm_stats'); /* الإحصائيات فقط؛ حبتا الفتح/الطي تبقيان */
+  const ctl = document.querySelector('.stats .ctl'); /* ann64: إخفاء حبتي الفتح/الطي */
+  if (ctl) ctl.hidden = prefHidden('alm_ctl');
+  const statsSec = document.querySelector('.stats'); /* إذا أُخفي الاثنان معًا يختفي الصف كله بدل فراغ */
+  if (statsSec) statsSec.hidden = prefHidden('alm_stats') && prefHidden('alm_ctl');
   const mg = $('#m-genstep'); if (mg) mg.textContent = prefHidden('alm_genstep') ? '👁️ إظهار عداد الأجيال' : '🙈 إخفاء عداد الأجيال';
   const ms = $('#m-stats'); if (ms) ms.textContent = prefHidden('alm_stats') ? '👁️ إظهار الإحصائيات' : '🙈 إخفاء الإحصائيات';
+  const mc = $('#m-ctl'); if (mc) mc.textContent = prefHidden('alm_ctl') ? '👁️ إظهار أزرار الفتح والطي' : '🙈 إخفاء أزرار الفتح والطي';
 }
 $('#btn-gen-plus').onclick = () => setGenCap(visibleMaxGen() + 1);
 $('#btn-gen-minus').onclick = () => setGenCap(visibleMaxGen() - 1);
@@ -848,6 +853,7 @@ $('#profile-body').addEventListener('input', e => { if (e.target.id === 'nsrch')
 $('#m-names').onclick = menuClose(() => { $('#profile-body').innerHTML = ''; namesList(); $('#nsrch').focus(); });
 $('#m-genstep').onclick = menuClose(() => { setPrefHidden('alm_genstep', !prefHidden('alm_genstep')); syncToggles(); });
 $('#m-stats').onclick = menuClose(() => { setPrefHidden('alm_stats', !prefHidden('alm_stats')); syncToggles(); });
+$('#m-ctl').onclick = menuClose(() => { setPrefHidden('alm_ctl', !prefHidden('alm_ctl')); syncToggles(); });
 
 $('#m-cities').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) { const c = (m.city || '').trim() || 'غير محددة'; (g.get(c) || g.set(c, []).get(c)).push(m); }
