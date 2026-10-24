@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=ann58">
+  <link rel="stylesheet" href="css/style.css?v=ann63">
 </head>
 <body>
   <div id="demo" hidden>نسخة تجريبية ببيانات وهمية لتجربة التصميم فقط</div>
@@ -27,6 +27,8 @@
           <button id="m-log" hidden>📜 سجل التغييرات</button>
           <button id="m-snap" hidden>📸 لقطة احتياطية في القاعدة</button>
           <button id="m-settings" hidden>⚙️ إعدادات الوصول</button>
+          <button id="m-genstep">👁️ عداد الأجيال</button>
+          <button id="m-stats">👁️ الإحصائيات</button>
           <hr>
         </div>
         <button id="m-cities">📍 المدن والمحافظات</button>
@@ -46,6 +48,7 @@
   <div id="event" hidden></div>
   <div id="newsbar" hidden></div>
   <section class="stats"><div id="chips"></div><div class="ctl"><button id="btn-open" class="lnk" aria-label="فتح الكل"><span class="ic">➕</span>فتح الكل</button><button id="btn-close" class="lnk" aria-label="طي الكل"><span class="ic">➖</span>طي الكل</button></div></section>
+  <section id="genstep" class="genstep"><button id="btn-gen-minus" aria-label="إخفاء جيل" title="إخفاء جيل">−</button><span id="genstep-val">الأجيال: 1 إلى 2</span><button id="btn-gen-plus" aria-label="إظهار جيل إضافي" title="إظهار جيل إضافي">+</button></section>
   <div class="bar">
     <input id="q" type="search" placeholder="ابحث بالاسم أو الكنية" autocomplete="off">
     <div id="qn" hidden><button id="qp" class="ghost" aria-label="النتيجة السابقة">›</button><span id="qc"></span><button id="qx" class="ghost" aria-label="النتيجة التالية">‹</button></div>
@@ -80,8 +83,8 @@
   <input type="file" id="photo-file" accept="image/*" hidden>
   <input type="file" id="ev-file" accept="image/*" hidden>
   <script src="js/config.js?v=ann17"></script>
-  <script src="js/api.js?v=ann17"></script>
-  <script src="js/app.js?v=ann60"></script>
+  <script src="js/api.js?v=ann63"></script>
+  <script src="js/app.js?v=ann63"></script>
   <script>
     const btnToggle = document.getElementById('btn-toggle-code');
     const inputCode = document.getElementById('code');

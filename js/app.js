@@ -69,6 +69,7 @@ function applyRole() {
   $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = S.role !== 'owner'; /* ann59: صندوق الاقتراحات والشكاوى للمالك فقط */ $('#m-family').hidden = !canEdit();
   $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
   initFeatToggles();
+  syncToggles();
 }
 $('#btn-login').onclick = () => {
   if (CFG.DEMO) {  // تجربة الأدوار: زائر ثم مالك ثم مسؤول فرع
@@ -353,6 +354,7 @@ function render(fitView) {
   $('#qc').textContent = S.curId && S.order.includes(S.curId) ? `${S.order.indexOf(S.curId) + 1} / ${S.order.length}` : `${S.order.length} نتيجة`;
   $('#empty').innerHTML = (S.members.length ? 'لا توجد نتائج لهذا البحث.' : 'لا يوجد أفراد بعد.') + (!S.members.length && canEdit() ? '<br><button id="add-root">➕ إضافة أول فرد</button>' : '');
   $('#empty').hidden = !(none || !S.members.length);
+  syncToggles();
 }
 $('#v-graph').onclick = () => { S.view = 'graph'; render(true); };
 $('#v-list').onclick = () => { S.view = 'list'; render(); };
@@ -393,6 +395,43 @@ for (const el of [$('#nodes'), $('#tree')]) el.addEventListener('keydown', e => 
 });
 $('#btn-open').onclick = () => { S.saved = null; S.open = new Set(S.members.map(m => m.id)); render(true); };
 $('#btn-close').onclick = () => { S.saved = null; collapseAll(); render(true); };
+
+/* ---------- عداد الأجيال + إظهار/إخفاء العداد والإحصائيات (ann63، طلب المالك 2026-10-24) ---------- */
+/* العداد مستقل عن الفتح/الطي: كل ضغطة + تُظهر جيلًا إضافيًا وكل ضغطة − تُخفي جيلًا، عبر ضبط عمق الفتح العام */
+function visibleMaxGen() {
+  let mx = 1;
+  const walk = m => { const g = gen(m); if (g > mx) mx = g; if (S.open.has(m.id)) for (const k of (S.kids.get(m.id) || [])) walk(k); };
+  for (const r of (S.roots || [])) walk(r);
+  return mx;
+}
+function setGenCap(n) {
+  const max = S.members.reduce((x, m) => Math.max(x, gen(m)), 1);
+  n = Math.max(1, Math.min(max, n));
+  S.saved = null;
+  S.open = new Set(S.members.filter(m => gen(m) < n).map(m => m.id));
+  render(true);
+}
+const prefHidden = k => { try { return localStorage.getItem(k) === '0'; } catch (_) { return false; } };
+const setPrefHidden = (k, h) => { try { localStorage.setItem(k, h ? '0' : '1'); } catch (_) {} };
+function syncToggles() {
+  const sec = $('#genstep');
+  if (sec) {
+    sec.hidden = prefHidden('alm_genstep') || !!S.hit; /* يُخفى أثناء البحث حتى لا تعرض القراءة نطاقًا غير مطابق */
+    if (!S.hit) {
+      const mx = visibleMaxGen();
+      const max = S.members.reduce((x, m) => Math.max(x, gen(m)), 1);
+      $('#genstep-val').textContent = `الأجيال: 1 إلى ${mx}`;
+      $('#btn-gen-plus').disabled = mx >= max;
+      $('#btn-gen-minus').disabled = mx <= 1;
+    }
+  }
+  const chips = $('#chips');
+  if (chips) chips.hidden = prefHidden('alm_stats'); /* الإحصائيات فقط؛ حبتا الفتح/الطي تبقيان */
+  const mg = $('#m-genstep'); if (mg) mg.textContent = prefHidden('alm_genstep') ? '👁️ إظهار عداد الأجيال' : '🙈 إخفاء عداد الأجيال';
+  const ms = $('#m-stats'); if (ms) ms.textContent = prefHidden('alm_stats') ? '👁️ إظهار الإحصائيات' : '🙈 إخفاء الإحصائيات';
+}
+$('#btn-gen-plus').onclick = () => setGenCap(visibleMaxGen() + 1);
+$('#btn-gen-minus').onclick = () => setGenCap(visibleMaxGen() - 1);
 addEventListener('resize', () => { if (S.view === 'graph' && !$('#vp').hidden) fit(); });
 
 /* ---------- الملف الشخصي ---------- */
@@ -807,6 +846,8 @@ function namesList(q = '') {
 }
 $('#profile-body').addEventListener('input', e => { if (e.target.id === 'nsrch') namesList(e.target.value); });
 $('#m-names').onclick = menuClose(() => { $('#profile-body').innerHTML = ''; namesList(); $('#nsrch').focus(); });
+$('#m-genstep').onclick = menuClose(() => { setPrefHidden('alm_genstep', !prefHidden('alm_genstep')); syncToggles(); });
+$('#m-stats').onclick = menuClose(() => { setPrefHidden('alm_stats', !prefHidden('alm_stats')); syncToggles(); });
 
 $('#m-cities').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) { const c = (m.city || '').trim() || 'غير محددة'; (g.get(c) || g.set(c, []).get(c)).push(m); }
