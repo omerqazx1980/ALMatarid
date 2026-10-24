@@ -1314,10 +1314,16 @@ function placeMore() {
     if (moreEl.parentElement !== bbarSlot) bbarSlot.appendChild(moreEl);
   } else if (moreEl.parentElement !== hbtns) {
     hbtns.insertBefore(moreEl, $('#btn-login'));
+    document.querySelector('.bar').classList.remove('show');
   }
 }
 placeMore();
 window.matchMedia('(max-width: 640px)').addEventListener('change', placeMore);
-$('#bb-graph').onclick = () => { $('#v-graph').click(); document.querySelector('main').scrollTo({ top: 0 }); };
-$('#bb-search').onclick = () => { $('#q').focus(); };
+/* ann67: زر تبديل مخطط/قائمة بالشريط (يعرض العرض الآخر)، وزر بحث يُظهر/يخفي صف البحث */
+function syncBbView() { const b = $('#bb-view'); if (!b) return; const g = S.view === 'graph'; b.innerHTML = `<span class="bb-ic">${g ? '☰' : '🌳'}</span><span>${g ? 'قائمة' : 'مخطط'}</span>`; }
+$('#bb-view').onclick = () => { if (S.view === 'graph') $('#v-list').click(); else $('#v-graph').click(); syncBbView(); document.querySelector('main').scrollTo({ top: 0 }); };
+$('#v-graph').addEventListener('click', syncBbView);
+$('#v-list').addEventListener('click', syncBbView);
+syncBbView();
+$('#bb-search').onclick = () => { const bar = document.querySelector('.bar'); bar.classList.toggle('show'); if (bar.classList.contains('show')) $('#q').focus(); };
 $('#bb-events').onclick = () => { $('#m-events').click(); };

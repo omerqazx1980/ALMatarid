@@ -421,3 +421,11 @@ h1{overflow:hidden;text-overflow:ellipsis}
   #profile[open]{display:flex;flex-direction:column;margin:0;inset-inline-start:0;inset-inline-end:auto;top:0;bottom:0;height:100dvh;max-height:100dvh;width:min(430px,94vw);border-radius:0;overflow:hidden}
   #profile-body{flex:1;min-height:0;overflow:auto}
 }
+
+/* ---------- 29) إكمال الشريط السفلي (ann67، طلب المالك 2026-10-24) ---------- */
+/* بالجوال: صف البحث (الحقل + مخطط/قائمة) مخفي افتراضيًا ويُظهره زر بحث فقط —
+   فلا يبقى تنقل مكرر فوق؛ والشريط يكتمل بزر تبديل مخطط/قائمة */
+@media(max-width:640px){
+  .bar{display:none}
+  .bar.show{display:flex}
+}
