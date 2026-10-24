@@ -447,3 +447,12 @@ h1{overflow:hidden;text-overflow:ellipsis}
 @media(max-width:640px){
   #qn button{padding:10px 14px;min-height:46px;font-size:1.25rem}
 }
+
+/* ---------- 32) إبراز لوحة الملف بالجوال (ann71، طلب المالك 2026-10-24) ---------- */
+/* اللوحة كانت تندمج مع خلفية الصفحة المعتمة بعد البحث فتبدو «شبه مخفية» —
+   إطار ذهبي علوي + ظل + خلفية أفتح قليلًا + سطر التفاصيل (الجيل...) بلون أفتح؛
+   جوال فقط، سطح المكتب بلا تغيير */
+@media(max-width:640px){
+  #profile[open]{background:#1e2c47;border-top:3px solid var(--gold);box-shadow:0 -12px 40px rgba(0,0,0,.65),0 0 0 1px rgba(245,158,11,.35)}
+  #profile-body .sub{color:#cbd5e1}
+}
