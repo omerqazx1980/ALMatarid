@@ -66,7 +66,7 @@ const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.fat
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
   $('#btn-login').textContent = ['visitor', 'family', 'reader'].includes(S.role) ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
-  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = !['owner', 'editor', 'branch'].includes(S.role); $('#m-family').hidden = !canEdit();
+  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = S.role !== 'owner'; /* ann59: صندوق الاقتراحات والشكاوى للمالك فقط */ $('#m-family').hidden = !canEdit();
   $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
   initFeatToggles();
 }
@@ -657,7 +657,7 @@ function suggestForm(targetId) {
   const fixed = S.byId.get(targetId) || null;
   const memOpts = [...S.members].filter(m => !m.name_masked).sort(byName).map(m => [m.id, m.full_name]);
   openForm(fixed ? 'رسالة بخصوص ' + fixed.full_name : 'مقترح / استفسار / طلب تعديل', [
-    { k: 'rtype', label: 'نوع الرسالة', type: 'select', opts: [['suggestion', '💡 مقترح'], ['inquiry', '❓ استفسار'], ['correction', '✏️ طلب تعديل معلومة']] },
+    { k: 'rtype', label: 'نوع الرسالة', type: 'select', opts: [['suggestion', '💡 مقترح'], ['inquiry', '❓ استفسار'], ['correction', '✏️ طلب تعديل معلومة'], ['complaint', '🗣️ شكوى']] },
     ...(fixed ? [] : [{ k: 'member', label: 'العضو المقصود (لطلب التعديل)', type: 'select', opts: [['', '— اختر العضو —'], ...memOpts] }]),
     { k: 'cfield', label: 'الحقل المراد تعديله', type: 'select', opts: CORR_FIELDS },
     { type: 'raw', html: '<p class="sub" id="sg-cur"></p>' },
@@ -708,14 +708,14 @@ function suggestForm(targetId) {
 async function inboxBadge() {
   const b = $('#inbox-badge'), d = $('#menu-dot');
   if (!b) return;
-  if (CFG.DEMO || !['owner', 'editor', 'branch'].includes(S.role) || !S.code) { b.hidden = true; if (d) d.hidden = true; return; }
+  if (CFG.DEMO || S.role !== 'owner' || !S.code) { b.hidden = true; if (d) d.hidden = true; return; }
   try {
     const r = await rpc('list_suggestions', { p_passcode: S.code });
-    const n = r.success ? (r.items || []).length : 0;
+    const n = r.success ? (r.items || []).filter(x => (x.status || 'pending') === 'pending').length : 0;
     b.textContent = n; b.hidden = !n; if (d) d.hidden = !n;
   } catch (_) { b.hidden = true; if (d) d.hidden = true; }
 }
-const REQ_TYPES = { suggestion: '💡 مقترح', inquiry: '❓ استفسار', correction: '✏️ طلب تعديل معلومة' };
+const REQ_TYPES = { suggestion: '💡 مقترح', inquiry: '❓ استفسار', correction: '✏️ طلب تعديل معلومة', complaint: '🗣️ شكوى' };
 async function inbox() {
   $('.more').open = false;
   let items;
@@ -728,12 +728,17 @@ async function inbox() {
     if (structured) detail += `<small>الحقل: ${esc(pd.field_label || corrFieldLabel(pd.field))} — الحالي: «${esc(memberFieldText(m, pd.field))}» ← المقترح: «${esc(corrValueText(pd.field, pd.new_value))}»</small>`;
     if (pd.note) detail += `<small>${esc(pd.note)}</small>`;
     detail += pd.from ? `<small>المُرسل: ${esc(pd.from)}${pd.from_member_name ? ' (بالشجرة: ' + esc(pd.from_member_name) + ')' : ''}</small>` : '<small>المُرسل: غير معروف (رسالة قديمة)</small>';
-    const btns = structured
-      ? `${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sa="${esc(s.id)}">اعتماد وتطبيق ✅</button><button class="x" data-sd="${esc(s.id)}">رفض</button>`
-      : `${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sd="${esc(s.id)}">تم ✓</button>`;
+    const st = s.status || 'pending';
+    const stTxt = st === 'applied' ? `<small style="color:var(--green)">✅ اعتُمد وطُبّق${s.decided_at ? ' · ' + new Date(s.decided_at).toLocaleDateString('ar-SA') : ''} — محفوظ بالأرشيف</small>`
+      : st === 'rejected' ? `<small style="color:#fb7185">مؤرشف كمرفوض${s.decided_at ? ' · ' + new Date(s.decided_at).toLocaleDateString('ar-SA') : ''}</small>` : '';
+    const btns = st !== 'pending' ? stTxt
+      : structured
+      ? `${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sa="${esc(s.id)}">اعتماد وتطبيق ✅</button><button class="x" data-sd="${esc(s.id)}">رفض وأرشفة</button>`
+      : `${m ? `<button class="x" data-so="${esc(m.id)}">فتح</button>` : ''}<button class="x" data-sd="${esc(s.id)}">أرشفة ✓</button>`;
     return `<div class="evrow"><div><b>${REQ_TYPES[s.request_type] || '💡 مقترح'}${m ? ' — ' + esc(m.full_name) : ''}</b>${detail}</div><span>${btns}</span></div>`;
   };
-  showInfo(`<h2>صندوق الاقتراحات (${items.length})</h2>${items.map(rowHtml).join('') || '<p class="sub">لا توجد اقتراحات.</p>'}`);
+  const pend = items.filter(x => (x.status || 'pending') === 'pending').length;
+  showInfo(`<h2>📥 صندوق الاقتراحات والشكاوى — للمالك فقط</h2><p class="sub">الكل: ${items.length} · جديدة: ${pend} · مؤرشفة: ${items.length - pend} — لا يُحذف أي طلب أبدًا</p>${items.map(rowHtml).join('') || '<p class="sub">لا توجد رسائل بعد.</p>'}`);
 }
 async function applySuggestion(id) {
   if (!confirm('اعتماد هذا التعديل وتطبيقه مباشرة على بيانات العضو؟')) return;
@@ -741,14 +746,15 @@ async function applySuggestion(id) {
     await op('secure_apply_suggestion', { p_suggestion_id: id, p_passcode: S.code }, () => {
       const s = (S.demoSug || []).find(x => String(x.id) === String(id));
       if (s?.proposed_data?.field) { const m = S.byId.get(s.target_member_id); if (m) m[s.proposed_data.field] = s.proposed_data.new_value; }
-      S.demoSug = (S.demoSug || []).filter(x => String(x.id) !== String(id));
+      const dx = (S.demoSug || []).find(x => String(x.id) === String(id)); if (dx) dx.status = 'applied';
     });
     if (!CFG.DEMO) await refresh();
     await inbox(); inboxBadge(); alert('تم اعتماد التعديل وتطبيقه ✅');
   } catch (err) { alert(err.message); }
 }
 async function delSuggestion(id) {
-  try { await op('secure_delete_suggestion', { suggestion_id: id, passcode: S.code }, () => { S.demoSug = S.demoSug.filter(s => s.id !== id); }); await inbox(); inboxBadge(); }
+  if (!confirm('أرشفة هذا الطلب؟ سيبقى محفوظًا في الصندوق نهائيًا ولن يُحذف.')) return;
+  try { await op('secure_reject_suggestion', { p_suggestion_id: id, p_passcode: S.code }, () => { const x = (S.demoSug || []).find(z => String(z.id) === String(id)); if (x) x.status = 'rejected'; }); await inbox(); inboxBadge(); }
   catch (err) { alert(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
