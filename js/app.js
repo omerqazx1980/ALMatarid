@@ -1306,14 +1306,16 @@ function initFeatToggles() {
 /* ---------- ann66: الشريط السفلي بالجوال + لوحة الملف ---------- */
 /* نقل قائمة الأقسام نفسها (details.more) بين الترويسة والشريط السفلي حسب العرض —
    لا نسخة مكررة، والمستمعات المرتبطة بالعنصر تنتقل معه */
-const bbarSlot = $('#bb-more-slot');
+const bbar = $('#bbar'), bbarSlot = $('#bb-more-slot');
 function placeMore() {
-  const moreEl = document.querySelector('.more'), hbtns = document.querySelector('.hbtns');
-  if (!moreEl || !hbtns || !bbarSlot) return;
+  const moreEl = document.querySelector('.more'), loginEl = $('#btn-login'), hbtns = document.querySelector('.hbtns');
+  if (!moreEl || !loginEl || !hbtns || !bbarSlot || !bbar) return;
   if (window.matchMedia('(max-width: 640px)').matches) {
     if (moreEl.parentElement !== bbarSlot) bbarSlot.appendChild(moreEl);
-  } else if (moreEl.parentElement !== hbtns) {
-    hbtns.insertBefore(moreEl, $('#btn-login'));
+    if (loginEl.parentElement !== bbar) bbar.appendChild(loginEl);
+  } else {
+    if (loginEl.parentElement !== hbtns) hbtns.appendChild(loginEl);
+    if (moreEl.parentElement !== hbtns) hbtns.insertBefore(moreEl, loginEl);
     document.querySelector('.bar').classList.remove('show');
   }
 }

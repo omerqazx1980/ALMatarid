@@ -429,3 +429,14 @@ h1{overflow:hidden;text-overflow:ellipsis}
   .bar{display:none}
   .bar.show{display:flex}
 }
+
+/* ---------- 30) دخول بالشريط وإخفاء حبة المناسبات العلوية بالجوال (ann68، طلب المالك 2026-10-24) ---------- */
+/* زر دخول ينتقل للشريط مع الأقسام (بنفس آلية النقل)، وحبة «مناسبات الأسرة» المُبرزة
+   تُخفى بالجوال فقط لأن زر المناسبات بالشريط يغني عنها — سطح المكتب بلا تغيير */
+@media(max-width:640px){
+  #bbar>button{border:0}
+  #bbar #btn-login::before{content:"🔑";font-size:1.15rem;line-height:1}
+  #feat [data-feat-go="events"]{display:none}
+  main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  #toast{bottom:calc(104px + env(safe-area-inset-bottom))}
+}
