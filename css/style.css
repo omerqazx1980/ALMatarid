@@ -375,3 +375,20 @@ h1{overflow:hidden;text-overflow:ellipsis}
 /* ---------- 26) قسم إظهار/إخفاء العناصر بقائمة الأقسام (ann64، طلب المالك 2026-10-24) ---------- */
 .tgl-sec{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
 .tgl-h{font-size:.72rem;color:var(--mut);padding:2px 10px 4px}
+
+/* ---------- 27) تضييق الفراغات بالجوال (ann65، طلب المالك 2026-10-24) ---------- */
+/* التشخيص من لقطته: (1) بطاقة الشريط بارتفاع محتوى أقل من حاوية 98px فيبقى فراغ أسفلها،
+   (2) صف الأقسام المُبرزة بمحاذاة البداية فيبقى فراغ بعرض الصف،
+   (3) حشوات الأقسام المتتالية تتراكم. العلاج: ملء البطاقة للحاوية (بلا قفزات عند التدوير لأن الحاوية ثابتة)،
+   وتوسيط حبات الأقسام، وتقليل الحشوات — سطح المكتب بلا تغيير */
+@media(max-width:640px){
+  .nbcard{height:100%}
+  #feat{justify-content:center}
+  #newsbar{margin-top:6px}
+  header{padding:6px 10px}
+  .hbtns{gap:4px}
+  header .more summary,header #btn-login{padding:5px 0}
+  .stats{padding:4px 10px 2px}
+  .genstep{padding:4px 0}
+  .bar{padding:6px 10px}
+}
