@@ -356,3 +356,11 @@ h1{overflow:hidden;text-overflow:ellipsis}
   header .more summary,header #btn-login{width:96px;text-align:center;padding:6px 0;font-size:.9rem}
   #feat{margin-top:0;padding-inline-end:0}
 }
+
+/* ---------- 24) توضيح وتثخين ➕/➖ بالجوال (ann62، طلب المالك 2026-10-24) ---------- */
+/* كانت الحبتان صغيرتين (~30px) برمز 1.1rem وحدّ 1px؛ الآن هدف لمس مريح (~46px) ورمز أكبر وحدّ أثخن — سطح المكتب بلا تغيير */
+@media(max-width:640px){
+  .ctl{gap:8px}
+  .ctl .lnk{padding:10px 14px;border:2px solid var(--line);border-radius:99px}
+  .ctl .lnk .ic{font-size:1.4rem;font-weight:700}
+}
