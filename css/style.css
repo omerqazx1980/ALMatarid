@@ -346,3 +346,13 @@ h1{overflow:hidden;text-overflow:ellipsis}
   header #btn-login{width:96px;text-align:center;padding:6px 0}
   #feat{margin-top:2px;padding-inline-end:104px}
 }
+
+/* ---------- 23) ترويسة مرنة بلا تداخل: عمود أزرار داخل التدفق (ann58، طلب المالك 2026-10-24) ---------- */
+.hbtns{display:contents}
+@media(max-width:640px){
+  .hbtns{display:flex;flex-direction:column;gap:6px;flex:none}
+  header .more{position:static;width:96px}
+  header #btn-login{position:static;width:96px}
+  header .more summary,header #btn-login{width:96px;text-align:center;padding:6px 0;font-size:.9rem}
+  #feat{margin-top:0;padding-inline-end:0}
+}
