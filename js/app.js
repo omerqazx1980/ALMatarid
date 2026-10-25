@@ -1323,10 +1323,11 @@ function placeMore() {
 placeMore();
 window.matchMedia('(max-width: 640px)').addEventListener('change', placeMore);
 /* ann67: زر تبديل مخطط/قائمة بالشريط (يعرض العرض الآخر)، وزر بحث يُظهر/يخفي صف البحث */
-function syncBbView() { const b = $('#bb-view'); if (!b) return; const g = S.view === 'graph'; b.innerHTML = `<span class="bb-ic">${g ? '☰' : '🌳'}</span><span>${g ? 'قائمة' : 'مخطط'}</span>`; }
+const BB_TREE = '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>', BB_LIST = '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>'; /* nav-redesign: أيقونات Lucide */
+function syncBbView() { const b = $('#bb-view'); if (!b) return; const g = S.view === 'graph'; b.innerHTML = `<svg class="bb-ic" viewBox="0 0 24 24" aria-hidden="true">${g ? BB_LIST : BB_TREE}</svg><span>${g ? 'قائمة' : 'مخطط'}</span>`; }
 $('#bb-view').onclick = () => { if (S.view === 'graph') $('#v-list').click(); else $('#v-graph').click(); syncBbView(); document.querySelector('main').scrollTo({ top: 0 }); };
 $('#v-graph').addEventListener('click', syncBbView);
 $('#v-list').addEventListener('click', syncBbView);
 syncBbView();
-$('#bb-search').onclick = () => { const bar = document.querySelector('.bar'); bar.classList.toggle('show'); if (bar.classList.contains('show')) $('#q').focus(); };
+$('#bb-search').onclick = () => { const bar = document.querySelector('.bar'); bar.classList.toggle('show'); $('#bb-search').classList.toggle('on', bar.classList.contains('show')); if (bar.classList.contains('show')) $('#q').focus(); };
 $('#bb-events').onclick = () => { $('#m-events').click(); };

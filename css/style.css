@@ -400,14 +400,21 @@ h1{overflow:hidden;text-overflow:ellipsis}
    ولوحة جانبية بسطح المكتب — بلا تغيير بسلوك فتحها (showModal) ولا ببياناتها */
 #bbar{display:none}
 @media(max-width:640px){
-  #bbar{display:flex;position:fixed;inset-inline:0;bottom:0;z-index:80;background:var(--panel);border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
-  #bbar>button,#bbar #bb-more-slot{flex:1}
+  /* nav-redesign: أيقونات خطية موحدة، العنصر النشط ذهبي مع مؤشر، «دخول» زر ذهبي، شفافية وضبابية */
+  #bbar{display:flex;align-items:center;gap:2px;position:fixed;inset-inline:0;bottom:0;z-index:80;background:rgba(22,32,51,.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid rgba(245,158,11,.18);box-shadow:0 -6px 20px rgba(0,0,0,.35);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+  #bbar>button:not(#btn-login),#bbar #bb-more-slot{flex:1}
   #bbar #bb-more-slot{display:flex}
-  #bbar>button{display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;color:var(--txt);font-size:.82rem;font-weight:600;padding:6px 2px}
-  #bbar .bb-ic{font-size:1.15rem;line-height:1}
+  #bbar>button:not(#btn-login){position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;background:transparent;border:0;color:var(--mut);font-size:.72rem;font-weight:600;padding:8px 2px 4px}
+  #bbar svg.bb-ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  #bbar>button.on:not(#btn-login){color:var(--gold)}
+  #bbar>button.on::before{content:"";position:absolute;top:0;width:22px;height:3px;border-radius:3px;background:var(--gold)}
+  #bbar>button.on svg{filter:drop-shadow(0 0 6px rgba(245,158,11,.45))}
   #bbar .more{flex:1;position:relative}
-  #bbar .more summary{display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:0;color:var(--txt);font-size:.82rem;font-weight:600;padding:6px 2px}
-  #bbar .more summary::before{content:"⋯";font-size:1.15rem;line-height:1}
+  #bbar .more summary{display:flex;flex-direction:column;align-items:center;gap:3px;background:transparent;border:0;color:var(--mut);font-size:.72rem;font-weight:600;padding:8px 2px 4px}
+  #bbar .more summary::before{content:"";width:22px;height:22px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='7' height='7' x='3' y='3' rx='1'/%3E%3Crect width='7' height='7' x='14' y='3' rx='1'/%3E%3Crect width='7' height='7' x='14' y='14' rx='1'/%3E%3Crect width='7' height='7' x='3' y='14' rx='1'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='7' height='7' x='3' y='3' rx='1'/%3E%3Crect width='7' height='7' x='14' y='3' rx='1'/%3E%3Crect width='7' height='7' x='14' y='14' rx='1'/%3E%3Crect width='7' height='7' x='3' y='14' rx='1'/%3E%3C/svg%3E") center/contain no-repeat}
+  #bbar .more[open] summary{color:var(--gold)}
+  #bbar #btn-login{flex:0 0 auto;display:flex;align-items:center;gap:5px;margin-inline-start:4px;padding:7px 13px;border:0;border-radius:99px;background:var(--gold);color:#1c1204;font-weight:800;font-size:.78rem;max-width:40vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #bbar #btn-login::before{content:"";flex:0 0 16px;height:16px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4'/%3E%3Cpath d='m10 17 5-5-5-5'/%3E%3Cpath d='M15 12H3'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4'/%3E%3Cpath d='m10 17 5-5-5-5'/%3E%3Cpath d='M15 12H3'/%3E%3C/svg%3E") center/contain no-repeat}
   #bbar .more .menu{top:auto;bottom:calc(100% + 10px);inset-inline-end:6px;width:min(230px,92vw)}
   /* لا يغطي الشريط المحتوى: مساحة تمرير أسفل الصفحة + رفع التنبيه فوقه */
   main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
@@ -435,7 +442,6 @@ h1{overflow:hidden;text-overflow:ellipsis}
    تُخفى بالجوال فقط لأن زر المناسبات بالشريط يغني عنها — سطح المكتب بلا تغيير */
 @media(max-width:640px){
   #bbar>button{border:0}
-  #bbar #btn-login::before{content:"🔑";font-size:1.15rem;line-height:1}
   #feat [data-feat-go="events"]{display:none}
   main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(104px + env(safe-area-inset-bottom))}
