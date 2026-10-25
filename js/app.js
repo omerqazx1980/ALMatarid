@@ -313,6 +313,7 @@ function zoomAt(cx, cy, f) {
 const vp = $('#vp'), ptr = new Map(); let moved = 0;
 const dist = () => { const [a, b] = [...ptr.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
 vp.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = 0; });
+vp.addEventListener('dragstart', e => e.preventDefault()); /* ann75: إيقاف السحب الأصلي للمتصفح (شبح النص/الصورة) داخل المخطط — دون المساس بالنقر */
 addEventListener('pointermove', e => {
   const p = ptr.get(e.pointerId); if (!p) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y; moved += Math.abs(dx) + Math.abs(dy);

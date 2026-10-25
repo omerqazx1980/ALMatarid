@@ -66,7 +66,7 @@ main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;width:
 @media(max-width:520px){header{gap:8px;padding:8px 12px}.ttl p{display:none}header .ghost,.more summary{padding:5px 10px;font-size:.85rem}.logo{width:38px;height:38px}}
 
 /* ---------- 3) المخطط الشجري ---------- */
-.vp{position:relative;flex:1;min-height:320px;overflow:hidden;touch-action:none;cursor:grab;
+.vp{position:relative;flex:1;min-height:320px;overflow:hidden;touch-action:none;cursor:grab;user-select:none; /* ann75: منع تحديد النص أثناء السحب */
   background:radial-gradient(circle at 15% 10%,rgba(56,189,248,.08),transparent 40%),radial-gradient(circle at 85% 90%,rgba(245,158,11,.08),transparent 40%),radial-gradient(circle,#1b2740 1px,transparent 1px) 0 0/22px 22px}
 .vp:active{cursor:grabbing}
 #stage{position:absolute;left:0;top:0;transform-origin:0 0}
