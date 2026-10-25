@@ -399,7 +399,7 @@ h1{overflow:hidden;text-overflow:ellipsis}
    لوحة الملف: نافذة الملف الحالية (dialog#profile) تصبح لوحة سفلية بالجوال
    ولوحة جانبية بسطح المكتب — بلا تغيير بسلوك فتحها (showModal) ولا ببياناتها */
 #bbar{display:none}
-@media(max-width:640px){
+@media(max-width:640px),(pointer:coarse) and (max-width:1366px){
   /* nav-redesign: أيقونات خطية موحدة، العنصر النشط ذهبي مع مؤشر، «دخول» زر ذهبي، شفافية وضبابية */
   #bbar{display:flex;align-items:center;gap:2px;position:fixed;inset-inline:0;bottom:0;z-index:80;background:rgba(22,32,51,.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid rgba(245,158,11,.18);box-shadow:0 -6px 20px rgba(0,0,0,.35);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
   #bbar>button:not(#btn-login),#bbar #bb-more-slot{flex:1}
@@ -419,6 +419,8 @@ h1{overflow:hidden;text-overflow:ellipsis}
   /* لا يغطي الشريط المحتوى: مساحة تمرير أسفل الصفحة + رفع التنبيه فوقه */
   main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(92px + env(safe-area-inset-bottom))}
+}
+@media(max-width:640px){
   /* لوحة سفلية: تملأ العرض وترتفع من الأسفل، وزر الإغلاق ثابت أسفلها */
   #profile[open]{display:flex;flex-direction:column;position:fixed;inset-inline:0;bottom:0;top:auto;margin:0;width:100%;max-width:100%;max-height:88dvh;border-radius:18px 18px 0 0;overflow:hidden}
   #profile-body{flex:1;min-height:0;overflow:auto}
@@ -440,11 +442,13 @@ h1{overflow:hidden;text-overflow:ellipsis}
 /* ---------- 30) دخول بالشريط وإخفاء حبة المناسبات العلوية بالجوال (ann68، طلب المالك 2026-10-24) ---------- */
 /* زر دخول ينتقل للشريط مع الأقسام (بنفس آلية النقل)، وحبة «مناسبات الأسرة» المُبرزة
    تُخفى بالجوال فقط لأن زر المناسبات بالشريط يغني عنها — سطح المكتب بلا تغيير */
-@media(max-width:640px){
+@media(max-width:640px),(pointer:coarse) and (max-width:1366px){
   #bbar>button{border:0}
-  #feat [data-feat-go="events"]{display:none}
   main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(104px + env(safe-area-inset-bottom))}
+}
+@media(max-width:640px){
+  #feat [data-feat-go="events"]{display:none}
 }
 
 /* ---------- 31) أزرار السابق/التالي بنتائج البحث بالجوال (ann70، طلب المالك 2026-10-24) ---------- */

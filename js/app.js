@@ -1308,10 +1308,12 @@ function initFeatToggles() {
 /* نقل قائمة الأقسام نفسها (details.more) بين الترويسة والشريط السفلي حسب العرض —
    لا نسخة مكررة، والمستمعات المرتبطة بالعنصر تنتقل معه */
 const bbar = $('#bbar'), bbarSlot = $('#bb-more-slot');
+/* tablet-bbar: الشريط السفلي أيضًا بالأجهزة اللمسية حتى 1366px (تابلت) */
+const BBAR_MQ = window.matchMedia('(max-width: 640px), (pointer: coarse) and (max-width: 1366px)');
 function placeMore() {
   const moreEl = document.querySelector('.more'), loginEl = $('#btn-login'), hbtns = document.querySelector('.hbtns');
   if (!moreEl || !loginEl || !hbtns || !bbarSlot || !bbar) return;
-  if (window.matchMedia('(max-width: 640px)').matches) {
+  if (BBAR_MQ.matches) {
     if (moreEl.parentElement !== bbarSlot) bbarSlot.appendChild(moreEl);
     if (loginEl.parentElement !== bbar) bbar.appendChild(loginEl);
   } else {
@@ -1321,7 +1323,7 @@ function placeMore() {
   }
 }
 placeMore();
-window.matchMedia('(max-width: 640px)').addEventListener('change', placeMore);
+BBAR_MQ.addEventListener('change', placeMore);
 /* ann67: زر تبديل مخطط/قائمة بالشريط (يعرض العرض الآخر)، وزر بحث يُظهر/يخفي صف البحث */
 const BB_TREE = '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>', BB_LIST = '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>'; /* nav-redesign: أيقونات Lucide */
 function syncBbView() { const b = $('#bb-view'); if (!b) return; const g = S.view === 'graph'; b.innerHTML = `<svg class="bb-ic" viewBox="0 0 24 24" aria-hidden="true">${g ? BB_LIST : BB_TREE}</svg><span>${g ? 'قائمة' : 'مخطط'}</span>`; }
@@ -1329,5 +1331,5 @@ $('#bb-view').onclick = () => { if (S.view === 'graph') $('#v-list').click(); el
 $('#v-graph').addEventListener('click', syncBbView);
 $('#v-list').addEventListener('click', syncBbView);
 syncBbView();
-$('#bb-search').onclick = () => { const bar = document.querySelector('.bar'); bar.classList.toggle('show'); $('#bb-search').classList.toggle('on', bar.classList.contains('show')); if (bar.classList.contains('show')) $('#q').focus(); };
+$('#bb-search').onclick = () => { if (!window.matchMedia('(max-width: 640px)').matches) { $('#q').scrollIntoView({ block: 'center' }); $('#q').focus(); return; } /* تابلت: صف البحث ظاهر أصلًا */ const bar = document.querySelector('.bar'); bar.classList.toggle('show'); $('#bb-search').classList.toggle('on', bar.classList.contains('show')); if (bar.classList.contains('show')) $('#q').focus(); };
 $('#bb-events').onclick = () => { $('#m-events').click(); };
