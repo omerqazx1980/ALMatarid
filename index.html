@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=pwa1">
+  <link rel="stylesheet" href="css/style.css?v=pwa2">
 </head>
 <body>
   <div id="demo" hidden>نسخة تجريبية ببيانات وهمية لتجربة التصميم فقط</div>
@@ -61,7 +61,7 @@
   <section class="stats"><div id="chips"></div><div class="ctl"><button id="btn-open" class="lnk" aria-label="فتح الكل"><span class="ic">➕</span>فتح الكل</button><button id="btn-close" class="lnk" aria-label="طي الكل"><span class="ic">➖</span>طي الكل</button></div></section>
   <section id="genstep" class="genstep"><button id="btn-gen-minus" aria-label="إخفاء جيل" title="إخفاء جيل">−</button><span id="genstep-val">الأجيال: 1 إلى 2</span><button id="btn-gen-plus" aria-label="إظهار جيل إضافي" title="إظهار جيل إضافي">+</button></section>
   <div class="bar">
-    <input id="q" type="search" placeholder="ابحث بالاسم أو الكنية" autocomplete="off">
+    <span class="qwrap"><input id="q" type="search" placeholder="ابحث بالاسم أو الكنية" autocomplete="off"><button id="q-clear" type="button" aria-label="مسح البحث" title="مسح البحث" hidden><span aria-hidden="true">✕</span></button></span>
     <div id="qn" hidden><button id="qp" class="ghost" aria-label="النتيجة السابقة">›</button><span id="qc"></span><button id="qx" class="ghost" aria-label="النتيجة التالية">‹</button></div>
     <div class="seg" role="group" aria-label="طريقة العرض"><button id="v-graph" aria-label="عرض المخطط"><span class="ic">🌳</span>مخطط</button><button id="v-list" aria-label="عرض القائمة"><span class="ic">☰</span>قائمة</button></div>
   </div>
@@ -101,8 +101,8 @@
   </nav>
   <script src="js/config.js?v=ann17"></script>
   <script src="js/api.js?v=ann65"></script>
-  <script src="js/app.js?v=nav4"></script>
-  <script src="js/pwa.js?v=pwa1"></script>
+  <script src="js/app.js?v=pwa2"></script>
+  <script src="js/pwa.js?v=pwa2"></script>
   <script>
     const btnToggle = document.getElementById('btn-toggle-code');
     const inputCode = document.getElementById('code');

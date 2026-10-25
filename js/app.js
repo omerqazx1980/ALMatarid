@@ -1333,3 +1333,12 @@ $('#v-list').addEventListener('click', syncBbView);
 syncBbView();
 $('#bb-search').onclick = () => { if (!window.matchMedia('(max-width: 640px)').matches) { $('#q').scrollIntoView({ block: 'center' }); $('#q').focus(); return; } /* تابلت: صف البحث ظاهر أصلًا */ const bar = document.querySelector('.bar'); bar.classList.toggle('show'); $('#bb-search').classList.toggle('on', bar.classList.contains('show')); if (bar.classList.contains('show')) $('#q').focus(); };
 $('#bb-events').onclick = () => { $('#m-events').click(); };
+
+/* زر «مسح» داخل خانة البحث: يظهر فقط عند وجود نص، يمسح ويعيد النتائج ويعيد التركيز */
+(() => {
+  const q = $('#q'), b = $('#q-clear'), w = q.parentElement;
+  const sync = () => { const has = q.value.length > 0; b.hidden = !has; w.classList.toggle('has', has); };
+  q.addEventListener('input', sync);
+  b.addEventListener('click', () => { q.value = ''; q.dispatchEvent(new Event('input', { bubbles: true })); q.focus(); });
+  sync();
+})();
