@@ -1,5 +1,5 @@
 /* PWA: شبكة أولًا دائمًا (لا محتوى قديم)، والنسخة المخزنة فقط عند انقطاع الاتصال. طلبات Supabase وغيرها من النطاقات لا تُلمس */
-const C = 'almatarid-v2';
+const C = 'almatarid-v3';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {

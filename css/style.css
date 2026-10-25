@@ -489,3 +489,13 @@ h1{overflow:hidden;text-overflow:ellipsis}
 #q-clear span{width:20px;height:20px;border-radius:50%;background:var(--gold);color:#1c1204;font-size:11px;font-weight:900;line-height:20px;text-align:center;transition:background .15s,transform .15s}
 #q-clear:hover span,#q-clear:focus-visible span{background:#fbbf24;transform:scale(1.1)}
 #q-clear:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;border-radius:50%}
+
+/* ---------- 36) آيفون: منع التكبير التلقائي عند التركيز على الحقول + منع تكبير النقر المزدوج (pwa3) ---------- */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+@media (max-width:640px),(pointer:coarse) and (max-width:1366px){
+  input,select,textarea,#q,#code{font-size:16px !important}
+  button,a,[role="button"],label,summary,.vp button{touch-action:manipulation}
+}
+@supports (-webkit-touch-callout:none){
+  input,select,textarea{font-size:max(16px,1em)}
+}
