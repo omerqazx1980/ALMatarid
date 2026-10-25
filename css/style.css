@@ -466,3 +466,15 @@ h1{overflow:hidden;text-overflow:ellipsis}
   #profile[open]{background:#1e2c47;border-top:3px solid var(--gold);box-shadow:0 -12px 40px rgba(0,0,0,.65),0 0 0 1px rgba(245,158,11,.35)}
   #profile-body .sub{color:#cbd5e1}
 }
+
+/* ---------- 34) PWA: تلميح التثبيت + مساحة النتوء بوضع التطبيق المثبت (pwa1) ---------- */
+#pwa-hint{position:fixed;inset-inline:10px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:250;display:flex;align-items:center;gap:10px;padding:10px 12px;background:#1e2c47;border:1px solid rgba(245,158,11,.45);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);font-size:.85rem;color:var(--txt);animation:phin .3s ease-out}
+#pwa-hint img{border-radius:10px;flex:none}
+#pwa-hint .ph-t{flex:1;display:flex;flex-direction:column;gap:2px;line-height:1.5}
+#pwa-hint .ph-t b{color:var(--gold)}
+#pwa-hint .ph-t svg{width:16px;height:16px;vertical-align:-3px;fill:none;stroke:#60a5fa;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#pwa-hint .ph-i{flex:none;background:var(--gold);color:#1c1204;border:0;border-radius:99px;padding:7px 12px;font-weight:800}
+#pwa-hint .ph-x{flex:none;background:transparent;border:0;color:var(--mut);font-size:1rem;padding:4px 6px}
+@keyframes phin{from{transform:translateY(20px);opacity:0}}
+.pwa-standalone header{padding-top:calc(10px + env(safe-area-inset-top))}
+.pwa-standalone header{padding-inline:max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-right))}
