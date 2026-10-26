@@ -1259,7 +1259,7 @@ async function renderNewsbar() {
   if (!items.length) { bar.hidden = true; bar.innerHTML = ''; stopNbCycle(); return; }
   bar.hidden = false;
   bar.onpointerenter = () => stopNbCycle(); bar.onpointerleave = () => startNbCycle(items.length); /* ann43: إيقاف الحركة عند التمرير/اللمس */
-  bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'general' ? '📢 إعلان' : (CARDS[a.kind] ? CARDS[a.kind].nb : '🕊️ تعزية')}: ${esc(a.member_name)}</span>${canEdit() ? `<span class="nbdel" data-andel="${a.id}" role="button" aria-label="حذف الإعلان" title="حذف الإعلان">✕</span>` : ''}</button>`).join('');
+  bar.innerHTML = items.map((a, i) => `<button class="nbcard${i === 0 ? ' on' : ''}" data-ann="${a.id}"><img alt=""><span>${a.kind === 'general' ? '📢 إعلان' : (CARDS[a.kind] ? CARDS[a.kind].nb : '🕊️ تعزية')}: ${esc(a.member_name)}</span>${canEdit() ? `<span class="nbdel nbedit" data-anedit="${a.id}" role="button" aria-label="تعديل الإعلان" title="تعديل الإعلان">✏️</span><span class="nbdel" data-andel="${a.id}" role="button" aria-label="حذف الإعلان" title="حذف الإعلان">✕</span>` : ''}</button>`).join('');
   for (const a of items) {
     const img = bar.querySelector(`[data-ann="${a.id}"] img`);
     if (a.kind === 'general') { img.style.display = 'none'; continue; }
@@ -1279,6 +1279,28 @@ async function renderNewsbar() {
       if (!CFG.DEMO) { const r = await rpc('secure_delete_announcement', { p_passcode: S.code, p_id: id }); if (!r || !r.ok) throw new Error('delete failed'); }
       S.ann = (S.ann || []).filter(z => z.id !== id); renderNewsbar(); toast('تم حذف الإعلان');
     } catch (_) { toast('تعذر حذف الإعلان'); }
+  });
+  /* ann84: تعديل الإعلان — العام: العنوان + النص؛ البطاقات: الاسم الظاهر (+ نص الشكر إن وُجد) */
+  bar.querySelectorAll('[data-anedit]').forEach(x => x.onclick = e => {
+    e.stopPropagation();
+    const a = items.find(z => z.id === x.dataset.anedit); if (!a) return;
+    const isGen = a.kind === 'general';
+    const fields = isGen
+      ? [{ k: 'title', label: 'عنوان الإعلان', val: a.member_name, req: 1 }, { k: 'text', label: 'نص الإعلان', type: 'area', val: a.body || '', req: 1 }]
+      : [{ k: 'name', label: 'الاسم الظاهر في الإعلان', val: a.member_name, req: 1 }].concat((a.kind === 'thanks' || a.body) ? [{ k: 'text', label: 'نص الشكر', type: 'area', val: a.body || '' }] : []);
+    openForm('تعديل الإعلان', fields, async d => {
+      const name = (isGen ? d.title : d.name).trim();
+      const body = isGen ? d.text.trim() : (d.text !== undefined ? d.text.trim() : undefined);
+      try {
+        if (!CFG.DEMO) {
+          const r = await rpc('secure_update_announcement', { p_passcode: S.code, p_id: a.id, p_member_name: name, p_body: body === undefined ? null : body });
+          if (!r || !r.ok) throw new Error('update failed');
+        }
+        a.member_name = name; if (body !== undefined) a.body = body || null;
+        if (S.thumbCache) S.thumbCache.delete(a.id); /* ann84: إعادة توليد صورة البطاقة بعد تعديل الاسم */
+        renderNewsbar(); toast('تم تعديل الإعلان');
+      } catch (_) { toast('تعذر تعديل الإعلان'); }
+    });
   });
   startNbCycle(items.length);
 }
