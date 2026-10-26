@@ -6,7 +6,7 @@ function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
-const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [] };
+const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [], tagCounts: null, _tagCountsP: null };
 const V = { x: 0, y: 0, k: 1 };
 
 /* ---------- بيانات وهمية للتصميم ---------- */
@@ -168,6 +168,8 @@ async function loadEvDoc(e, force) {
     const r = await rpc('get_event_media', { p_code: S.code, p_event_id: e.id });
     if (!r.ok) throw new Error();
     e._items = r.items || [];
+    /* ann76: وسوم الوجوه لهذه المناسبة (للعارض المكبّر) */
+    try { const tr = await rpc('get_photo_tags', { p_code: S.code, p_event_id: e.id }); e._tags = new Map(); (tr.items || []).forEach(t => { if (!e._tags.has(t.media_id)) e._tags.set(t.media_id, []); e._tags.get(t.media_id).push(t); }); } catch (_) { e._tags = new Map(); }
     if (S.evDetail === e && $('#evdoc')) renderEvDoc(e, e._items);
   } catch (_) {
     const m = $('#evloadmsg'); if (m && S.evDetail === e) m.textContent = 'تعذّر تحميل الصور — اضغط الزر أعلاه للمحاولة مرة أخرى';
@@ -228,11 +230,15 @@ function renderEvDoc(e, items) {
 /* عارض الصور: تنقّل سابق/تالي بين صور المناسبة (ann30) */
 function evZoom(e, photos, idx) {
   const x = photos[idx]; if (!x) return;
+  /* ann76: وسوم الوجوه — الضغط على وجه يفتح ملف صاحبه */
+  const tags = (e._tags && e._tags.get(x.id)) || [];
+  const tagHtml = tags.map(t => { const m = S.byId.get(t.member_id); if (!m) return ''; return `<button class="evtag" style="left:${t.x / 10}%;top:${t.y / 10}%;width:${t.w / 10}%;height:${t.h / 10}%" data-mid="${t.member_id}" aria-label="${esc(cardName(m))}"><span>${esc(cardName(m))}</span></button>`; }).join('');
   $('#profile-body').innerHTML = `<div class="evzoombar"><button class="x" id="evback">→ رجوع</button><span class="sub">${idx + 1} / ${photos.length}</span>
     <span><button class="x" id="evprev" ${idx === 0 ? 'disabled' : ''} aria-label="الصورة السابقة">‹ سابقة</button>
     <button class="x" id="evnext" ${idx === photos.length - 1 ? 'disabled' : ''} aria-label="الصورة التالية">تالية ›</button></span></div>
-    <img class="evbig" src="${x.url}" alt="">${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`;
+    <div class="evzoom-wrap"><img class="evbig" src="${x.url}" alt="">${tagHtml}</div>${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`;
   $('#evback').onclick = () => evDetails();
+  document.querySelectorAll('#profile-body .evtag').forEach(b => b.onclick = () => profile(b.dataset.mid));
   const pv = $('#evprev'), nx = $('#evnext');
   if (pv) pv.onclick = () => evZoom(e, photos, idx - 1);
   if (nx) nx.onclick = () => evZoom(e, photos, idx + 1);
@@ -449,6 +455,22 @@ function waNum(p) {  // 05xxxxxxxx أو 5xxxxxxxx أو 00966... إلى صيغة 
   if (/^05\d{8}$/.test(d)) d = '966' + d.slice(1); else if (/^5\d{8}$/.test(d)) d = '966' + d;
   return d;
 }
+/* ann76: عدّاد ظهور الأعضاء في صور المناسبات (يُحمّل مرة واحدة من الوسوم) */
+async function ensureTagCounts() {
+  if (S.tagCounts) return S.tagCounts;
+  if (CFG.DEMO) return new Map();
+  if (S._tagCountsP) return S._tagCountsP;
+  S._tagCountsP = (async () => {
+    try {
+      const r = await rpc('get_photo_tags', { p_code: S.code, p_event_id: null });
+      const counts = new Map();
+      (r.items || []).forEach(t => counts.set(t.member_id, (counts.get(t.member_id) || 0) + 1));
+      S.tagCounts = counts; return counts;
+    } catch (_) { S._tagCountsP = null; return new Map(); }
+  })();
+  return S._tagCountsP;
+}
+const tagCountText = id => { const n = S.tagCounts ? (S.tagCounts.get(id) || 0) : 0; if (!n) return ''; return `ظهر في ${n} ${n === 1 ? 'صورة' : n === 2 ? 'صورتان' : n <= 10 ? 'صور' : 'صورة'}`; };
 function profile(id) {
   const m = S.byId.get(id); if (!m) return;
   const father = S.byId.get(m.father_id), wives = S.wives.filter(w => w.husband_id === m.id), mother = S.wives.find(w => w.id === m.wife_mother_id);
@@ -463,12 +485,14 @@ function profile(id) {
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
       ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
-      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}
+      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}${row('صور المناسبات', tagCountText(id))}
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
     ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
-  $('#profile').showModal();
+  /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
+  if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
+  if (!$('#profile').open) $('#profile').showModal();
 }
 $('#profile-x').onclick = () => $('#profile').close();
 
