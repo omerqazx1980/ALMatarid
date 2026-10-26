@@ -186,7 +186,7 @@ function attHtml(e, canDoc) {
   const chips = list.map(m => `<div class="att" data-mid="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img src="${S.photos.get(m.id)}" alt="">` : ''}<span>${esc(cardName(m))}</span>${tagged.has(m.id) ? '<i title="يظهر في الصور">📸</i>' : '<i title="حاضر دون صورة">✓</i>'}${canDoc() && !tagged.has(m.id) ? `<button class="x" data-attdel="${m.id}" aria-label="إزالة من الحضور">✕</button>` : ''}</div>`).join('');
   return `<h3 class="evdoch">👥 الحضور${list.length ? ` (${list.length})` : ''}</h3>` +
     (list.length ? `<div class="attlist">${chips}</div>` : '<p class="sub">لا حضور مسجّل بعد — يُضاف تلقائيًا من وسوم الصور.</p>') +
-    (canDoc() ? `<div class="evdoc-tools"><button data-attadd="1">➕ إضافة حاضر</button></div>` : '');
+    (canDoc() ? `<div class="evdoc-tools"><button data-attadd="1">➕ إضافة حاضرين</button></div>` : '');
 }
 function renderEvDoc(e, items) {
   const box = $('#evdoc'); if (!box) return;
@@ -222,14 +222,16 @@ function renderEvDoc(e, items) {
   const attAdd = box.querySelector('[data-attadd]');
   if (attAdd) attAdd.onclick = () => {
     const existing = new Set([...(e._tags ? [...e._tags.values()].flat().map(t => t.member_id) : []), ...(e._attendees || [])]);
-    const opts = S.members.filter(m => !existing.has(m.id) && (!m.name_masked || canEdit() || (S.role === 'branch' && inBranch(m)))).map(m => [m.id, `${m.full_name}${m.city ? ' — ' + m.city : ''}`]).sort((a, b) => a[1].localeCompare(b[1], 'ar'));
-    if (!opts.length) { toast('لا أعضاء متاحين للإضافة'); return; }
-    openForm('إضافة حاضر', [{ k: 'member', label: 'العضو', type: 'select', req: true, opts }], async d => {
-      if (CFG.DEMO) { e._attendees = [...(e._attendees || []), d.member]; renderEvDoc(e, e._items || []); toast('تمت الإضافة'); return; }
-      const r = await rpc('secure_add_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: d.member });
-      if (!r.ok) throw new Error('تعذّرت الإضافة');
-      e._attendees = [...(e._attendees || []), d.member];
-      renderEvDoc(e, e._items || []); toast('تمت الإضافة');
+    const items = S.members.filter(m => !existing.has(m.id) && (!m.name_masked || canEdit() || (S.role === 'branch' && inBranch(m)))).map(m => ({ id: m.id, label: m.full_name, sub: m.city || '' })).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+    if (!items.length) { toast('لا أعضاء متاحين للإضافة'); return; }
+    /* ann80: إضافة جماعية — علّم على كل الحاضرين ثم زر واحد */
+    openBulkPicker('إضافة حاضرين', items, async ids => {
+      if (CFG.DEMO) { e._attendees = [...(e._attendees || []), ...ids]; renderEvDoc(e, e._items || []); toast(`تمت إضافة ${ids.length}`); return; }
+      const done = [];
+      for (const mid of ids) { try { const r = await rpc('secure_add_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: mid }); if (r.ok) done.push(mid); } catch (_) {} }
+      e._attendees = [...(e._attendees || []), ...done];
+      renderEvDoc(e, e._items || []);
+      toast(done.length === ids.length ? `تمت إضافة ${done.length}` : `أُضيف ${done.length} من ${ids.length} — راجع الرمز`);
     });
   };
   box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
@@ -578,7 +580,31 @@ $('#form-el').addEventListener('submit', async e => {
   catch (err) { $('#form-err').textContent = err.message || 'تعذر الحفظ'; $('#form-err').hidden = false; }
   btn.disabled = false;
 });
+/* ann80: منتقي جماعي — بحث + تحديد بعدة أسماء دفعة واحدة (الاختيار يبقى عند البحث) */
+function openBulkPicker(title, items, onDone) {
+  $('#pick-title').textContent = title;
+  const q = $('#pick-q'), list = $('#pick-list'), ok = $('#pick-ok'), count = $('#pick-count');
+  const sel = new Set();
+  q.value = '';
+  const render = () => {
+    const needle = q.value.trim();
+    list.innerHTML = items.filter(it => !needle || it.label.includes(needle)).map(it => `<label class="pickrow"><input type="checkbox" value="${esc(it.id)}"${sel.has(it.id) ? ' checked' : ''}><span>${esc(it.label)}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</label>`).join('') || '<p class="sub">لا نتائج مطابقة.</p>';
+    update();
+  };
+  const update = () => {
+    const n = sel.size;
+    count.textContent = n ? `تم اختيار ${n}` : '';
+    ok.disabled = !n;
+    ok.textContent = n ? `➕ إضافة المحددين (${n})` : '➕ إضافة المحددين';
+  };
+  q.oninput = render;
+  list.onchange = ev => { const c = ev.target; if (c.matches('input[type=checkbox]')) { c.checked ? sel.add(c.value) : sel.delete(c.value); update(); } };
+  ok.onclick = () => { const ids = [...sel]; $('#pick').close(); onDone(ids); };
+  render();
+  if (!$('#pick').open) $('#pick').showModal();
+}
 $('#form-x').onclick = () => $('#form').close();
+$('#pick-x').onclick = () => $('#pick').close();
 
 async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
