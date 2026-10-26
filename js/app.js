@@ -6,7 +6,7 @@ function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
-const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [], tagCounts: null, _tagCountsP: null };
+const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [], tagCounts: null, tagEvents: null, _tagCountsP: null };
 const V = { x: 0, y: 0, k: 1 };
 
 /* ---------- بيانات وهمية للتصميم ---------- */
@@ -170,10 +170,23 @@ async function loadEvDoc(e, force) {
     e._items = r.items || [];
     /* ann76: وسوم الوجوه لهذه المناسبة (للعارض المكبّر) */
     try { const tr = await rpc('get_photo_tags', { p_code: S.code, p_event_id: e.id }); e._tags = new Map(); (tr.items || []).forEach(t => { if (!e._tags.has(t.media_id)) e._tags.set(t.media_id, []); e._tags.get(t.media_id).push(t); }); } catch (_) { e._tags = new Map(); }
+    /* ann78: الحضور اليدوي لهذه المناسبة */
+    try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: e.id }); e._attendees = (ar.items || []).map(x => x.member_id); } catch (_) { e._attendees = []; }
     if (S.evDetail === e && $('#evdoc')) renderEvDoc(e, e._items);
   } catch (_) {
     const m = $('#evloadmsg'); if (m && S.evDetail === e) m.textContent = 'تعذّر تحميل الصور — اضغط الزر أعلاه للمحاولة مرة أخرى';
   }
+}
+/* ann78: قائمة حضور المناسبة — من وسوم الصور تلقائيًا + إضافة يدوية لمن حضر دون صورة */
+function attHtml(e, canDoc) {
+  const tagged = new Set();
+  (e._tags || new Map()).forEach(list => list.forEach(t => tagged.add(t.member_id)));
+  const ids = new Set([...tagged, ...(e._attendees || [])]);
+  const list = [...ids].map(id => S.byId.get(id)).filter(Boolean);
+  const chips = list.map(m => `<div class="att" data-mid="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img src="${S.photos.get(m.id)}" alt="">` : ''}<span>${esc(cardName(m))}</span>${tagged.has(m.id) ? '<i title="يظهر في الصور">📸</i>' : '<i title="حاضر دون صورة">✓</i>'}${canDoc() && !tagged.has(m.id) ? `<button class="x" data-attdel="${m.id}" aria-label="إزالة من الحضور">✕</button>` : ''}</div>`).join('');
+  return `<h3 class="evdoch">👥 الحضور${list.length ? ` (${list.length})` : ''}</h3>` +
+    (list.length ? `<div class="attlist">${chips}</div>` : '<p class="sub">لا حضور مسجّل بعد — يُضاف تلقائيًا من وسوم الصور.</p>') +
+    (canDoc() ? `<div class="evdoc-tools"><button data-attadd="1">➕ إضافة حاضر</button></div>` : '');
 }
 function renderEvDoc(e, items) {
   const box = $('#evdoc'); if (!box) return;
@@ -184,6 +197,7 @@ function renderEvDoc(e, items) {
     ${e.story ? `<div class="story">${esc(e.story)}</div>` : '<p class="sub">لا حكاية موثقة بعد.</p>'}
     ${photos.length ? `<div class="evgrid">${photos.map(x => `<figure><img src="${x.url}" alt="${esc(x.caption || 'صورة من المناسبة')}" data-evzoom="${x.id}">${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف صورة">✕</button>` : ''}${x.caption ? `<figcaption>${esc(x.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
     ${vids.map(x => `<div class="evvid">▶️ <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.caption || 'مشاهدة الفيديو')}</a>${canDoc() ? `<button class="x" data-evdel="${x.id}" aria-label="حذف فيديو">✕</button>` : ''}</div>`).join('')}
+    ${attHtml(e, canDoc)}
     <div class="evdoc-tools">${canDoc() ? `<button data-evadd="photo">➕ صورة</button><button data-evadd="video">➕ فيديو (رابط)</button><button data-evadd="story">✏️ ${e.story ? 'تعديل الحكاية' : 'كتابة حكاية المناسبة'}</button>` : `<button data-evadd="code">🎟️ لديّ رمز توثيق هذه المناسبة</button>`}</div>`;
   box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const i = photos.findIndex(z => z.id === im.dataset.evzoom); if (i >= 0) evZoom(e, photos, i); });
   box.querySelectorAll('[data-evdel]').forEach(b => b.onclick = async () => {
@@ -194,6 +208,30 @@ function renderEvDoc(e, items) {
       loadEvDoc(e, true); toast('تم الحذف');
     } catch (_) { toast('تعذر الحذف — تأكد من الرمز'); }
   });
+  /* ann78: الحضور — فتح الملف بالضغط، وإزالة/إضافة لليدوي فقط */
+  box.querySelectorAll('.att').forEach(ch => {
+    ch.onclick = ev2 => { if (ev2.target.closest('[data-attdel]')) return; profile(ch.dataset.mid); };
+    ch.onkeydown = ev2 => { if ((ev2.key === 'Enter' || ev2.key === ' ') && !ev2.target.closest('[data-attdel]')) { ev2.preventDefault(); profile(ch.dataset.mid); } };
+  });
+  box.querySelectorAll('[data-attdel]').forEach(b => b.onclick = async ev2 => {
+    ev2.stopPropagation();
+    const mid = b.dataset.attdel;
+    if (CFG.DEMO) { e._attendees = (e._attendees || []).filter(x => x !== mid); renderEvDoc(e, e._items || []); return; }
+    try { const r = await rpc('secure_delete_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: mid }); if (!r.ok) throw new Error(); e._attendees = (e._attendees || []).filter(x => x !== mid); renderEvDoc(e, e._items || []); toast('تمت الإزالة'); } catch (_) { toast('تعذّرت الإزالة — تأكد من الرمز'); }
+  });
+  const attAdd = box.querySelector('[data-attadd]');
+  if (attAdd) attAdd.onclick = () => {
+    const existing = new Set([...(e._tags ? [...e._tags.values()].flat().map(t => t.member_id) : []), ...(e._attendees || [])]);
+    const opts = S.members.filter(m => !existing.has(m.id) && (!m.name_masked || canEdit() || (S.role === 'branch' && inBranch(m)))).map(m => [m.id, `${m.full_name}${m.city ? ' — ' + m.city : ''}`]).sort((a, b) => a[1].localeCompare(b[1], 'ar'));
+    if (!opts.length) { toast('لا أعضاء متاحين للإضافة'); return; }
+    openForm('إضافة حاضر', [{ k: 'member', label: 'العضو', type: 'select', req: true, opts }], async d => {
+      if (CFG.DEMO) { e._attendees = [...(e._attendees || []), d.member]; renderEvDoc(e, e._items || []); toast('تمت الإضافة'); return; }
+      const r = await rpc('secure_add_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: d.member });
+      if (!r.ok) throw new Error('تعذّرت الإضافة');
+      e._attendees = [...(e._attendees || []), d.member];
+      renderEvDoc(e, e._items || []); toast('تمت الإضافة');
+    });
+  };
   box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
     const k = b.dataset.evadd;
     if (k === 'code') {
@@ -468,14 +506,17 @@ async function ensureTagCounts() {
   S._tagCountsP = (async () => {
     try {
       const r = await rpc('get_photo_tags', { p_code: S.code, p_event_id: null });
-      const counts = new Map();
-      (r.items || []).forEach(t => counts.set(t.member_id, (counts.get(t.member_id) || 0) + 1));
-      S.tagCounts = counts; return counts;
+      const counts = new Map(), evs = new Map();
+      (r.items || []).forEach(t => { counts.set(t.member_id, (counts.get(t.member_id) || 0) + 1); if (!evs.has(t.member_id)) evs.set(t.member_id, new Set()); evs.get(t.member_id).add(t.event_id); });
+      /* ann78: الحضور اليدوي يشارك أيضًا في المشاركات */
+      try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: null }); (ar.items || []).forEach(x => { if (!evs.has(x.member_id)) evs.set(x.member_id, new Set()); evs.get(x.member_id).add(x.event_id); }); } catch (_) {}
+      S.tagCounts = counts; S.tagEvents = evs; return counts;
     } catch (_) { S._tagCountsP = null; return new Map(); }
   })();
   return S._tagCountsP;
 }
 const tagCountText = id => { const n = S.tagCounts ? (S.tagCounts.get(id) || 0) : 0; if (!n) return ''; return `ظهر في ${n} ${n === 1 ? 'صورة' : n === 2 ? 'صورتان' : n <= 10 ? 'صور' : 'صورة'}`; };
+const partText = id => { const s = S.tagEvents ? S.tagEvents.get(id) : null; if (!s || !s.size) return ''; return [...s].map(eid => { const ev = (S.events || []).find(z => String(z.id) === String(eid)); return ev ? ev.title : null; }).filter(Boolean).join('، '); };
 function profile(id) {
   const m = S.byId.get(id); if (!m) return;
   const father = S.byId.get(m.father_id), wives = S.wives.filter(w => w.husband_id === m.id), mother = S.wives.find(w => w.id === m.wife_mother_id);
@@ -490,7 +531,7 @@ function profile(id) {
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
       ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
-      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}${row('صور المناسبات', tagCountText(id))}
+      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}${row('صور المناسبات', tagCountText(id))}${row('المشاركات', partText(id))}
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
