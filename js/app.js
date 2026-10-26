@@ -183,7 +183,7 @@ function attHtml(e, canDoc) {
   (e._tags || new Map()).forEach(list => list.forEach(t => tagged.add(t.member_id)));
   const ids = new Set([...tagged, ...(e._attendees || [])]);
   const list = [...ids].map(id => S.byId.get(id)).filter(Boolean);
-  const chips = list.map(m => `<div class="att" data-mid="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img src="${S.photos.get(m.id)}" alt="">` : ''}<span>${esc(cardName(m))}</span>${tagged.has(m.id) ? '<i title="يظهر في الصور">📸</i>' : '<i title="حاضر دون صورة">✓</i>'}${canDoc() && !tagged.has(m.id) ? `<button class="x" data-attdel="${m.id}" aria-label="إزالة من الحضور">✕</button>` : ''}</div>`).join('');
+  const chips = list.map(m => `<div class="att" data-mid="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img src="${S.photos.get(m.id)}" alt="">` : ''}<span>${esc(cardLongName(m))}</span>${tagged.has(m.id) ? '<i title="يظهر في الصور">📸</i>' : '<i title="حاضر دون صورة">✓</i>'}${canDoc() && !tagged.has(m.id) ? `<button class="x" data-attdel="${m.id}" aria-label="إزالة من الحضور">✕</button>` : ''}</div>`).join('');
   return `<h3 class="evdoch">👥 الحضور${list.length ? ` (${list.length})` : ''}</h3>` +
     (list.length ? `<div class="attlist">${chips}</div>` : '<p class="sub">لا حضور مسجّل بعد — يُضاف تلقائيًا من وسوم الصور.</p>') +
     (canDoc() ? `<div class="evdoc-tools"><button data-attadd="1">➕ إضافة حاضرين</button></div>` : '');
@@ -222,7 +222,10 @@ function renderEvDoc(e, items) {
   const attAdd = box.querySelector('[data-attadd]');
   if (attAdd) attAdd.onclick = () => {
     const existing = new Set([...(e._tags ? [...e._tags.values()].flat().map(t => t.member_id) : []), ...(e._attendees || [])]);
-    const items = S.members.filter(m => !existing.has(m.id) && (!m.name_masked || canEdit() || (S.role === 'branch' && inBranch(m)))).map(m => ({ id: m.id, label: m.full_name, sub: m.city || '' })).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+    /* ann81: الحضور من الجيل الرابع فما فوق فقط (الأجيال السابقة توفوا جميعًا) ومن الأحياء فقط — والاسم ثلاثي/رباعي دائمًا */
+    const GENORD = { 4: 'الرابع', 5: 'الخامس', 6: 'السادس', 7: 'السابع' };
+    const items = S.members.filter(m => !existing.has(m.id) && m.is_alive !== false && gen(m) >= 4 && (!m.name_masked || canEdit() || (S.role === 'branch' && inBranch(m)))).map(m => ({ id: m.id, label: cardLongName(m), sub: m.city || '', group: gen(m) })).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+    const groups = [...new Set(items.map(i => i.group))].sort((a, b) => a - b).map(g => ({ key: g, label: 'الجيل ' + (GENORD[g] || g) }));
     if (!items.length) { toast('لا أعضاء متاحين للإضافة'); return; }
     /* ann80: إضافة جماعية — علّم على كل الحاضرين ثم زر واحد */
     openBulkPicker('إضافة حاضرين', items, async ids => {
@@ -232,7 +235,7 @@ function renderEvDoc(e, items) {
       e._attendees = [...(e._attendees || []), ...done];
       renderEvDoc(e, e._items || []);
       toast(done.length === ids.length ? `تمت إضافة ${done.length}` : `أُضيف ${done.length} من ${ids.length} — راجع الرمز`);
-    });
+    }, groups);
   };
   box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
     const k = b.dataset.evadd;
@@ -581,14 +584,24 @@ $('#form-el').addEventListener('submit', async e => {
   btn.disabled = false;
 });
 /* ann80: منتقي جماعي — بحث + تحديد بعدة أسماء دفعة واحدة (الاختيار يبقى عند البحث) */
-function openBulkPicker(title, items, onDone) {
+/* ann81: فلاتر بالأجيال (اختياري عبر groups) */
+function openBulkPicker(title, items, onDone, groups) {
   $('#pick-title').textContent = title;
-  const q = $('#pick-q'), list = $('#pick-list'), ok = $('#pick-ok'), count = $('#pick-count');
+  const q = $('#pick-q'), list = $('#pick-list'), ok = $('#pick-ok'), count = $('#pick-count'), filters = $('#pick-filters');
   const sel = new Set();
+  let group = null;
   q.value = '';
+  const renderFilters = () => {
+    if (!groups || !groups.length) { filters.innerHTML = ''; return; }
+    const counts = {};
+    items.forEach(it => counts[it.group] = (counts[it.group] || 0) + 1);
+    const gs = groups.filter(g => counts[g.key]);
+    filters.innerHTML = `<button type="button" class="pickf${group === null ? ' on' : ''}" data-g="">الكل (${items.length})</button>` + gs.map(g => `<button type="button" class="pickf${group === g.key ? ' on' : ''}" data-g="${g.key}">${g.label} (${counts[g.key]})</button>`).join('');
+    filters.querySelectorAll('.pickf').forEach(b => b.onclick = () => { group = b.dataset.g === '' ? null : +b.dataset.g; renderFilters(); render(); });
+  };
   const render = () => {
     const needle = q.value.trim();
-    list.innerHTML = items.filter(it => !needle || it.label.includes(needle)).map(it => `<label class="pickrow"><input type="checkbox" value="${esc(it.id)}"${sel.has(it.id) ? ' checked' : ''}><span>${esc(it.label)}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</label>`).join('') || '<p class="sub">لا نتائج مطابقة.</p>';
+    list.innerHTML = items.filter(it => (group === null || it.group === group) && (!needle || it.label.includes(needle))).map(it => `<label class="pickrow"><input type="checkbox" value="${esc(it.id)}"${sel.has(it.id) ? ' checked' : ''}><span>${esc(it.label)}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</label>`).join('') || '<p class="sub">لا نتائج مطابقة.</p>';
     update();
   };
   const update = () => {
@@ -600,6 +613,7 @@ function openBulkPicker(title, items, onDone) {
   q.oninput = render;
   list.onchange = ev => { const c = ev.target; if (c.matches('input[type=checkbox]')) { c.checked ? sel.add(c.value) : sel.delete(c.value); update(); } };
   ok.onclick = () => { const ids = [...sel]; $('#pick').close(); onDone(ids); };
+  renderFilters();
   render();
   if (!$('#pick').open) $('#pick').showModal();
 }
