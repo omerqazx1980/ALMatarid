@@ -591,10 +591,10 @@ async function saveMember(m, fid, d) {
   await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
-  // بطاقات تلقائية: إضافة مولود ← تهنئة، وتحويل حي إلى متوفى ← تعزية (تقبل السنة الحالية أو الماضية، هجري/ميلادي، بأرقام عربية أو إنجليزية)
+  // بطاقات تلقائية: إضافة مولود ← تهنئة فقط إذا كانت سنة الميلاد المذكورة هي السنة الحالية (هجري/ميلادي، بأرقام عربية أو إنجليزية) — بدون سنة أو بسنة قديمة لا تهنئة (طلب المالك 2026-10-26)؛ وتحويل حي إلى متوفى ← تعزية
   const ym = (String(v.birth_year_text || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).match(/\d{4}/) || [''])[0];
   const yr = new Date().getFullYear(), hj = +new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' }).format(new Date()).replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
-  const newborn = !ym || Math.abs(+ym - yr) <= 1 || Math.abs(+ym - hj) <= 1;
+  const newborn = !!ym && (+ym === yr || +ym === hj); /* ann79: التهنئة فقط لسنة الميلاد الحالية */
   if (!m && v.is_alive && newborn) { const ln = cardLongName({ full_name: v.full_name, gender: v.gender, father_id: fid }); setTimeout(() => openCard({ full_name: ln, gender: v.gender, father_id: fid }, 'birth'), 80); postAnnouncement('birth', { id: r.id, full_name: ln, gender: v.gender }); }
   else if (m && m.is_alive !== false && !v.is_alive) { const ln = cardLongName({ full_name: v.full_name, gender: v.gender, father_id: m.father_id }); setTimeout(() => openCard({ full_name: ln, gender: v.gender, father_id: m.father_id }, 'condolence'), 80); postAnnouncement('condolence', { id: m.id, full_name: ln, gender: v.gender }); }
 }
