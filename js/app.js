@@ -526,8 +526,10 @@ function profile(id) {
   const m = S.byId.get(id); if (!m) return;
   const father = S.byId.get(m.father_id), wives = S.wives.filter(w => w.husband_id === m.id), mother = S.wives.find(w => w.id === m.wife_mother_id);
   const hub = S.wives.find(w => w.member_id === m.id), husband = hub ? S.byId.get(hub.husband_id) : null;
-  const born = m.birth_year_text || (m.birth_date || '').slice(0, 4);
-  const died = m.is_alive === false ? (m.death_year_text || (m.death_date || '').slice(0, 4) || 'غير معروف') : '';
+  /* ann82: التاريخ الكامل هجري + ميلادي إن وُجد، وإلا سنة الميلاد النصية */
+  const datePair = iso => { if (!iso) return ''; const h = hijriShort(new Date(iso + 'T00:00:00Z')); return `${h} (${iso.replaceAll('-', '/')}م)`; };
+  const born = m.birth_date ? datePair(m.birth_date) : (m.birth_year_text || '');
+  const died = m.is_alive === false ? (m.death_date ? datePair(m.death_date) : (m.death_year_text || 'غير معروف')) : '';
   $('#profile-body').dataset.id = id;
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '', digits = waNum(m.phone);
   $('#profile-body').innerHTML = `${S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
@@ -624,11 +626,23 @@ async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
     death_year_text: d.alive === '1' ? null : (d.dy.trim() || null), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
     birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.gender === 'female' && d.namepub === '1', name_hidden: d.gender === 'female' && d.namehid === '1' };
+  /* ann82: التواريخ الكاملة — هجري من المنتقي → ميلادي ISO؛ التحقق قبل أي حفظ */
+  const hdate = p => {
+    const y = +d[p + '_y'];
+    if (!y) return null;
+    const day = +d[p + '_d'] || 1, mm = +d[p + '_m'] || 1;
+    if (y < 1300 || y > 1600) throw new Error('أدخل سنة هجرية صحيحة (1300–1600)');
+    const g = hijriToGreg(y, mm, day), chk = gregToHijri(g);
+    if (chk.y !== y || chk.m !== mm || chk.d !== day) throw new Error('هذا اليوم غير موجود في هذا الشهر الهجري — جرّب يومًا آخر');
+    return `${g.getUTCFullYear()}-${pad(g.getUTCMonth() + 1)}-${pad(g.getUTCDate())}`;
+  };
+  const birthD = hdate('bd'), deathD = d.alive === '1' ? null : hdate('dd');
   const r = await op('secure_save_member', { p_id: m?.id ?? null, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: fid,
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
     p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code },
     () => { if (m) Object.assign(m, v); else S.members.push({ id: 'n' + Date.now(), father_id: fid, audio_url: null, created_at: Date.now(), ...v }); });
   await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
+  await op('secure_set_member_dates', { p_passcode: S.code, p_id: r.id ?? m?.id, p_birth_date: birthD, p_death_date: deathD }, () => { const mm = S.byId.get(r.id ?? m?.id); if (mm) { mm.birth_date = birthD; mm.death_date = deathD; } });
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
   // بطاقات تلقائية: إضافة مولود ← تهنئة فقط إذا كانت سنة الميلاد المذكورة هي السنة الحالية (هجري/ميلادي، بأرقام عربية أو إنجليزية) — بدون سنة أو بسنة قديمة لا تهنئة (طلب المالك 2026-10-26)؛ وتحويل حي إلى متوفى ← تعزية
@@ -639,6 +653,15 @@ async function saveMember(m, fid, d) {
   else if (m && m.is_alive !== false && !v.is_alive) { const ln = cardLongName({ full_name: v.full_name, gender: v.gender, father_id: m.father_id }); setTimeout(() => openCard({ full_name: ln, gender: v.gender, father_id: m.father_id }, 'condolence'), 80); postAnnouncement('condolence', { id: m.id, full_name: ln, gender: v.gender }); }
 }
 const CITIES = ['المدينة المنورة', 'ينبع', 'العلا', 'خيبر', 'الحناكية', 'المهد', 'بدر', 'وادي الفرع', 'العيص', 'مكة المكرمة', 'جدة', 'الطائف', 'رابغ', 'الليث', 'القنفذة', 'الجموم', 'الرياض', 'الخرج', 'الدوادمي', 'المجمعة', 'الزلفي', 'شقراء', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الدمام', 'الخبر', 'الظهران', 'الجبيل', 'الأحساء', 'القطيف', 'حفر الباطن', 'تبوك', 'ضباء', 'الوجه', 'أملج', 'تيماء', 'حائل', 'بريدة', 'عنيزة', 'الرس', 'عرعر', 'سكاكا', 'القريات', 'أبها', 'خميس مشيط', 'بيشة', 'جازان', 'صبيا', 'نجران', 'الباحة', 'بلجرشي', 'خارج المملكة'];
+/* ann82: منتقي التاريخ الهجري (أم القرى) — اليوم/الشهر اختياريان (يُحفظ 01 عند تركهما)، السنة إلزامية للتسجيل */
+function hdateRow(p, title, iso) {
+  const hj = iso ? gregToHijri(new Date(iso + 'T00:00:00Z')) : { y: '', m: '', d: '' };
+  return `<div class="conv" id="${p}-wrap"><b>${title} (هجري — أم القرى)</b><div class="convrow">`
+    + `<select name="${p}_d" aria-label="اليوم"><option value="">اليوم</option>${Array.from({ length: 30 }, (_, i) => `<option value="${i + 1}"${hj.d === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select>`
+    + `<select name="${p}_m" aria-label="الشهر"><option value="">الشهر</option>${HJ_MONTHS.map((t, i) => `<option value="${i + 1}"${hj.m === i + 1 ? ' selected' : ''}>${t}</option>`).join('')}</select>`
+    + `<input name="${p}_y" type="number" min="1300" max="1600" placeholder="السنة" value="${hj.y || ''}" aria-label="السنة الهجرية">`
+    + `</div><p class="sub" id="${p}-g"></p><p class="sub">إذا لم تعرف اليوم أو الشهر اتركه فارغًا — يُحفظ 01.</p></div>`;
+}
 function memberForm(m, parentId) {
   const fid = m ? m.father_id : parentId, moms = S.wives.filter(w => w.husband_id === fid);
   const f = (k, label, val, type, x = {}) => ({ k, label, val, type, ...x });
@@ -647,6 +670,8 @@ function memberForm(m, parentId) {
     f('gender', 'الجنس', m?.gender || 'male', 'select', { opts: [['male', 'ذكر'], ['female', 'أنثى']] }),
     f('alive', 'الحالة', m?.is_alive === false ? '0' : '1', 'select', { opts: [['1', 'حي'], ['0', 'متوفى']] }),
     f('by', 'سنة الميلاد (نص)', m?.birth_year_text ?? (m?.birth_date || '').slice(0, 4)), f('dy', 'سنة الوفاة', m?.death_year_text),
+    { type: 'raw', html: hdateRow('bd', 'تاريخ الميلاد', m?.birth_date) },
+    { type: 'raw', html: hdateRow('dd', 'تاريخ الوفاة', m?.death_date) },
     { type: 'raw', html: `<div class="conv"><b>محوّل سنة الميلاد والوفاة (هجري ⇄ ميلادي)</b><div class="convrow"><input name="cy" type="number" placeholder="السنة" aria-label="السنة للتحويل"><select name="cc" aria-label="نوع السنة"><option value="h">هجرية</option><option value="g">ميلادية</option></select><button type="button" id="cv-go">حوّل</button></div><p class="cvout sub" hidden></p><div class="convrow"><button type="button" id="cv-by">املأ به سنة الميلاد</button><button type="button" id="cv-dy">املأ به سنة الوفاة</button></div></div>` },
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
@@ -665,8 +690,24 @@ function memberForm(m, parentId) {
     document.querySelector('#cv-by').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=by]').value = cvText; };
     document.querySelector('#cv-dy').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=dy]').value = cvText; };
   }
+  /* ann82: تحديث المقابل الميلادي لحظيًا لمنتقيي التاريخ */
+  const wireHDate = p => {
+    const wrap = document.querySelector('#' + p + '-wrap'); if (!wrap) return;
+    const upd = () => {
+      const d = +wrap.querySelector(`[name=${p}_d]`).value || 1, mm = +wrap.querySelector(`[name=${p}_m]`).value || 1, y = +wrap.querySelector(`[name=${p}_y]`).value;
+      const out = document.querySelector('#' + p + '-g');
+      if (!y) { out.textContent = ''; return; }
+      if (y < 1300 || y > 1600) { out.textContent = 'أدخل سنة هجرية صحيحة (1300–1600)'; return; }
+      const g = hijriToGreg(y, mm, d), chk = gregToHijri(g);
+      if (chk.y !== y || chk.m !== mm || chk.d !== d) { out.textContent = 'هذا اليوم غير موجود في هذا الشهر الهجري'; return; }
+      out.textContent = `الميلادي: ${g.getUTCFullYear()}/${pad(g.getUTCMonth() + 1)}/${pad(g.getUTCDate())}`;
+    };
+    wrap.querySelectorAll('select, input').forEach(el => el.addEventListener('change', upd));
+    upd();
+  };
+  wireHDate('bd'); wireHDate('dd');
   const alSel = document.querySelector('#form-fields [name=alive]'), dyInp = document.querySelector('#form-fields [name=dy]');
-  if (alSel && dyInp) { const syncAlive = () => { dyInp.closest('.fl').style.display = alSel.value === '1' ? 'none' : ''; }; alSel.addEventListener('change', syncAlive); syncAlive(); }
+  if (alSel && dyInp) { const syncAlive = () => { const dead = alSel.value !== '1'; dyInp.closest('.fl').style.display = dead ? '' : 'none'; const ddWrap = document.querySelector('#dd-wrap'); if (ddWrap) ddWrap.style.display = dead ? '' : 'none'; }; alSel.addEventListener('change', syncAlive); syncAlive(); }
   const gSel = document.querySelector('#form-fields [name=gender]');
   if (gSel) { const syncGender = () => { const fem = gSel.value === 'female'; for (const n of ['namepub', 'namehid']) { const inp = document.querySelector(`#form-fields [name=${n}]`); if (inp) inp.closest('.fl').style.display = fem ? '' : 'none'; } }; gSel.addEventListener('change', syncGender); syncGender(); }
 }
