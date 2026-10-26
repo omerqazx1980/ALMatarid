@@ -207,7 +207,7 @@ dd{overflow-wrap:anywhere}
 .pickf.on{background:var(--gold);border-color:var(--gold);color:#111}
 #toast{position:fixed;bottom:22px;inset-inline:0;margin-inline:auto;width:max-content;max-width:92vw;background:var(--gold);color:#1c1204;font-weight:700;font-size:.9rem;padding:10px 18px;border-radius:99px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:300;opacity:0;transition:opacity .25s;text-align:center}
 #toast.on{opacity:1}
-.zoom button.zfit{width:auto;height:38px;padding:0 14px;font-size:.8rem;font-weight:700;border-radius:99px}
+.zoom button.zfit{width:64px;height:64px;padding:4px;font-size:.8rem;font-weight:700;line-height:1.3;border-radius:12px} /* ann83: زر الملاءمة مربع والكلمتان فوق بعض */
 .beta{font-size:11px;font-weight:600;color:var(--gold);border:1px solid var(--gold);border-radius:99px;padding:1px 9px;vertical-align:middle;white-space:nowrap}
 .bdg{background:#dc2626;color:#fff;border-radius:99px;font-size:12px;font-weight:800;padding:0 7px;margin-inline-start:4px}
 .pimg{width:110px;height:110px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);display:block;margin:0 auto 8px}
