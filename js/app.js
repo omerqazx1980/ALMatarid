@@ -283,10 +283,13 @@ function evZoom(e, photos, idx) {
     <span><button class="x" id="evprev" ${idx === 0 ? 'disabled' : ''} aria-label="الصورة السابقة">‹ سابقة</button>
     <button class="x" id="evnext" ${idx === photos.length - 1 ? 'disabled' : ''} aria-label="الصورة التالية">تالية ›</button></span></div>
     <div class="evzoom-wrap${hideTags ? ' notags' : ''}"><img class="evbig" src="${x.url}" alt="">${tagHtml}</div>${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`;
+  /* ann85: زر الإغلاق في عرض الصورة يغلق النافذة (لا رجوع هنا) */
+  $('#profile-x').textContent = 'إغلاق';
   $('#evback').onclick = () => evDetails();
   const tg = $('#evtags');
   if (tg) tg.onclick = () => { const wrap = document.querySelector('#profile-body .evzoom-wrap'); const hidden = wrap.classList.toggle('notags'); localStorage.setItem('almatarid-hide-tags', hidden ? '1' : '0'); tg.textContent = hidden ? '🏷️ إظهار' : '🏷️ إخفاء'; tg.setAttribute('aria-label', hidden ? 'إظهار الوسوم' : 'إخفاء الوسوم'); };
-  document.querySelectorAll('#profile-body .evtag').forEach(b => b.onclick = () => profile(b.dataset.mid));
+  /* ann85: تذكّر الصورة — الخروج من الملف يرجع لها */
+  document.querySelectorAll('#profile-body .evtag').forEach(b => b.onclick = () => { S.zoomBack = { e, photos, idx }; profile(b.dataset.mid); });
   const pv = $('#evprev'), nx = $('#evnext');
   if (pv) pv.onclick = () => evZoom(e, photos, idx - 1);
   if (nx) nx.onclick = () => evZoom(e, photos, idx + 1);
@@ -545,9 +548,16 @@ function profile(id) {
     ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
+  /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
+  $('#profile-x').textContent = S.zoomBack ? '→ رجوع للصورة' : 'إغلاق';
   if (!$('#profile').open) $('#profile').showModal();
 }
-$('#profile-x').onclick = () => $('#profile').close();
+/* ann85: إن كان الملف فُتح من وسم صورة، الإغلاق يرجع للصورة نفسها بدل إغلاق النافذة */
+$('#profile-x').onclick = () => {
+  if (S.zoomBack) { const z = S.zoomBack; S.zoomBack = null; evZoom(z.e, z.photos, z.idx); }
+  else $('#profile').close();
+};
+$('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x').textContent = 'إغلاق'; });
 
 /* ---------- الإدارة: تعمل عبر دوال الخادم المؤمّنة، وفي التجربة على الذاكرة ---------- */
 async function op(name, args, demo) {
