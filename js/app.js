@@ -233,11 +233,16 @@ function evZoom(e, photos, idx) {
   /* ann76: وسوم الوجوه — الضغط على وجه يفتح ملف صاحبه */
   const tags = (e._tags && e._tags.get(x.id)) || [];
   const tagHtml = tags.map(t => { const m = S.byId.get(t.member_id); if (!m) return ''; return `<button class="evtag" style="left:${t.x / 10}%;top:${t.y / 10}%;width:${t.w / 10}%;height:${t.h / 10}%" data-mid="${t.member_id}" aria-label="${esc(cardName(m))}"><span>${esc(cardName(m))}</span></button>`; }).join('');
+  /* ann77: زر إظهار/إخفاء الوسوم — الافتراضي الوسوم ظاهرة، والاختيار يُحفظ في الجهاز */
+  const hideTags = localStorage.getItem('almatarid-hide-tags') === '1';
   $('#profile-body').innerHTML = `<div class="evzoombar"><button class="x" id="evback">→ رجوع</button><span class="sub">${idx + 1} / ${photos.length}</span>
+    ${tags.length ? `<button class="x" id="evtags" aria-label="${hideTags ? 'إظهار الوسوم' : 'إخفاء الوسوم'}">${hideTags ? '🏷️ إظهار' : '🏷️ إخفاء'}</button>` : ''}
     <span><button class="x" id="evprev" ${idx === 0 ? 'disabled' : ''} aria-label="الصورة السابقة">‹ سابقة</button>
     <button class="x" id="evnext" ${idx === photos.length - 1 ? 'disabled' : ''} aria-label="الصورة التالية">تالية ›</button></span></div>
-    <div class="evzoom-wrap"><img class="evbig" src="${x.url}" alt="">${tagHtml}</div>${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`;
+    <div class="evzoom-wrap${hideTags ? ' notags' : ''}"><img class="evbig" src="${x.url}" alt="">${tagHtml}</div>${x.caption ? `<p class="sub">${esc(x.caption)}</p>` : ''}`;
   $('#evback').onclick = () => evDetails();
+  const tg = $('#evtags');
+  if (tg) tg.onclick = () => { const wrap = document.querySelector('#profile-body .evzoom-wrap'); const hidden = wrap.classList.toggle('notags'); localStorage.setItem('almatarid-hide-tags', hidden ? '1' : '0'); tg.textContent = hidden ? '🏷️ إظهار' : '🏷️ إخفاء'; tg.setAttribute('aria-label', hidden ? 'إظهار الوسوم' : 'إخفاء الوسوم'); };
   document.querySelectorAll('#profile-body .evtag').forEach(b => b.onclick = () => profile(b.dataset.mid));
   const pv = $('#evprev'), nx = $('#evnext');
   if (pv) pv.onclick = () => evZoom(e, photos, idx - 1);
