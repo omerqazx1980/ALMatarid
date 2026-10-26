@@ -3,7 +3,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 let _toastT = null;
 function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; requestAnimationFrame(() => t.classList.add('on')); clearTimeout(_toastT); _toastT = setTimeout(() => { t.classList.remove('on'); setTimeout(() => { t.hidden = true; }, 300); }, 2600); }
 /* شاشة الافتتاح: فيديو الشعار عند كل فتح، يُخفى عند انتهائه أو بالضغط أو بعد 5.5 ثوانٍ كحد أقصى */
-(function () { const sp = document.getElementById('splash'); if (!sp) return; const v = document.getElementById('splash-v'); let done = false; const hide = () => { if (done) return; done = true; sp.classList.add('hide'); setTimeout(() => sp.remove(), 700); }; v.addEventListener('ended', hide); v.addEventListener('error', hide); sp.addEventListener('click', hide); setTimeout(hide, 5500); v.play().catch(hide); })();
+(function () { const sp = document.getElementById('splash'); if (!sp) { window.__splashDone = true; return; } const v = document.getElementById('splash-v'); let done = false; const hide = () => { if (done) return; done = true; sp.classList.add('hide'); setTimeout(() => { sp.remove(); window.__splashDone = true; document.dispatchEvent(new Event('splashdone')); }, 700); }; v.addEventListener('ended', hide); v.addEventListener('error', hide); sp.addEventListener('click', hide); setTimeout(hide, 5500); v.play().catch(hide); })();
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
@@ -47,6 +47,7 @@ async function load(code) {
   return true;
 }
 function showGate(msg) {
+  if (!window.__splashDone && document.getElementById('splash')) { document.addEventListener('splashdone', () => showGate(msg), { once: true }); return; }
 $('#gate-err').hidden = !msg; $('#gate-err').textContent = msg || '';
   $('#code').value = ''; $('#gate').showModal(); $('#code').focus();
 }
