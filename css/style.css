@@ -525,3 +525,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   input,select,textarea{font-size:max(16px,1em)}
 }
 
+
+/* ---------- 37) بانر آية آل عمران أعلى الموقع (ann86) ---------- */
+/* الصورة شفافة (بدون خلفية) فتندمج مع خلفية الموقع مباشرة — بلا ظل ولا حواف */
+.verse-banner{display:block;width:calc(100% - 32px);max-width:880px;margin:14px auto 6px}
+@media (max-width:640px){.verse-banner{margin-top:10px}}
