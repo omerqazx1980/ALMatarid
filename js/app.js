@@ -563,7 +563,8 @@ $('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x
 async function op(name, args, demo) {
   if (CFG.DEMO) { demo(); index(); render(); return { success: true }; }
   const r = await rpc(name, args);
-  if (!r.success) throw new Error(r.message || 'تعذر الحفظ');
+  /* ann95: بعض الدوال ترجع {'ok': true} لا {'success': true} (مثل secure_set_member_dates §20) — اقبلها نجاحًا */
+  if (!r.success && !r.ok) throw new Error(r.message || 'تعذر الحفظ');
   return r;
 }
 async function refresh() {
