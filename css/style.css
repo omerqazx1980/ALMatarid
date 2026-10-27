@@ -526,9 +526,11 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 }
 
 
-/* ---------- 37) بانر آية آل عمران (ann86، تصغير ann87، داخل الترويسة بمحاذاة العنوان ann88) ---------- */
+/* ---------- 37) بانر آية آل عمران (ann86، تصغير ann87، داخل الترويسة بمحاذاة العنوان ann88، إصلاح تزاحم الجوال ann89) ---------- */
 /* الصورة شفافة (بدون خلفية) فتندمج مع خلفية الموقع مباشرة — بلا ظل ولا حواف */
-/* داخل الترويسة: بمحاذاة العنوان وبروز خفيف فوقه وتحته (أطول من سطر العنوان)؛ على الشاشات الضيقة ينزل سطراً مستقلاً متمركزاً */
+/* داخل الترويسة: بمحاذاة العنوان وبروز خفيف فوقه وتحته (أطول من سطر العنوان) */
+/* الغلاف display:contents على الشاشات الواسعة فيبقى البانر بجانب العنوان؛ وعلى الشاشات الضيقة (≤900px) يأخذ الغلاف سطراً كاملاً مستقلاً متمركزاً فلا يزاحم العنوان ولا يقصّه */
 .verse-banner{display:block;width:240px;max-width:calc(100% - 48px);flex:none}
-@media (max-width:900px){.verse-banner{flex-basis:100%;max-width:240px;margin-inline:auto}}
-@media (max-width:640px){.verse-banner{max-width:200px}}
+.verse-wrap{display:contents}
+@media (max-width:900px){.verse-wrap{display:flex;flex:0 0 100%;justify-content:center}.verse-banner{width:240px}}
+@media (max-width:640px){.verse-banner{width:200px}}
