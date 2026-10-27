@@ -717,7 +717,7 @@ function wifeForm(m, existing) { /* ann61: existing = تعديل زوجة موج
   const fields = [
     { k: 'mode', label: 'نوع الزوجة', type: 'select', val: existing?.member_id ? 'link' : 'new', opts: [['new', 'من خارج الأسرة (اسم نصي)'], ['link', 'من نساء الأسرة (ربط بسجلها)']] },
     { k: 'member', label: 'اخترها من نساء الشجرة (عند الربط)', type: 'select', val: existing?.member_id || '', opts: [['', '—'], ...women.map(w => [w.id, w.full_name])] },
-    { k: 'name', label: 'اسم الزوجة (عند عدم الربط)', val: existing && !existing.member_id ? existing.full_name : '' }, { k: 'fam', label: 'اسم عائلتها', val: existing?.family_name || '' },
+    { k: 'name', label: 'اسم الزوجة (عند عدم الربط)', val: existing && !existing.member_id ? existing.full_name : '' },
     { k: 'namepub', label: 'إظهار اسمها رغم إخفاء أسماء النساء', type: 'select', val: existing?.name_public ? '1' : '0', opts: [['0', 'لا'], ['1', 'نعم']] },
     { k: 'namehid', label: 'إخفاء اسمها برغبتها', type: 'select', val: existing?.name_hidden ? '1' : '0', opts: [['0', 'لا'], ['1', 'نعم']] }];
   if (!existing) fields.push({ k: 'mstatus', label: 'حالة الزواج', type: 'select', val: 'current', opts: [['current', 'زوجة حالية'], ['divorced', 'زوجة سابقة — انتهى الزواج بالطلاق (تظهر للمالك فقط)']] });
@@ -726,7 +726,7 @@ function wifeForm(m, existing) { /* ann61: existing = تعديل زوجة موج
     if (d.mode === 'link' && !linked) throw new Error('اختر الزوجة من قائمة نساء الأسرة');
     const name = linked ? linked.full_name : d.name.trim();
     if (!name) throw new Error('الاسم مطلوب');
-    const fam = linked ? null : (d.fam.trim() || null);
+    const fam = linked ? null : (existing?.family_name ?? null); /* ann96: حقل «اسم عائلتها» حُذف من النموذج — يُحفظ الاسم القديم إن وُجد */
     if (existing) {
       await op('secure_update_wife', { p_wife_id: existing.id, p_full_name: name, p_family_name: fam, p_member_id: linked?.id || null, p_name_public: d.namepub === '1', p_name_hidden: d.namehid === '1', p_passcode: S.code },
         () => Object.assign(existing, { full_name: name, family_name: fam, member_id: linked?.id || null, name_public: d.namepub === '1', name_hidden: d.namehid === '1' }));
@@ -736,6 +736,10 @@ function wifeForm(m, existing) { /* ann61: existing = تعديل زوجة موج
     }
     if (!CFG.DEMO) await refresh(); profile(m.id);
   });
+  /* ann96: حقل الربط يظهر فقط عند اختيار «من نساء الأسرة» */
+  const modeSel = document.querySelector('#form-fields [name=mode]');
+  const memSel = document.querySelector('#form-fields [name=member]');
+  if (modeSel && memSel) { const syncMode = () => { memSel.closest('.fl').style.display = modeSel.value === 'link' ? '' : 'none'; }; modeSel.addEventListener('change', syncMode); syncMode(); }
 }
 async function editWife(id) {
   const w = S.wives.find(x => x.id === id); if (!w) return;
