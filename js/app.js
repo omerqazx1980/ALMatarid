@@ -574,7 +574,7 @@ async function refresh() {
 function openForm(title, fields, onSubmit) {
   $('#form-title').textContent = title; $('#form-err').hidden = true; S.onForm = onSubmit;
   $('#form-fields').innerHTML = fields.map(f => f.type === 'raw' ? f.html : `<label class="fl">${esc(f.label)}${
-    f.type === 'select' ? `${f.opts.length > 12 ? `<input class="selfilter" type="search" placeholder="🔍 ابحث في القائمة…" data-tg="${f.k}">` : ''}<select name="${f.k}">${f.opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(f.val ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`
+    f.type === 'select' ? `<div class="selrow">${f.opts.length > 12 ? `<input class="selfilter" type="search" placeholder="🔍 ابحث في القائمة…" data-tg="${f.k}">` : ''}<select name="${f.k}">${f.opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(f.val ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`
     : f.type === 'area' ? `<textarea name="${f.k}" rows="4"${f.req ? ' required' : ''}>${esc(f.val)}</textarea>`
     : `<input name="${f.k}" type="${f.type || 'text'}" value="${esc(f.val)}"${f.req ? ' required' : ''} autocomplete="off">`}</label>`).join('');
   /* ann41: بحث داخل القوائم الطويلة (رأس فرع/مسؤول/عضو…) */
@@ -633,8 +633,10 @@ $('#form-x').onclick = () => $('#form').close();
 $('#pick-x').onclick = () => $('#pick').close();
 
 async function saveMember(m, fid, d) {
-  const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1', birth_year_text: d.by.trim() || null,
-    death_year_text: d.alive === '1' ? null : (d.dy.trim() || null), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
+  const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1',
+    /* ann91: السنة النصية تُشتق من منتقي التاريخ الهجري؛ وإن كان المنتقي فارغًا يُحفظ النص القديم إن وُجد حتى لا يضيع */
+    birth_year_text: d.bd_y ? String(d.bd_y) : (m?.birth_year_text ?? null),
+    death_year_text: d.alive === '1' ? null : (d.dd_y ? String(d.dd_y) : (m?.death_year_text ?? null)), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
     birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.gender === 'female' && d.namepub === '1', name_hidden: d.gender === 'female' && d.namehid === '1' };
   /* ann82: التواريخ الكاملة — هجري من المنتقي → ميلادي ISO؛ التحقق قبل أي حفظ */
   const hdate = p => {
@@ -679,10 +681,8 @@ function memberForm(m, parentId) {
     f('full_name', 'الاسم الكامل', m?.full_name, 'text', { req: true }), f('nickname', 'الكنية', m?.nickname),
     f('gender', 'الجنس', m?.gender || 'male', 'select', { opts: [['male', 'ذكر'], ['female', 'أنثى']] }),
     f('alive', 'الحالة', m?.is_alive === false ? '0' : '1', 'select', { opts: [['1', 'حي'], ['0', 'متوفى']] }),
-    f('by', 'سنة الميلاد (نص)', m?.birth_year_text ?? (m?.birth_date || '').slice(0, 4)), f('dy', 'سنة الوفاة', m?.death_year_text),
     { type: 'raw', html: hdateRow('bd', 'تاريخ الميلاد', m?.birth_date) },
     { type: 'raw', html: hdateRow('dd', 'تاريخ الوفاة', m?.death_date) },
-    { type: 'raw', html: `<div class="conv"><b>محوّل سنة الميلاد والوفاة (هجري ⇄ ميلادي)</b><div class="convrow"><input name="cy" type="number" placeholder="السنة" aria-label="السنة للتحويل"><select name="cc" aria-label="نوع السنة"><option value="h">هجرية</option><option value="g">ميلادية</option></select><button type="button" id="cv-go">حوّل</button></div><p class="cvout sub" hidden></p><div class="convrow"><button type="button" id="cv-by">املأ به سنة الميلاد</button><button type="button" id="cv-dy">املأ به سنة الوفاة</button></div></div>` },
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
     f('order', 'ترتيب الميلاد بين إخوته', m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1, 'number'),
@@ -690,16 +690,6 @@ function memberForm(m, parentId) {
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('story', 'نبذة', m?.biography_story || m?.bio, 'area')], d => saveMember(m, fid, d));
-  const cvGo = document.querySelector('#cv-go');
-  if (cvGo) {
-    let cvText = '';
-    const run = () => { const y = +document.querySelector('#form-fields [name=cy]').value, cc = document.querySelector('#form-fields [name=cc]').value, out = document.querySelector('.cvout');
-      if (!y || y < 1000 || y > 3000) { out.hidden = false; out.textContent = 'أدخل سنة صحيحة أولًا'; cvText = ''; return; }
-      cvText = cc === 'h' ? hijriYearText(y) : gregYearText(y); out.hidden = false; out.textContent = cvText; };
-    cvGo.onclick = run;
-    document.querySelector('#cv-by').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=by]').value = cvText; };
-    document.querySelector('#cv-dy').onclick = () => { if (!cvText) run(); if (cvText) document.querySelector('#form-fields [name=dy]').value = cvText; };
-  }
   /* ann82: تحديث المقابل الميلادي لحظيًا لمنتقيي التاريخ */
   const wireHDate = p => {
     const wrap = document.querySelector('#' + p + '-wrap'); if (!wrap) return;
@@ -716,8 +706,8 @@ function memberForm(m, parentId) {
     upd();
   };
   wireHDate('bd'); wireHDate('dd');
-  const alSel = document.querySelector('#form-fields [name=alive]'), dyInp = document.querySelector('#form-fields [name=dy]');
-  if (alSel && dyInp) { const syncAlive = () => { const dead = alSel.value !== '1'; dyInp.closest('.fl').style.display = dead ? '' : 'none'; const ddWrap = document.querySelector('#dd-wrap'); if (ddWrap) ddWrap.style.display = dead ? '' : 'none'; }; alSel.addEventListener('change', syncAlive); syncAlive(); }
+  const alSel = document.querySelector('#form-fields [name=alive]');
+  if (alSel) { const syncAlive = () => { const dead = alSel.value !== '1'; const ddWrap = document.querySelector('#dd-wrap'); if (ddWrap) ddWrap.style.display = dead ? '' : 'none'; }; alSel.addEventListener('change', syncAlive); syncAlive(); }
   const gSel = document.querySelector('#form-fields [name=gender]');
   if (gSel) { const syncGender = () => { const fem = gSel.value === 'female'; for (const n of ['namepub', 'namehid']) { const inp = document.querySelector(`#form-fields [name=${n}]`); if (inp) inp.closest('.fl').style.display = fem ? '' : 'none'; } }; gSel.addEventListener('change', syncGender); syncGender(); }
 }
@@ -819,8 +809,6 @@ function hijriToGreg(y, m, d) {
 }
 const hijriLong = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d); } catch (_) { return ''; } };
 const hijriShort = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(d); } catch (_) { return ''; } };
-function hijriYearText(y) { const a = hijriToGreg(y, 1, 1).getUTCFullYear(), b = hijriToGreg(y + 1, 1, 1).getUTCFullYear(); return b > a ? `${y}هـ (الموافق ${a}–${b}م)` : `${y}هـ (الموافق ${a}م)`; }
-function gregYearText(y) { const a = gregToHijri(new Date(Date.UTC(y, 0, 1))).y, b = gregToHijri(new Date(Date.UTC(y, 11, 31))).y; return b > a ? `${y}م (الموافق ${a}–${b}هـ)` : `${y}م (الموافق ${a}هـ)`; }
 const localDT = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 function showInfo(html) { $('#profile-body').dataset.id = ''; $('#profile-body').innerHTML = html; const p = $('#profile'); if (!p.open) p.showModal(); }
 const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' });
