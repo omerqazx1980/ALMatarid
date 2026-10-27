@@ -526,7 +526,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 }
 
 
-/* ---------- 37) بانر آية آل عمران أعلى الموقع (ann86) ---------- */
+/* ---------- 37) بانر آية آل عمران أعلى الموقع (ann86، تصغير ann87) ---------- */
 /* الصورة شفافة (بدون خلفية) فتندمج مع خلفية الموقع مباشرة — بلا ظل ولا حواف */
-.verse-banner{display:block;width:calc(100% - 32px);max-width:880px;margin:14px auto 6px}
-@media (max-width:640px){.verse-banner{margin-top:10px}}
+.verse-banner{display:block;width:480px;max-width:calc(100% - 48px);margin:12px auto 4px}
+@media (max-width:640px){.verse-banner{width:300px;margin-top:10px}}
