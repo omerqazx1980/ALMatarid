@@ -542,3 +542,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 /* كان صندوق البحث سطرًا مستقلًا فوق القائمة المنسدلة؛ الآن البحث والقائمة في سطر واحد */
 .selrow{display:flex;gap:6px}
 .selrow .selfilter,.selrow select{flex:1 1 0;min-width:0}
+
+/* ---------- 40) حقلان قصيران في سطر واحد (ann93) ---------- */
+/* الحالة والجنس: خياران فقط لكل منهما، فلا يحتاجان سطرًا كاملًا لكل حقل */
+.pairrow{display:flex;gap:6px}
+.pairrow .fl{flex:1 1 0;min-width:0}

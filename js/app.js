@@ -679,8 +679,7 @@ function memberForm(m, parentId) {
   const f = (k, label, val, type, x = {}) => ({ k, label, val, type, ...x });
   openForm(m ? 'تعديل بيانات الفرد' : fid ? 'إضافة ابن لـ ' + (S.byId.get(fid)?.full_name || '') : 'إضافة أول فرد', [
     f('full_name', 'الاسم الكامل', m?.full_name, 'text', { req: true }), f('nickname', 'الكنية', m?.nickname),
-    f('alive', 'الحالة', m?.is_alive === false ? '0' : '1', 'select', { opts: [['1', 'حي'], ['0', 'متوفى']] }),
-    f('gender', 'الجنس', m?.gender || 'male', 'select', { opts: [['male', 'ذكر'], ['female', 'أنثى']] }),
+    { type: 'raw', html: `<div class="pairrow"><label class="fl">الحالة<select name="alive"><option value="1"${m?.is_alive === false ? '' : ' selected'}>حي</option><option value="0"${m?.is_alive === false ? ' selected' : ''}>متوفى</option></select></label><label class="fl">الجنس<select name="gender"><option value="male"${(m?.gender || 'male') === 'male' ? ' selected' : ''}>ذكر</option><option value="female"${m?.gender === 'female' ? ' selected' : ''}>أنثى</option></select></label></div>` },
     { type: 'raw', html: hdateRow('bd', 'تاريخ الميلاد', m?.birth_date) },
     { type: 'raw', html: hdateRow('dd', 'تاريخ الوفاة', m?.death_date) },
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
