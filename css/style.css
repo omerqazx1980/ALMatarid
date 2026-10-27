@@ -526,11 +526,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 }
 
 
-/* ---------- 37) بانر آية آل عمران (ann86، تصغير ann87، داخل الترويسة بمحاذاة العنوان ann88، إصلاح تزاحم الجوال ann89) ---------- */
+/* ---------- 37) بانر آية آل عمران (ann86، تصغير ann87، داخل الترويسة بمحاذاة العنوان ann88؛ ألغي التفاف الجوال ann90 وعاد بجانب العنوان) ---------- */
 /* الصورة شفافة (بدون خلفية) فتندمج مع خلفية الموقع مباشرة — بلا ظل ولا حواف */
 /* داخل الترويسة: بمحاذاة العنوان وبروز خفيف فوقه وتحته (أطول من سطر العنوان) */
-/* الغلاف display:contents على الشاشات الواسعة فيبقى البانر بجانب العنوان؛ وعلى الشاشات الضيقة (≤900px) يأخذ الغلاف سطراً كاملاً مستقلاً متمركزاً فلا يزاحم العنوان ولا يقصّه */
 .verse-banner{display:block;width:240px;max-width:calc(100% - 48px);flex:none}
-.verse-wrap{display:contents}
-@media (max-width:900px){.verse-wrap{display:flex;flex:0 0 100%;justify-content:center}.verse-banner{width:240px}}
-@media (max-width:640px){.verse-banner{width:200px}}
+@media (max-width:640px){.verse-banner{max-width:200px}}
+
+/* ---------- 38) عنوان سطرين: «بنو عمرو» تحت «آل مطارد» (ann90) ---------- */
+/* السطر الثاني أصغر (.85em) والتباعد مضغوط (line-height 1.2) فلا يزيد ارتفاع الترويسة عن السابق — البانر ما زال أطول عنصر فيها */
+.ttl h1{white-space:normal;line-height:1.2}
+.ttl h1 .h1sub{font-size:.85em}
+@media (max-width:640px){.ttl h1{font-size:.9rem}}
