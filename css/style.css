@@ -526,7 +526,9 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 }
 
 
-/* ---------- 37) بانر آية آل عمران أعلى الموقع (ann86، تصغير ann87) ---------- */
+/* ---------- 37) بانر آية آل عمران (ann86، تصغير ann87، داخل الترويسة بمحاذاة العنوان ann88) ---------- */
 /* الصورة شفافة (بدون خلفية) فتندمج مع خلفية الموقع مباشرة — بلا ظل ولا حواف */
-.verse-banner{display:block;width:480px;max-width:calc(100% - 48px);margin:12px auto 4px}
-@media (max-width:640px){.verse-banner{width:300px;margin-top:10px}}
+/* داخل الترويسة: بمحاذاة العنوان وبروز خفيف فوقه وتحته (أطول من سطر العنوان)؛ على الشاشات الضيقة ينزل سطراً مستقلاً متمركزاً */
+.verse-banner{display:block;width:240px;max-width:calc(100% - 48px);flex:none}
+@media (max-width:900px){.verse-banner{flex-basis:100%;max-width:240px;margin-inline:auto}}
+@media (max-width:640px){.verse-banner{max-width:200px}}
