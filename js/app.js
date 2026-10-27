@@ -678,13 +678,14 @@ function memberForm(m, parentId) {
   const fid = m ? m.father_id : parentId, moms = S.wives.filter(w => w.husband_id === fid);
   const f = (k, label, val, type, x = {}) => ({ k, label, val, type, ...x });
   openForm(m ? 'تعديل بيانات الفرد' : fid ? 'إضافة ابن لـ ' + (S.byId.get(fid)?.full_name || '') : 'إضافة أول فرد', [
-    f('full_name', 'الاسم الكامل', m?.full_name, 'text', { req: true }), f('nickname', 'الكنية', m?.nickname),
-    { type: 'raw', html: `<div class="pairrow"><label class="fl">الحالة<select name="alive"><option value="1"${m?.is_alive === false ? '' : ' selected'}>حي</option><option value="0"${m?.is_alive === false ? ' selected' : ''}>متوفى</option></select></label><label class="fl">الجنس<select name="gender"><option value="male"${(m?.gender || 'male') === 'male' ? ' selected' : ''}>ذكر</option><option value="female"${m?.gender === 'female' ? ' selected' : ''}>أنثى</option></select></label></div>` },
+    f('full_name', 'الاسم الكامل', m?.full_name, 'text', { req: true }),
+    { type: 'raw', html: `<div class="pairrow w21"><label class="fl">الكنية<input name="nickname" type="text" value="${esc(m?.nickname ?? '')}" autocomplete="off"></label><label class="fl">الترتيب<input name="order" type="number" value="${m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1}" autocomplete="off"></label></div>` },
+    { type: 'raw', html: `<div class="pairrow"><label class="fl">الجنس<select name="gender"><option value="male"${(m?.gender || 'male') === 'male' ? ' selected' : ''}>ذكر</option><option value="female"${m?.gender === 'female' ? ' selected' : ''}>أنثى</option></select></label><label class="fl">الحالة<select name="alive"><option value="1"${m?.is_alive === false ? '' : ' selected'}>حي</option><option value="0"${m?.is_alive === false ? ' selected' : ''}>متوفى</option></select></label></div>` },
     { type: 'raw', html: hdateRow('bd', 'تاريخ الميلاد', m?.birth_date) },
     { type: 'raw', html: hdateRow('dd', 'تاريخ الوفاة', m?.death_date) },
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
-    f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''), f('phone', 'الهاتف', m?.phone, 'tel'), f('badge', 'الشارة', m?.achievement_badge),
-    f('order', 'ترتيب الميلاد بين إخوته', m?.birth_order ?? (S.kids.get(fid)?.length || 0) + 1, 'number'),
+    f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''),
+    { type: 'raw', html: `<div class="pairrow"><label class="fl">الهاتف<input name="phone" type="tel" value="${esc(m?.phone ?? '')}" autocomplete="off"></label><label class="fl">الشارة<input name="badge" type="text" value="${esc(m?.achievement_badge ?? '')}" autocomplete="off"></label></div>` },
     ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name + (w.marriage_status === 'divorced' ? ' (زوجة سابقة)' : '')])] })] : []),
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
