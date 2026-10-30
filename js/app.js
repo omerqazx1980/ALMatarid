@@ -870,18 +870,21 @@ async function delEvent(id) {
   try { await op('secure_delete_event', { event_id: id, passcode: S.code }, () => { S.events = S.events.filter(x => String(x.id) !== id); }); if (!CFG.DEMO) await refresh(); showEvent(); eventsList(); }
   catch (err) { alert(err.message); }
 }
-const CORR_FIELDS = [['full_name', 'الاسم الكامل'], ['nickname', 'الكنية'], ['gender', 'الجنس'], ['is_alive', 'الحالة'], ['birth_year_text', 'سنة الميلاد'], ['death_year_text', 'سنة الوفاة'], ['city', 'المدينة'], ['biography_story', 'النبذة']];
+const CORR_FIELDS = [['full_name', 'الاسم الكامل'], ['nickname', 'الكنية'], ['gender', 'الجنس'], ['is_alive', 'الحالة'], ['birth_year_text', 'سنة الميلاد'], ['death_year_text', 'سنة الوفاة'], ['city', 'المدينة'], ['phone', 'الهاتف'], ['achievement_badge', 'الشارة'], ['badge_is_job', 'نوع الشارة'], ['birth_order', 'الترتيب بين الأبناء'], ['wife_mother_id', 'الأم'], ['biography_story', 'النبذة']];
 const corrFieldLabel = k => (CORR_FIELDS.find(([v]) => v === k) || [, k])[1];
 function memberFieldText(m, k) {
   if (!m) return '—';
   if (k === 'gender') return m.gender === 'female' ? 'أنثى' : 'ذكر';
   if (k === 'is_alive') return m.is_alive === false ? 'متوفى' : 'حي';
+  if (k === 'badge_is_job') return m.achievement_badge ? (m.badge_is_job ? 'وظيفة' : 'شارة') : '—';
+  if (k === 'wife_mother_id') return S.byId.get(m.wife_mother_id)?.full_name || '—';
   const v = m[k];
   return v == null || v === '' ? '—' : String(v);
 }
 function corrValueText(field, val) {
   if (field === 'gender') return val === 'female' ? 'أنثى' : 'ذكر';
   if (field === 'is_alive') return val ? 'حي' : 'متوفى';
+  if (field === 'badge_is_job') return val ? 'وظيفة' : 'شارة';
   return val == null || val === '' ? '—' : String(val);
 }
 function suggestForm(targetId) {
@@ -895,6 +898,7 @@ function suggestForm(targetId) {
     { k: 'newval', label: 'القيمة الجديدة' },
     { k: 'newgender', label: 'القيمة الجديدة', type: 'select', opts: [['male', 'ذكر'], ['female', 'أنثى']] },
     { k: 'newalive', label: 'القيمة الجديدة', type: 'select', opts: [['1', 'حي'], ['0', 'متوفى']] },
+    { k: 'newbkind', label: 'القيمة الجديدة', type: 'select', opts: [['badge', 'شارة (تميّز/تكريم)'], ['job', 'وظيفة']] },
     { k: 'note', label: 'التفاصيل (نص الرسالة، أو سبب التعديل)', type: 'area' },
     { k: 'from', label: 'اسمك الكامل (إلزامي — لا تُقبل الرسائل مجهولة الاسم)', req: true },
     { k: 'frommember', label: 'هل اسمك موجود بالشجرة؟ اختره لتوثيق هويتك (اختياري)', type: 'select', opts: [['', '—'], ...memOpts] }], async d => {
@@ -908,8 +912,8 @@ function suggestForm(targetId) {
       target = fixed?.id || d.member || null;
       if (!target) throw new Error('اختر العضو المقصود بطلب التعديل');
       const field = d.cfield;
-      const new_value = field === 'gender' ? d.newgender : field === 'is_alive' ? (d.newalive === '1') : (d.newval || '').trim();
-      if (field !== 'gender' && field !== 'is_alive' && !new_value && !['nickname', 'city', 'biography_story', 'death_year_text'].includes(field))
+      const new_value = field === 'gender' ? d.newgender : field === 'is_alive' ? (d.newalive === '1') : field === 'badge_is_job' ? (d.newbkind === 'job') : (d.newval || '').trim();
+      if (field !== 'gender' && field !== 'is_alive' && field !== 'badge_is_job' && !new_value && !['nickname', 'city', 'biography_story', 'death_year_text', 'phone', 'achievement_badge', 'wife_mother_id'].includes(field))
         throw new Error('اكتب القيمة الجديدة');
       data = { ...base, field, field_label: corrFieldLabel(field), new_value, note };
     } else {
@@ -925,16 +929,19 @@ function suggestForm(targetId) {
   const typeSel = F('rtype'), fldSel = F('cfield'), memSel = F('member'), cur = document.querySelector('#sg-cur');
   const sync = () => {
     const corr = typeSel.value === 'correction';
-    [['member', !!memSel], ['cfield', 1], ['newval', 1], ['newgender', 1], ['newalive', 1]].forEach(([n, has]) => { if (!has) return; const el = F(n); el.disabled = !corr; if (row(n)) row(n).style.display = corr ? '' : 'none'; });
+    [['member', !!memSel], ['cfield', 1], ['newval', 1], ['newgender', 1], ['newalive', 1], ['newbkind', 1]].forEach(([n, has]) => { if (!has) return; const el = F(n); el.disabled = !corr; if (row(n)) row(n).style.display = corr ? '' : 'none'; });
     if (cur) cur.style.display = corr ? '' : 'none';
     if (!corr) return;
     const fld = fldSel.value;
-    const show = fld === 'gender' ? 'newgender' : fld === 'is_alive' ? 'newalive' : 'newval';
-    ['newval', 'newgender', 'newalive'].forEach(n => { if (row(n)) row(n).style.display = n === show ? '' : 'none'; F(n).disabled = n !== show; });
+    const show = fld === 'gender' ? 'newgender' : fld === 'is_alive' ? 'newalive' : fld === 'badge_is_job' ? 'newbkind' : 'newval';
+    ['newval', 'newgender', 'newalive', 'newbkind'].forEach(n => { if (row(n)) row(n).style.display = n === show ? '' : 'none'; F(n).disabled = n !== show; });
     const m = S.byId.get(fixed?.id || memSel?.value || '');
     if (cur) cur.textContent = m ? `القيمة الحالية لـ«${corrFieldLabel(fld)}»: ${memberFieldText(m, fld)}` : '';
   };
-  typeSel.addEventListener('change', sync); fldSel.addEventListener('change', sync); if (memSel) memSel.addEventListener('change', sync); sync();
+  typeSel.addEventListener('change', sync); fldSel.addEventListener('change', sync); if (memSel) memSel.addEventListener('change', sync);
+  /* ann99: اختيار اسمك من الشجرة يرحّل الاسم مباشرة إلى خانة «اسمك الكامل» العليا فلا حاجة لكتابته */
+  F('frommember')?.addEventListener('change', () => { const m = S.byId.get(F('frommember').value || ''); if (m && F('from')) F('from').value = m.full_name; });
+  sync();
 }
 async function inboxBadge() {
   const b = $('#inbox-badge'), d = $('#menu-dot');
