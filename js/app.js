@@ -572,20 +572,29 @@ async function refresh() {
   if (!b.ok) throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
   S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.branch = b.branch || null; S.branches = b.branches || []; index(); render(); showEvent();
 }
+/* بحث داخل قوائم الأسماء (ann97): تطبيع عربي (أ/إ/آ، ة/ه، ى/ي، التشكيل) + عدم فقدان الاختيار الحالي عند التصفية + منع إرسال النموذج بالإنتر */
+const normAr = s => String(s ?? '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[\u064B-\u0652\u0670ـ]/g, '');
+function bindSelectSearch(sel, inp) {
+  const all = [...sel.options].map(o => [o.value, o.textContent]);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+  inp.addEventListener('input', () => {
+    const q = normAr(inp.value).trim();
+    const cur = sel.value;
+    const vis = all.filter(([v, t], i) => (i === 0 && v === '') || normAr(t).includes(q));
+    if (cur && !vis.some(([v]) => v === cur)) { const co = all.find(([v]) => v === cur); if (co) vis.splice(1, 0, co); }
+    sel.innerHTML = vis.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
+    sel.value = cur;
+  });
+}
 function openForm(title, fields, onSubmit) {
   $('#form-title').textContent = title; $('#form-err').hidden = true; S.onForm = onSubmit;
   $('#form-fields').innerHTML = fields.map(f => f.type === 'raw' ? f.html : `<label class="fl">${esc(f.label)}${
     f.type === 'select' ? `<div class="selrow">${f.opts.length > 12 ? `<input class="selfilter" type="search" placeholder="🔍 ابحث في القائمة…" data-tg="${f.k}">` : ''}<select name="${f.k}">${f.opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(f.val ?? '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`
     : f.type === 'area' ? `<textarea name="${f.k}" rows="4"${f.req ? ' required' : ''}>${esc(f.val)}</textarea>`
     : `<input name="${f.k}" type="${f.type || 'text'}" value="${esc(f.val)}"${f.req ? ' required' : ''} autocomplete="off">`}</label>`).join('');
-  /* ann41: بحث داخل القوائم الطويلة (رأس فرع/مسؤول/عضو…) */
+  /* ann41: بحث داخل القوائم الطويلة (رأس فرع/مسؤول/عضو…) — ann97: دالة مشتركة */
   document.querySelectorAll('.selfilter').forEach(inp => {
-    const sel = document.querySelector(`select[name="${inp.dataset.tg}"]`); if (!sel) return;
-    const all = [...sel.options].map(o => [o.value, o.textContent]);
-    inp.addEventListener('input', () => {
-      const q = inp.value.trim();
-      sel.innerHTML = all.filter(([v, t], i) => (i === 0 && v === '') || t.includes(q)).map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
-    });
+    const sel = document.querySelector(`select[name="${inp.dataset.tg}"]`); if (sel) bindSelectSearch(sel, inp);
   });
   $('#form').showModal();
 }
@@ -1044,8 +1053,9 @@ function kinView() {
 $('#m-kin').onclick = menuClose(() => {
   const opt = S.members.slice().sort(byName).map(m => `<option value="${esc(m.id)}">${esc(m.full_name)} (الجيل ${gen(m)}${S.byId.get(S.byId.get(m.father_id)?.father_id) ? ' · ' + esc(S.byId.get(S.byId.get(m.father_id).father_id).full_name) : ''})</option>`).join('');
   showInfo(`<h2>🧭 مستكشف القرابة</h2><p class="sub">تُحسب الصلة عبر خط الآباء فقط، وهي تقريبية.</p>
-    <label>الشخص الأول<select id="kin-a"><option value="">اختر…</option>${opt}</select></label>
-    <label>الشخص الثاني<select id="kin-b"><option value="">اختر…</option>${opt}</select></label><div id="kin-out"></div>`); kinView();
+    <label>الشخص الأول<div class="selrow"><input class="selfilter" type="search" placeholder="🔍 ابحث بالاسم…" data-tg="kin-a"><select id="kin-a"><option value="">اختر…</option>${opt}</select></div></label>
+    <label>الشخص الثاني<div class="selrow"><input class="selfilter" type="search" placeholder="🔍 ابحث بالاسم…" data-tg="kin-b"><select id="kin-b"><option value="">اختر…</option>${opt}</select></div></label><div id="kin-out"></div>`); kinView();
+  bindSelectSearch($('#kin-a'), document.querySelector('[data-tg="kin-a"]')); bindSelectSearch($('#kin-b'), document.querySelector('[data-tg="kin-b"]'));
 });
 $('#profile-body').addEventListener('change', e => { if (e.target.id === 'kin-a' || e.target.id === 'kin-b') kinView(); });
 
@@ -1405,6 +1415,7 @@ function familyEditor(fid) {
    <div class="frow"><label>أم المضافين</label><select id="fe-mom"><option value="">—</option>${wives.map(w => `<option value="${w.id}">${esc(w.full_name)}</option>`).join('')}</select></div>
    <div class="row adm"><button id="fe-save">💾 حفظ الكل</button></div>
    <p class="sub" id="fe-msg"></p>`);
+  if (wives.length > 12) { const momSel = $('#fe-mom'), inp = document.createElement('input'), wrap = document.createElement('div'); inp.className = 'selfilter'; inp.type = 'search'; inp.placeholder = '🔍 ابحث بالاسم…'; wrap.className = 'selrow'; momSel.before(wrap); wrap.append(inp, momSel); bindSelectSearch(momSel, inp); }
   $('#fe-save').onclick = async () => {
     const msg = $('#fe-msg'); msg.textContent = 'جارٍ الحفظ…';
     let done = 0, fail = 0;
