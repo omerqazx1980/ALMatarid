@@ -339,7 +339,7 @@ function renderGraph(fitView) {
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
       <i>الجيل ${gen(m)}</i>${S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}
-      <b>${esc(cardName(m))}</b><small class="stt ${m.is_alive === false ? 'dead' : 'alive'}">${m.is_alive === false ? 'رحمه الله' : 'حي يرزق'}${m.nickname ? ' · ' + esc(m.nickname) : ''}</small>${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
+      <b>${esc(cardName(m))}</b><small class="stt ${m.is_alive === false ? 'dead' : 'alive'}">${m.is_alive === false ? 'رحمه الله' : 'حي يرزق'}${m.nickname ? ' · ' + esc(m.nickname) : ''}</small>${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
       <small class="meta">${esc([m.city ? '📍 ' + m.city : '', kidsTxt(m)].filter(Boolean).join(' · '))}</small>
       ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'} ${all.length}</button>` : ''}</div>`;
   }
@@ -389,7 +389,7 @@ function node(m) {
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
     ${k.length ? `<button class="tg tgl" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'}</button>` : '<span class="tg dot"></span>'}
     <div class="nm" data-p="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}<small>الجيل ${gen(m)}${m.city ? ' · 📍 ' + esc(m.city) : ''}</small></div>
-    ${m.achievement_badge ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${kidsTxt(m) ? `<span class="ct">${kidsTxt(m)}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
+    ${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${kidsTxt(m) ? `<span class="ct">${kidsTxt(m)}</span>` : ''}${m.is_alive === false ? '<span class="rip">رحمه الله</span>' : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
 }
 
@@ -537,7 +537,7 @@ function profile(id) {
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '', digits = waNum(m.phone);
   $('#profile-body').innerHTML = `${S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
     <p class="sub">${m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · رحمه الله' : ''}</p>
-    ${m.achievement_badge ? `<p><span class="bd">${esc(m.achievement_badge)}</span></p>` : ''}
+    ${m.achievement_badge ? (m.badge_is_job ? `<p class="sub">الوظيفة: ${esc(m.achievement_badge)}</p>` : `<p><span class="bd">${esc(m.achievement_badge)}</span></p>`) : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? esc(mother.full_name) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
       ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
@@ -646,7 +646,7 @@ async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1',
     /* ann91: السنة النصية تُشتق من منتقي التاريخ الهجري؛ وإن كان المنتقي فارغًا يُحفظ النص القديم إن وُجد حتى لا يضيع */
     birth_year_text: d.bd_y ? String(d.bd_y) : (m?.birth_year_text ?? null),
-    death_year_text: d.alive === '1' ? null : (d.dd_y ? String(d.dd_y) : (m?.death_year_text ?? null)), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, phone: d.phone.trim() || null,
+    death_year_text: d.alive === '1' ? null : (d.dd_y ? String(d.dd_y) : (m?.death_year_text ?? null)), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, badge_is_job: d.badge.trim() ? d.bkind === 'job' : false, phone: d.phone.trim() || null,
     birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.gender === 'female' && d.namepub === '1', name_hidden: d.gender === 'female' && d.namehid === '1' };
   /* ann82: التواريخ الكاملة — هجري من المنتقي → ميلادي ISO؛ التحقق قبل أي حفظ */
   const hdate = p => {
@@ -663,7 +663,7 @@ async function saveMember(m, fid, d) {
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
     p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code },
     () => { if (m) Object.assign(m, v); else S.members.push({ id: 'n' + Date.now(), father_id: fid, audio_url: null, created_at: Date.now(), ...v }); });
-  await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
+  await op('secure_update_member_extras', { p_id: r.id ?? m?.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_badge_is_job: v.badge_is_job, p_audio_url: m?.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
   await op('secure_set_member_dates', { p_passcode: S.code, p_id: r.id ?? m?.id, p_birth_date: birthD, p_death_date: deathD }, () => { const mm = S.byId.get(r.id ?? m?.id); if (mm) { mm.birth_date = birthD; mm.death_date = deathD; } });
   if (fid) S.open.add(fid);
   if (!CFG.DEMO) await refresh(); else render();
@@ -696,6 +696,7 @@ function memberForm(m, parentId) {
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''),
     { type: 'raw', html: `<div class="pairrow"><label class="fl">الهاتف<input name="phone" type="tel" value="${esc(m?.phone ?? '')}" autocomplete="off"></label><label class="fl">الشارة<input name="badge" type="text" value="${esc(m?.achievement_badge ?? '')}" autocomplete="off"></label></div>` },
+    f('bkind', 'نوع الشارة', m?.badge_is_job ? 'job' : 'badge', 'select', { opts: [['badge', 'شارة (تميّز/تكريم)'], ['job', 'وظيفة']] }),
     ...(moms.length ? [f('mother', 'الأم', m?.wife_mother_id || '', 'select', { opts: [['', '—'], ...moms.map(w => [w.id, w.full_name + (w.marriage_status === 'divorced' ? ' (زوجة سابقة)' : '')])] })] : []),
     f('namepub', 'إظهار الاسم رغم إخفاء أسماء النساء (للإناث)', m?.name_public ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
     f('namehid', 'إخفاء الاسم برغبة صاحبة الاسم (للإناث)', m?.name_hidden ? '1' : '0', 'select', { opts: [['0', 'لا'], ['1', 'نعم']] }),
@@ -1027,7 +1028,7 @@ $('#m-cities').onclick = menuClose(() => {
 });
 
 $('#m-honor').onclick = menuClose(() => {
-  const g = new Map(); for (const m of S.members) if (m.achievement_badge) (g.get(m.achievement_badge) || g.set(m.achievement_badge, []).get(m.achievement_badge)).push(m);
+  const g = new Map(); for (const m of S.members) if (m.achievement_badge && !m.badge_is_job) (g.get(m.achievement_badge) || g.set(m.achievement_badge, []).get(m.achievement_badge)).push(m);
   showInfo(`<h2>🏅 لوحة الشرف</h2>${[...g].map(([b, L]) => `<h3>${esc(b)} (${L.length})</h3>${L.sort(byName).map(nameBtn).join('')}`).join('') || '<p class="sub">لا توجد شارات بعد. تُضاف الشارة من نموذج تعديل الفرد.</p>'}`);
 });
 
@@ -1062,9 +1063,9 @@ $('#profile-body').addEventListener('change', e => { if (e.target.id === 'kin-a'
 /* تصدير Excel (CSV بترميز يفتحه Excel بالعربية صحيحًا) */
 $('#m-csv').onclick = menuClose(() => {
   const cell = v => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
-  const head = ['الاسم', 'الكنية', 'الأب', 'الجيل', 'الجنس', 'الحالة', 'الميلاد', 'الوفاة', 'المدينة', 'الشارة', ...(canEdit() ? ['الهاتف'] : [])];
+  const head = ['الاسم', 'الكنية', 'الأب', 'الجيل', 'الجنس', 'الحالة', 'الميلاد', 'الوفاة', 'المدينة', 'الشارة', 'نوع الشارة', ...(canEdit() ? ['الهاتف'] : [])];
   const rows = S.members.slice().sort(byName).map(m => [m.full_name, m.nickname, S.byId.get(m.father_id)?.full_name, gen(m), m.gender === 'female' ? 'أنثى' : 'ذكر',
-    m.is_alive === false ? 'متوفى' : 'حي', m.birth_year_text || (m.birth_date || '').slice(0, 4), m.death_year_text || (m.death_date || '').slice(0, 4), m.city, m.achievement_badge, ...(canEdit() ? [m.phone] : [])]);
+    m.is_alive === false ? 'متوفى' : 'حي', m.birth_year_text || (m.birth_date || '').slice(0, 4), m.death_year_text || (m.death_date || '').slice(0, 4), m.city, m.achievement_badge, m.achievement_badge ? (m.badge_is_job ? 'وظيفة' : 'شارة') : '', ...(canEdit() ? [m.phone] : [])]);
   const blob = new Blob(['\ufeff' + [head, ...rows].map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `al-matarid-names-${new Date().toISOString().slice(0, 10)}.csv` });
   a.click(); URL.revokeObjectURL(a.href);
@@ -1381,7 +1382,7 @@ async function silentRefresh() {
     if (Array.isArray(b.featured_sections)) S.featured = b.featured_sections;
     /* ann61: لا تعيد رسم الشجرة إذا لم تتغير البيانات (كان التحديث كل 90 ثانية يضيّع البحث وموضع التصفح) */
     const sig = JSON.stringify([b.role, b.women_names_visible, b.featured_sections,
-      (b.members || []).map(m => [m.id, m.full_name, m.nickname, m.is_alive, m.father_id, m.city, m.achievement_badge]),
+      (b.members || []).map(m => [m.id, m.full_name, m.nickname, m.is_alive, m.father_id, m.city, m.achievement_badge, m.badge_is_job]),
       (b.wives || []).map(w => [w.id, w.full_name, w.family_name, w.marriage_status, w.member_id]),
       (b.events || []).map(e => [e.id, e.title, e.event_date])]);
     if (sig !== S._sig) { S._sig = sig; index(); render(); showEvent(); applyRole(); renderFeat(); inboxBadge(); }
@@ -1392,9 +1393,9 @@ async function silentRefresh() {
 
 /* ---------- محرر العائلة: زوجات وأبناء الأب في شاشة واحدة، لصق جماعي، حفظ واحد ---------- */
 async function saveMemberData(m, over) {
-  const v = { full_name: m.full_name, nickname: m.nickname, gender: m.gender, is_alive: m.is_alive !== false, birth_year_text: m.birth_year_text, death_year_text: m.death_year_text, city: m.city, achievement_badge: m.achievement_badge, phone: m.phone, birth_order: m.birth_order, wife_mother_id: m.wife_mother_id, biography_story: m.biography_story || m.bio, name_public: !!m.name_public, name_hidden: !!m.name_hidden, ...over };
+  const v = { full_name: m.full_name, nickname: m.nickname, gender: m.gender, is_alive: m.is_alive !== false, birth_year_text: m.birth_year_text, death_year_text: m.death_year_text, city: m.city, achievement_badge: m.achievement_badge, badge_is_job: !!m.badge_is_job, phone: m.phone, birth_order: m.birth_order, wife_mother_id: m.wife_mother_id, biography_story: m.biography_story || m.bio, name_public: !!m.name_public, name_hidden: !!m.name_hidden, ...over };
   const r = await op('secure_save_member', { p_id: m.id, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: m.father_id, p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text, p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code }, () => Object.assign(m, v));
-  await op('secure_update_member_extras', { p_id: m.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_audio_url: m.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
+  await op('secure_update_member_extras', { p_id: m.id, p_city: v.city, p_achievement_badge: v.achievement_badge, p_badge_is_job: v.badge_is_job, p_audio_url: m.audio_url || null, p_name_public: v.name_public, p_name_hidden: v.name_hidden, p_passcode: S.code }, () => {});
   return r;
 }
 function familyEditor(fid) {
