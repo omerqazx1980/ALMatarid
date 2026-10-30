@@ -889,7 +889,8 @@ function corrValueText(field, val) {
 }
 function suggestForm(targetId) {
   const fixed = S.byId.get(targetId) || null;
-  const memOpts = [...S.members].filter(m => !m.name_masked).sort(byName).map(m => [m.id, m.full_name]);
+  /* ann101: أسماء القائمة ثلاثية/رباعية عبر سلسلة الآباء (cardLongName) بدل الاسم المخزون وحده — حتى لا يلتبس المتشابهون */
+  const memOpts = [...S.members].filter(m => !m.name_masked).sort(byName).map(m => [m.id, cardLongName(m)]);
   openForm(fixed ? 'رسالة بخصوص ' + fixed.full_name : 'مقترح / استفسار / طلب تعديل', [
     { k: 'rtype', label: 'نوع الرسالة', type: 'select', opts: [['suggestion', '💡 مقترح'], ['inquiry', '❓ استفسار'], ['correction', '✏️ طلب تعديل معلومة'], ['complaint', '🗣️ شكوى']] },
     ...(fixed ? [] : [{ k: 'member', label: 'العضو المقصود (لطلب التعديل)', type: 'select', opts: [['', '— اختر العضو —'], ...memOpts] }]),
@@ -940,7 +941,7 @@ function suggestForm(targetId) {
   };
   typeSel.addEventListener('change', sync); fldSel.addEventListener('change', sync); if (memSel) memSel.addEventListener('change', sync);
   /* ann100: اختيار الاسم من الشجرة (أعلى) يملأ خانة «اسمك الكامل» أدناه مباشرة فلا حاجة لكتابته */
-  F('frommember')?.addEventListener('change', () => { const m = S.byId.get(F('frommember').value || ''); if (m && F('from')) F('from').value = m.full_name; });
+  F('frommember')?.addEventListener('change', () => { const m = S.byId.get(F('frommember').value || ''); if (m && F('from')) F('from').value = cardLongName(m); });
   sync();
 }
 async function inboxBadge() {
