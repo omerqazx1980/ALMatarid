@@ -900,8 +900,8 @@ function suggestForm(targetId) {
     { k: 'newalive', label: 'القيمة الجديدة', type: 'select', opts: [['1', 'حي'], ['0', 'متوفى']] },
     { k: 'newbkind', label: 'القيمة الجديدة', type: 'select', opts: [['badge', 'شارة (تميّز/تكريم)'], ['job', 'وظيفة']] },
     { k: 'note', label: 'التفاصيل (نص الرسالة، أو سبب التعديل)', type: 'area' },
-    { k: 'from', label: 'اسمك الكامل (إلزامي — لا تُقبل الرسائل مجهولة الاسم)', req: true },
-    { k: 'frommember', label: 'هل اسمك موجود بالشجرة؟ اختره لتوثيق هويتك (اختياري)', type: 'select', opts: [['', '—'], ...memOpts] }], async d => {
+    { k: 'frommember', label: 'هل اسمك موجود بالشجرة؟ اختره لتوثيق هويتك (اختياري)', type: 'select', opts: [['', '—'], ...memOpts] },
+    { k: 'from', label: 'اسمك الكامل (إلزامي — لا تُقبل الرسائل مجهولة الاسم)', req: true }], async d => {
     const from = (d.from || '').trim();
     if (from.length < 2) throw new Error('اكتب اسمك الكامل — لا تُقبل الرسائل بدون اسم المُرسل');
     const fm = d.frommember ? S.byId.get(d.frommember) : null;
@@ -939,7 +939,7 @@ function suggestForm(targetId) {
     if (cur) cur.textContent = m ? `القيمة الحالية لـ«${corrFieldLabel(fld)}»: ${memberFieldText(m, fld)}` : '';
   };
   typeSel.addEventListener('change', sync); fldSel.addEventListener('change', sync); if (memSel) memSel.addEventListener('change', sync);
-  /* ann99: اختيار اسمك من الشجرة يرحّل الاسم مباشرة إلى خانة «اسمك الكامل» العليا فلا حاجة لكتابته */
+  /* ann100: اختيار الاسم من الشجرة (أعلى) يملأ خانة «اسمك الكامل» أدناه مباشرة فلا حاجة لكتابته */
   F('frommember')?.addEventListener('change', () => { const m = S.byId.get(F('frommember').value || ''); if (m && F('from')) F('from').value = m.full_name; });
   sync();
 }
