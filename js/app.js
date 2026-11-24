@@ -5835,3 +5835,158 @@ function openDataQualityDashboard() {
 }
 
 $('#m-data-quality').onclick = menuClose(() => openDataQualityDashboard());
+
+/* ---------- 64) تلميحات واقتراحات إكمال الشجرة (فرع تجربة) ---------- */
+function getTreeCompletionHints() {
+  const hints = [];
+
+  S.members.forEach(m => {
+    const kids = S.kids.get(m.id) || [];
+    const wives = (S.wives || []).filter(w => w.husband_id === m.id);
+    const hasPhoto = S.photos.has(m.id);
+    const g = gen(m);
+
+    // 1. Elders / prominent members without photo
+    if (!hasPhoto && (g <= 3 || m.achievement_badge)) {
+      hints.push({
+        member: m,
+        type: 'missing_photo',
+        typeName: 'صورة شخصية مفقودة',
+        icon: '📷',
+        badgeBg: 'rgba(56,189,248,.15)',
+        badgeColor: '#38bdf8',
+        desc: `العضو «${m.full_name}» (الجيل ${g}) من أعيان العائلة ولا توجد له صورة شخصية مسجلة.`,
+        actLabel: '📷 رفع صورة',
+        action: () => {
+          $('#profile').close();
+          const f = $('#photo-file');
+          if (f) { f.dataset.mid = m.id; f.click(); }
+        }
+      });
+    }
+
+    // 2. Members with wives but 0 kids registered
+    if (wives.length > 0 && kids.length === 0) {
+      hints.push({
+        member: m,
+        type: 'missing_children',
+        typeName: 'أبناء غير مسجلين',
+        icon: '👶',
+        badgeBg: 'rgba(251,191,36,.15)',
+        badgeColor: '#fbbf24',
+        desc: `العضو «${m.full_name}» متزوج ولديه ${wives.length} زوجات مسجلات ولكن لا يوجد أبناء مسجلون بعد.`,
+        actLabel: '➕ إضافة ابن/ابنة',
+        action: () => {
+          $('#profile').close();
+          memberForm(null, m.id);
+        }
+      });
+    }
+
+    // 3. Incomplete profile details
+    if (!m.city || (!m.birth_year_text && !m.birth_date)) {
+      const missingFields = [!m.city ? 'المدينة' : '', (!m.birth_year_text && !m.birth_date) ? 'سنة الميلاد' : ''].filter(Boolean).join(' و ');
+      hints.push({
+        member: m,
+        type: 'incomplete_profile',
+        typeName: 'ملف غير مكتمل',
+        icon: '📝',
+        badgeBg: 'rgba(168,85,247,.15)',
+        badgeColor: '#c084fc',
+        desc: `الملف الشخصي لـ «${m.full_name}» ينقصه: (${missingFields}).`,
+        actLabel: '✏️ إكمال البيانات',
+        action: () => {
+          $('#profile').close();
+          memberForm(m);
+        }
+      });
+    }
+  });
+
+  return hints;
+}
+
+function openTreeCompletionHints() {
+  const hints = getTreeCompletionHints();
+  let activeFilter = 'all';
+
+  const renderContent = () => {
+    const filtered = hints.filter(h => activeFilter === 'all' || h.type === activeFilter);
+    const photoCount = hints.filter(h => h.type === 'missing_photo').length;
+    const kidsCount = hints.filter(h => h.type === 'missing_children').length;
+    const incCount = hints.filter(h => h.type === 'incomplete_profile').length;
+
+    const html = `
+      <div class="hints-wrap">
+        <div class="fstats-head">
+          <h2>💡 تلميحات واقتراحات إكمال الشجرة</h2>
+          <p class="sub">مساعد توثيقي ذكي يحلل الشجرة ويرشدك للملفات الناقصة، الأعضاء بلا أبناء، والفروع المحتاجة لصور</p>
+        </div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px">
+          <button type="button" class="fbook-tab-btn ${activeFilter === 'all' ? 'active' : ''}" data-hf="all">
+            الكل (${hints.length})
+          </button>
+          <button type="button" class="fbook-tab-btn ${activeFilter === 'missing_photo' ? 'active' : ''}" data-hf="missing_photo">
+            📷 صور مفقودة (${photoCount})
+          </button>
+          <button type="button" class="fbook-tab-btn ${activeFilter === 'missing_children' ? 'active' : ''}" data-hf="missing_children">
+            👶 أبناء غير مسجلين (${kidsCount})
+          </button>
+          <button type="button" class="fbook-tab-btn ${activeFilter === 'incomplete_profile' ? 'active' : ''}" data-hf="incomplete_profile">
+            📝 ملفات ناقصة (${incCount})
+          </button>
+        </div>
+
+        <div class="hints-grid" id="hints-grid-target">
+          ${filtered.length ? filtered.map((h, i) => `
+            <div class="hint-card">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <span class="hint-badge" style="background:${h.badgeBg};border:1px solid ${h.badgeColor};color:${h.badgeColor}">
+                  ${h.icon} ${h.typeName}
+                </span>
+                <span style="font-size:.72rem;color:var(--mut)">الجيل ${gen(h.member)}</span>
+              </div>
+              <div style="font-weight:700;color:#fff;font-size:.9rem;margin-top:2px">
+                ${esc(h.member.full_name)}
+              </div>
+              <div style="font-size:.78rem;color:#cbd5e1;line-height:1.6">
+                ${esc(h.desc)}
+              </div>
+              <div style="margin-top:auto;padding-top:6px;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center">
+                <button type="button" class="btn" data-hint-act="${i}" style="background:var(--gold);color:#1c1204;font-size:.75rem;padding:5px 12px;border-radius:6px;font-weight:700">
+                  ${esc(h.actLabel)}
+                </button>
+                <button type="button" class="x" onclick="$('#profile').close();focusMember('${h.member.id}')" style="color:var(--mut);font-size:.72rem">
+                  عرض في الشجرة ←
+                </button>
+              </div>
+            </div>
+          `).join('') : '<p class="sub" style="text-align:center;padding:24px;grid-column:1/-1">رائع جداً! لا توجد تلميحات ناقصة في هذا التصنيف.</p>'}
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    document.querySelectorAll('[data-hf]').forEach(b => {
+      b.onclick = () => {
+        activeFilter = b.dataset.hf;
+        renderContent();
+      };
+    });
+
+    document.querySelectorAll('[data-hint-act]').forEach(b => {
+      b.onclick = () => {
+        const idx = parseInt(b.dataset.hintAct, 10);
+        if (filtered[idx] && filtered[idx].action) {
+          filtered[idx].action();
+        }
+      };
+    });
+  };
+
+  renderContent();
+}
+
+$('#m-completion-hints').onclick = menuClose(() => openTreeCompletionHints());
