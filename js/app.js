@@ -943,13 +943,37 @@ $('#m-export').onclick = () => {
   a.click(); URL.revokeObjectURL(a.href); $('.more').open = false;
 };
 /* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
-function verifyOwner2FA(onSuccess) {
+/* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
+/* إصلاح أمني: الرمز يُحفظ كبصمة SHA-256 فقط (لا نص صريح ولا رمز افتراضي معروض)؛ لا رمز ثابت ولا قبول كود المالك كعامل ثانٍ. */
+async function hash2fa(pin) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('alm-2fa:' + pin));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (_) {
+    let h = 0; const s = 'alm-2fa:' + pin;
+    for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
+    return 'f' + h.toString(16);
+  }
+}
+/* ترحيل لمرة واحدة: رمز نصي قديم (قبل الإصلاح) يُحوَّل لبصمة ثم يُحذف نصه من التخزين */
+async function get2faHash() {
+  try {
+    let h = localStorage.getItem('almatarid_owner_2fa_hash') || '';
+    if (!h) {
+      const legacy = localStorage.getItem('almatarid_owner_2fa_pin');
+      if (legacy) { h = await hash2fa(legacy.trim()); localStorage.setItem('almatarid_owner_2fa_hash', h); localStorage.removeItem('almatarid_owner_2fa_pin'); }
+    }
+    return h;
+  } catch (_) { return ''; }
+}
+async function verifyOwner2FA(onSuccess) {
   if (sessionStorage.getItem('almatarid_owner_2fa') === '1') {
     onSuccess();
     return;
   }
 
-  const storedPin = localStorage.getItem('almatarid_owner_2fa_pin') || '8899';
+  const storedHash = await get2faHash();
+  if (!storedHash) { onSuccess(); return; } /* لم يُعيَّن رمز بعد — يُعيَّن من داخل الإعدادات */
   const html = `
     <div style="display:flex;flex-direction:column;gap:12px;padding:4px 0;text-align:center">
       <div style="font-size:2rem">🔐</div>
@@ -957,10 +981,6 @@ function verifyOwner2FA(onSuccess) {
       <p style="font-size:.84rem;color:#cbd5e1;margin:0;line-height:1.6">
         هذا القسم يحتوي على إعدادات حساسة لحماية الشجرة. يرجى إدخال رمز التحقق الإضافي للمالك.
       </p>
-
-      <div style="background:rgba(245,158,11,.1);border:1px dashed var(--gold);border-radius:10px;padding:10px;font-size:.78rem;color:var(--gold)">
-        🔑 رمز التحقق الافتراضي هو <b>${storedPin}</b> (يمكنك تغييره من داخل الإعدادات)
-      </div>
 
       <div style="max-width:260px;margin:8px auto;width:100%">
         <input type="password" id="owner-2fa-input" placeholder="أدخل رمز 2FA الإضافي" maxlength="8" style="width:100%;font-size:1.2rem;text-align:center;letter-spacing:4px;padding:10px;border-radius:8px;border:2px solid var(--gold);background:var(--bg);color:#fff">
@@ -987,9 +1007,9 @@ function verifyOwner2FA(onSuccess) {
 
   if (inp) inp.focus();
 
-  const doCheck = () => {
+  const doCheck = async () => {
     const val = (inp.value || '').trim();
-    if (val === storedPin || val === '27748111' || val === S.code) {
+    if (val && (await hash2fa(val)) === storedHash) {
       sessionStorage.setItem('almatarid_owner_2fa', '1');
       $('#profile').close();
       toast('✓ تم التحقق بنجاح من المصادقة الثنائية 2FA');
@@ -1010,13 +1030,19 @@ $('#m-settings').onclick = () => {
   $('.more').open = false;
   verifyOwner2FA(async () => {
     const mode = CFG.DEMO ? 'family_code' : await rpc('get_access_mode');
+    const hasPin = !!(await get2faHash());
     openForm('إعدادات الوصول وحساب المالك (2FA)', [
       { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
       { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
-      { k: 'pin2fa', label: 'رمز المصادقة الثنائية 2FA للمالك (4-8 أرقام)', val: localStorage.getItem('almatarid_owner_2fa_pin') || '8899', type: 'password' },
+      { k: 'pin2fa', label: hasPin ? 'رمز المصادقة الثنائية 2FA الجديد (4-8 أرقام، فارغ = بلا تغيير)' : 'رمز المصادقة الثنائية 2FA الجديد (4-8 أرقام — لم يُعيَّن بعد، أدخله لتفعيله)', val: '', type: 'password' },
       { k: 'fam', label: 'رمز عائلة جديد (فارغ = بلا تغيير، 6 خانات فأكثر)', type: 'password' },
       { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر)', type: 'password' }], async d => {
-      if (d.pin2fa) localStorage.setItem('almatarid_owner_2fa_pin', d.pin2fa.trim());
+      if (d.pin2fa) {
+        const np = d.pin2fa.trim();
+        if (!/^\d{4,8}$/.test(np)) return alert('رمز 2FA يجب أن يكون 4-8 أرقام.');
+        localStorage.setItem('almatarid_owner_2fa_hash', await hash2fa(np));
+        localStorage.removeItem('almatarid_owner_2fa_pin');
+      }
       await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
       await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
       if (d.fam) await op('secure_set_family_code', { p_new_code: d.fam, p_passcode: S.code }, () => {});
