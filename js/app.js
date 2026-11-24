@@ -2057,6 +2057,141 @@ function openFamilyGame() {
 
 $('#m-game').onclick = menuClose(() => openFamilyGame());
 
+/* ---------- الخط الزمني المتحرك لتاريخ العائلة (فرع تجربة) ---------- */
+let tlTourTimer = null;
+function openFamilyTimeline() {
+  if (tlTourTimer) { clearInterval(tlTourTimer); tlTourTimer = null; }
+
+  const roots = S.roots || [];
+  const g2 = S.members.filter(m => gen(m) === 2);
+  const g3 = S.members.filter(m => gen(m) === 3);
+  const g4 = S.members.filter(m => gen(m) === 4);
+  const g5 = S.members.filter(m => gen(m) === 5);
+  const g67 = S.members.filter(m => gen(m) >= 6);
+
+  const milestones = [
+    {
+      era: 'بدايات التأسيس والرسوخ',
+      time: 'القرن الثالث عشر الهجري وما قبله',
+      title: '👑 الجيل الأول: مطارد وأجداد الأسرة في بني عمرو (النماص)',
+      desc: 'انطلاقة السلالة العريقة لأسرة آل مطارد في ديار بني عمرو بمحافظة النماص في منطقة عسير. حيث تميزت هذه الحقبة بترسيخ القيم الأصيلة، الكرم، والشجاعة والترابط الأسري المتين.',
+      members: roots
+    },
+    {
+      era: 'عهد الأجداد والامتداد',
+      time: 'القرن الرابع عشر الهجري (البدايات)',
+      title: '📜 الجيل الثاني والثالث: اتساع الفروع ورعاية الأبناء',
+      desc: 'مرحلة نمو الفروع الكبرى للأسرة، وبداية تدوين وتوارث الحكايات الشعبية والأنساب في قرى ومراكز النماص، وتوثيق صلات الرحم والمصاهرات الكريمة مع القبائل المجاورة.',
+      members: [...g2, ...g3.slice(0, 15)]
+    },
+    {
+      era: 'التوسع الجغرافي والنهضة السعودية',
+      time: 'منتصف القرن الرابع عشر الهجري',
+      title: '📍 الجيل الرابع: انتشار الأسرة في مدن ومناطق المملكة',
+      desc: 'مع التوحيد والنهضة المباركة للمملكة العربية السعودية، انتشر أبناء الأسرة للخدمة والمساهمة في بناء الوطن واستقروا في بيشة، الرياض، المدينة المنورة، مكة المكرمة، خميس مشيط، الدمام، وجدة.',
+      members: g4.slice(0, 20)
+    },
+    {
+      era: 'ذروة الكثافة والتعليم والإنجاز',
+      time: 'أواخر القرن الرابع عشر وأوائل الخامس عشر',
+      title: '🏅 الجيل الخامس: جيل الكفاءات والتعليم والشارات الرفيعة',
+      desc: 'يمثل هذا الجيل القمة العددية للأسرة (أكثر من 160 فرداً)، وشهد بزوغ نخبة من الأطباء، المهندسين، الضباط، والأكاديميين الذين توجوا لوحة شرف آل مطارد.',
+      members: g5.slice(0, 20)
+    },
+    {
+      era: 'عصر التوثيق الرقمي والمستقبل',
+      time: 'القرن الخامس عشر الهجري (الحاضر والمستقبل)',
+      title: '🌱 الجيل السادس والسابع: حفظ التراث وصلة الرحم الرقمية',
+      desc: 'استمرار راية الأسرة بيد الأبناء والأحفاد، واجتماعهم على صلة الرحم والتواصل عبر هذا المشجر التفاعلي لتخليد تاريخ الأجداد للأجيال القادمة.',
+      members: g67.slice(0, 20)
+    }
+  ];
+
+  const html = `
+    <div class="tl-wrap">
+      <div class="fstats-head">
+        <h2>⏳ الخط الزمني لتاريخ وأجيال أسرة آل مطارد</h2>
+        <p class="sub">رحلة تاريخية متحركة توثق محطات الأسرة من الجد المؤسس وحتى الأجيال المعاصرة</p>
+      </div>
+
+      <div class="tl-controls">
+        <span style="font-size:.85rem;color:var(--mut)">المحطات التاريخية: <b>${milestones.length} محطات</b></span>
+        <button type="button" id="btn-tl-tour" class="tl-btn-tour">▶️ تشغيل الجولة التلقائية</button>
+      </div>
+
+      <div class="timeline-stream" id="tl-stream">
+        ${milestones.map((m, idx) => `
+          <div class="tl-item ${idx === 0 ? 'active' : ''}" data-tl-idx="${idx}" id="tl-step-${idx}">
+            <div class="tl-dot"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="tl-badge">${esc(m.era)}</span>
+              <span style="font-size:.75rem;color:var(--mut)">${esc(m.time)}</span>
+            </div>
+            <div class="tl-title">${m.title}</div>
+            <div class="tl-desc">${m.desc}</div>
+            ${m.members && m.members.length ? `
+              <div class="tl-members">
+                ${m.members.map(nameBtn).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+
+  showInfo(html);
+
+  const pb = $('#profile-body');
+  if (!pb) return;
+
+  const tourBtn = $('#btn-tl-tour');
+  let currentStep = 0;
+  let isPlaying = false;
+
+  function setStep(idx) {
+    pb.querySelectorAll('.tl-item').forEach((el, i) => {
+      const on = i === idx;
+      el.classList.toggle('active', on);
+      if (on) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
+  if (tourBtn) {
+    tourBtn.onclick = () => {
+      if (isPlaying) {
+        clearInterval(tlTourTimer);
+        tlTourTimer = null;
+        isPlaying = false;
+        tourBtn.textContent = '▶️ استئناف الجولة';
+      } else {
+        isPlaying = true;
+        tourBtn.textContent = '⏸️ إيقاف مؤقت';
+        tlTourTimer = setInterval(() => {
+          currentStep = (currentStep + 1) % milestones.length;
+          setStep(currentStep);
+        }, 4000);
+      }
+    };
+  }
+
+  pb.querySelectorAll('.tl-item').forEach((item, idx) => {
+    item.onclick = () => {
+      if (isPlaying) {
+        clearInterval(tlTourTimer);
+        tlTourTimer = null;
+        isPlaying = false;
+        if (tourBtn) tourBtn.textContent = '▶️ استئناف الجولة';
+      }
+      currentStep = idx;
+      setStep(idx);
+    };
+  });
+}
+
+$('#m-timeline').onclick = menuClose(() => openFamilyTimeline());
+
 /* ---------- تصدير الشجرة PDF والطباعة ومحرر المشجر الجداري (فرع تجربة) ---------- */
 function openPdfExport() {
   const roots = S.roots || [];
