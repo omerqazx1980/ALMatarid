@@ -3647,3 +3647,288 @@ function openInvites(selectedEventId = null) {
 }
 
 $('#m-invites').onclick = menuClose(() => openInvites());
+
+/* ---------- 53) أرشيف وثائق وصور العائلة القديمة (فرع تجربة) ---------- */
+const DEFAULT_ARCHIVE_ITEMS = [
+  {
+    id: 'arch-1',
+    title: 'صك وقف وحيازة زراعية قديم لأملاك الأسرة',
+    type: 'doc',
+    typeName: 'صك ومخطوط شرعي',
+    typeIcon: '📜',
+    year_hijri: 1318,
+    year_greg: 1900,
+    era: 'pre1350',
+    eraLabel: 'ما قبل 1350 هـ',
+    image_url: 'logo.jpg',
+    description: 'صك حيازة ووقف شرعي قديم يوثق حدود أراضي ومزارع الأسرة في بني عمرو، موقّع بختم قاضي الناحية وشاهدين من كبار القبيلة.',
+    transcription: 'بسم الله الرحمن الرحيم، هذا ما اتّفق عليه وحازه وأوقفه رجالات آل مطارد في ديار بني عمرو... حدود الأرض المذكورة شمالاً مسيل الوادي وجنوباً الجبل وشرقاً ملك فلان وغرباً الطريق العام... شهد على ذلك أعيان الفروع.',
+    source: 'أرشيف كبار الأسرة المتوارث',
+    members_linked: 'أعلام الجيل الأول والمؤسسون'
+  },
+  {
+    id: 'arch-2',
+    title: 'صورة تاريخية نادرة لكبار وأعيان آل مطارد',
+    type: 'photo',
+    typeName: 'صورة تاريخية',
+    typeIcon: '📷',
+    year_hijri: 1374,
+    year_greg: 1955,
+    era: '1350_1380',
+    eraLabel: '1350 - 1380 هـ',
+    image_url: 'logo.jpg',
+    description: 'لقاء تاريخي جمع شيوخ وكبار فروع الأسرة في مناسبة لقاء سنوي عام بعد موسم الحصاد.',
+    transcription: 'تظهر الصورة كبار أعيان الأسرة وأصحاب الرأي والحكمة، يرتدون الزي التراثي والمجالد، وقد تم التقاطها بحضور جمع كريم من أبناء العمومة.',
+    source: 'إهداء من أحفاد الجيل الثاني',
+    members_linked: 'كبار فروع آل مطارد'
+  },
+  {
+    id: 'arch-3',
+    title: 'رسالة تراحم ومكاتبة ودية بين فروع العائلة',
+    type: 'letter',
+    typeName: 'رسالة ومراسلة',
+    typeIcon: '✉️',
+    year_hijri: 1342,
+    year_greg: 1923,
+    era: 'pre1350',
+    eraLabel: 'ما قبل 1350 هـ',
+    image_url: 'logo.jpg',
+    description: 'خطاب خطي تاريخي بمداد عربي تقليدي يحث على صلة الرحم والتناصر والتكاتف في رعاية الأيتام وكبار السن.',
+    transcription: 'سلام الله عليكم ورحمته وبركاته، أما بعد يا بني عمنا وإخواننا فإن رابطة الدم والدين توجب دوام التزاور والتفقد... ونوصيكم بالتعاون والوفاق.',
+    source: 'مخطوطة محفوظة لدى مسؤول الفرع',
+    members_linked: 'أعيان فروع الأسرة'
+  },
+  {
+    id: 'arch-4',
+    title: 'وثيقة مبايعة وسجل أملاك تاريخي بختم رسمي',
+    type: 'doc',
+    typeName: 'وثيقة وسجل مبايعة',
+    typeIcon: '📜',
+    year_hijri: 1358,
+    year_greg: 1939,
+    era: '1350_1380',
+    eraLabel: '1350 - 1380 هـ',
+    image_url: 'logo.jpg',
+    description: 'وثيقة شراء بئر ماء وبستان نخيل وزيتون مشترك لأبناء العائلة ومؤرخة باليوم والشهر مع شهادة الشهود.',
+    transcription: 'الحمد لله وحده، اشترى بالثمن المسمى فلان بن فلان من آل مطارد نصيب الشركاء في البئر المسماة... سالمة من كل عيب وموجبة للحق الشرعي.',
+    source: 'صندوق وثائق العائلة',
+    members_linked: 'ملاك المزارع والأوقاف'
+  },
+  {
+    id: 'arch-5',
+    title: 'صورة ملتقطة أثناء إعمار مجلس العائلة الجامع',
+    type: 'photo',
+    typeName: 'صورة تاريخية',
+    typeIcon: '📷',
+    year_hijri: 1388,
+    year_greg: 1968,
+    era: '1380_1410',
+    eraLabel: '1380 - 1410 هـ',
+    image_url: 'logo.jpg',
+    description: 'توثيق فوتوغرافي لبناء وتجديد مقر اللقاءات والمجلس التراثي لآل مطارد بمشاركة شباب وكبار العائلة.',
+    transcription: 'مشهد يجسد روح الفزعة والتعاون القبلي في نقل الحجارة وعوارض الخشب لبناء بيت الأسرة الكبير.',
+    source: 'ألبوم صور كبار السن',
+    members_linked: 'رجالات الجيل الثالث'
+  },
+  {
+    id: 'arch-6',
+    title: 'سجل مواريث وتوزيع تركة شرعية بخط اليد',
+    type: 'doc',
+    typeName: 'مخطوط شرعي',
+    typeIcon: '📜',
+    year_hijri: 1335,
+    year_greg: 1916,
+    era: 'pre1350',
+    eraLabel: 'ما قبل 1350 هـ',
+    image_url: 'logo.jpg',
+    description: 'قسمة تركة شرعية عادلة بالتراضي بين الورثة والأبناء مؤرخة في عهد الأشراف والدولة العثمانية.',
+    transcription: 'بحضور القاضي والعدول جرى تقسيم ما تركه المتوفى رحمه الله تعالى بالعدل والإنصاف بين أصحاب الفروض والعصبات.',
+    source: 'مخطوط أصلي محفوظ',
+    members_linked: 'الجد المؤسس وفروعه'
+  }
+];
+
+function getArchiveItems() {
+  try {
+    const raw = localStorage.getItem('almatarid_archive_items');
+    if (raw) {
+      const custom = JSON.parse(raw);
+      return [...DEFAULT_ARCHIVE_ITEMS, ...custom];
+    }
+  } catch (_) {}
+  return DEFAULT_ARCHIVE_ITEMS;
+}
+
+function openArchiveItemDetail(item) {
+  const html = `
+    <div class="arch-modal-view">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div>
+          <span class="bd" style="background:rgba(245,158,11,.15);border:1px solid var(--gold);color:var(--gold);padding:2px 8px;border-radius:99px;font-size:.75rem">
+            ${item.typeIcon} ${esc(item.typeName)}
+          </span>
+          <h2 style="font-size:1.15rem;color:#fff;margin:6px 0">${esc(item.title)}</h2>
+          <div style="font-size:.8rem;color:var(--mut)">
+            📅 ${item.year_hijri} هـ (${item.year_greg} م) · ${esc(item.eraLabel)}
+          </div>
+        </div>
+      </div>
+
+      <img src="${esc(item.image_url)}" alt="${esc(item.title)}" class="arch-modal-img">
+
+      <div style="font-size:.84rem;color:#e2e8f0;line-height:1.7;background:rgba(255,255,255,.03);padding:10px;border-radius:8px">
+        ${esc(item.description)}
+      </div>
+
+      <div class="arch-transcription">
+        <b style="color:var(--gold);display:block;margin-bottom:6px">📖 نص الوثيقة المفرّغ للقراءة:</b>
+        «${esc(item.transcription)}»
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:var(--mut);border-top:1px solid var(--line);padding-top:8px">
+        <span><b>المصدر:</b> ${esc(item.source || 'أرشيف الأسرة')}</span>
+        <span><b>الصلة:</b> ${esc(item.members_linked || 'عام للأسرة')}</span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="button" class="btn lcard-btn-wa" id="btn-share-arch-wa">
+          💬 مشاركة الوثيقة بالواتساب
+        </button>
+        <button type="button" class="btn ghost" id="btn-back-archive">
+          ← العودة للأرشيف
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const shareBtn = $('#btn-share-arch-wa');
+  if (shareBtn) {
+    shareBtn.onclick = () => {
+      const txt = `📜 *وثيقة تاريخية من أرشيف أسرة آل مطارد (بنو عمرو)* 📜\n\n` +
+        `🔖 *العنوان:* ${item.title}\n` +
+        `📅 *التاريخ:* ${item.year_hijri} هـ (${item.year_greg} م)\n` +
+        `📑 *النوع:* ${item.typeName}\n` +
+        `📝 *النبذة:* ${item.description}\n\n` +
+        `📖 *النص المفرغ:* «${item.transcription}»\n\n` +
+        `🔗 شاهد الأرشيف كاملاً: https://omerqazx1980.github.io/ALMatarid/`;
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
+    };
+  }
+
+  const backBtn = $('#btn-back-archive');
+  if (backBtn) {
+    backBtn.onclick = () => openFamilyArchive();
+  }
+}
+
+function openFamilyArchive() {
+  const allItems = getArchiveItems().sort((a, b) => a.year_hijri - b.year_hijri);
+
+  const renderGrid = (items) => {
+    if (!items.length) {
+      return '<p class="sub" style="text-align:center;padding:20px;grid-column:1/-1">لا توجد وثائق مطابقة لخيارات التصفية.</p>';
+    }
+    return items.map(it => `
+      <div class="arch-card" data-arch-id="${esc(it.id)}">
+        <div class="arch-thumb-box">
+          <img src="${esc(it.image_url)}" alt="${esc(it.title)}" class="arch-thumb" loading="lazy">
+          <span class="arch-pill-type">${it.typeIcon} ${esc(it.typeName)}</span>
+          <span class="arch-pill-date">${it.year_hijri} هـ</span>
+        </div>
+        <div class="arch-content">
+          <div class="arch-title">${esc(it.title)}</div>
+          <div class="arch-desc">${esc(it.description)}</div>
+          <div class="arch-meta">
+            <span>📅 ${it.year_hijri} هـ (${it.year_greg} م)</span>
+            <span style="color:var(--gold)">عرض التفاصيل ←</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  };
+
+  const html = `
+    <div class="archive-wrap">
+      <div class="fstats-head">
+        <h2>📜 أرشيف وثائق وصور العائلة القديمة</h2>
+        <p class="sub">موسوعة رقمية للصكوك التاريخية، المخطوطات القديمة، الصور النادرة، والمراسلات الأسرية مرتبة زمنياً</p>
+      </div>
+
+      <div class="archive-filters">
+        <input type="search" id="arch-q" placeholder="🔍 ابحث في عنوان أو نص الوثيقة…" style="flex:1;min-width:160px;padding:6px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+        <select id="arch-era-filter" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+          <option value="all">جميع الفترات الزمنية</option>
+          <option value="pre1350">ما قبل 1350 هـ (أوائل القرن 14)</option>
+          <option value="1350_1380">1350 - 1380 هـ</option>
+          <option value="1380_1410">1380 - 1410 هـ</option>
+          <option value="post1410">1410 هـ فصاعداً</option>
+        </select>
+        <select id="arch-type-filter" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+          <option value="all">جميع أنواع الوثائق</option>
+          <option value="doc">📜 صكوك ومخطوطات</option>
+          <option value="photo">📷 صور تاريخية</option>
+          <option value="letter">✉️ رسائل ومكاتبات</option>
+        </select>
+        <select id="arch-sort" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+          <option value="asc">الأقدم تاريخاً أولاً</option>
+          <option value="desc">الأحدث تاريخاً أولاً</option>
+        </select>
+      </div>
+
+      <div class="archive-grid" id="arch-grid-box">
+        ${renderGrid(allItems)}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const gridBox = $('#arch-grid-box');
+  const qInp = $('#arch-q');
+  const eraSel = $('#arch-era-filter');
+  const typeSel = $('#arch-type-filter');
+  const sortSel = $('#arch-sort');
+
+  const updateList = () => {
+    const q = (qInp.value || '').trim().toLowerCase();
+    const era = eraSel.value;
+    const type = typeSel.value;
+    const sort = sortSel.value;
+
+    let filtered = allItems.filter(it => {
+      if (era !== 'all' && it.era !== era) return false;
+      if (type !== 'all' && it.type !== type) return false;
+      if (q) {
+        const text = `${it.title} ${it.description} ${it.transcription} ${it.members_linked}`.toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+
+    if (sort === 'desc') filtered.sort((a, b) => b.year_hijri - a.year_hijri);
+    else filtered.sort((a, b) => a.year_hijri - b.year_hijri);
+
+    gridBox.innerHTML = renderGrid(filtered);
+    bindCardClicks();
+  };
+
+  const bindCardClicks = () => {
+    gridBox.querySelectorAll('[data-arch-id]').forEach(card => {
+      card.onclick = () => {
+        const item = allItems.find(x => x.id === card.dataset.archId);
+        if (item) openArchiveItemDetail(item);
+      };
+    });
+  };
+
+  qInp.oninput = updateList;
+  eraSel.onchange = updateList;
+  typeSel.onchange = updateList;
+  sortSel.onchange = updateList;
+
+  bindCardClicks();
+}
+
+$('#m-archive').onclick = menuClose(() => openFamilyArchive());

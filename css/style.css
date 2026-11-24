@@ -836,3 +836,21 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .rsvp-item{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.03);padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.05)}
 .rsvp-form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 @media(max-width:480px){.rsvp-form-row{grid-template-columns:1fr}}
+
+/* ---------- 53) أرشيف الوثائق والصور القديمة (فرع تجربة) ---------- */
+.archive-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.archive-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.archive-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:6px}
+.arch-card{background:linear-gradient(145deg,#0e1726,#1b253b);border:1px solid rgba(245,158,11,.3);border-radius:12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.4);display:flex;flex-direction:column;transition:transform .2s,border-color .2s;cursor:pointer}
+.arch-card:hover{transform:translateY(-2px);border-color:var(--gold)}
+.arch-thumb-box{height:160px;background:#050811;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.arch-thumb{width:100%;height:100%;object-fit:cover}
+.arch-pill-type{position:absolute;top:8px;inset-inline-start:8px;background:rgba(15,23,42,.85);border:1px solid var(--gold);color:var(--gold);padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700}
+.arch-pill-date{position:absolute;bottom:8px;inset-inline-end:8px;background:rgba(0,0,0,.8);color:#fff;padding:2px 8px;border-radius:6px;font-size:.7rem}
+.arch-content{padding:12px;display:flex;flex-direction:column;gap:6px;flex:1}
+.arch-title{font-size:.95rem;font-weight:700;color:#fff}
+.arch-desc{font-size:.78rem;color:var(--mut);line-height:1.6;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.arch-meta{font-size:.72rem;color:#94a3b8;display:flex;justify-content:space-between;margin-top:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:6px}
+.arch-modal-view{display:flex;flex-direction:column;gap:12px}
+.arch-modal-img{max-height:400px;object-fit:contain;width:100%;background:#030712;border-radius:8px;border:1px solid var(--line)}
+.arch-transcription{background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:.82rem;line-height:1.8;color:#cbd5e1}
