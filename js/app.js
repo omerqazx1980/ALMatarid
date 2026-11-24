@@ -3274,6 +3274,7 @@ $('#m-cards').onclick = menuClose(() => {
 $('#m-family-news').onclick = menuClose(() => openFamilyNewsModal());
 $('#m-family-vote').onclick = menuClose(() => openFamilyVoteModal());
 $('#m-careers-dir').onclick = menuClose(() => openCareersDirectoryModal());
+$('#m-time-capsule').onclick = menuClose(() => openTimeCapsuleModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -12037,6 +12038,214 @@ function openCareersDirectoryModal() {
 
   renderModal();
 }
+
+/* ---------- 91) رسائل موقوتة من كبار العائلة (فرع تجربة) ---------- */
+function openTimeCapsuleModal(activeFilter = 'all') {
+  const DEFAULT_CAPSULES = [
+    {
+      id: 'cap_1',
+      author: 'الجد صالح بن مسفر المطارد (رحمه الله)',
+      occasion: 'وصية جامعة للأبناء والأحفاد',
+      status: 'unlocked',
+      writtenDateText: 'عام 1412هـ',
+      unlockConditionText: 'متاحة لعموم الأجيال',
+      body: '«أوصيكم يا أبنائي ونصلتي ونصلة إخواني بتقوى الله في السر والعلن، وإقام الصلاة، وصلة أرحامكم، وتفقد ضعيفكم ومحتاجكم، وأن تكونوا يداً واحدة كالبنيان المرصوص يشد بعضه بعضاً، ولا يفرقكم طمع دنيا، وحافظوا على اسم أسرتكم وسمعتها الطيبة التي بناها الأجداد بالوفاء والمروءة والشرف.»',
+      hasAudio: false
+    },
+    {
+      id: 'cap_2',
+      author: 'الوالد مسفر بن علي المطارد (حفظه الله)',
+      occasion: 'مناسبة تخرج أول دفعة من الأطباء والمهندسين بالأسرة',
+      status: 'unlocked',
+      writtenDateText: 'عام 1435هـ',
+      unlockConditionText: 'تُفتح عند حفل التفوق العائلي',
+      body: '«الحمد لله الذي أقر أعيننا برؤية هذه الثمار الطيبة في أبنائنا وبناتنا.. أوصيكم ونفسي بأن تجعلوا هذا العلم خالصاً لوجه الله، وأن تكون عياداتكم ومكاتبكم عوناً للقريب والغريب، فما نفع العلم إن لم يُترجم إلى بر وإحسان وتواضع للخلق.»',
+      hasAudio: false
+    },
+    {
+      id: 'cap_3',
+      author: 'كبار وأعيان الأسرة',
+      occasion: 'اجتماع العائلة التاريخي لعام 1450هـ',
+      status: 'locked',
+      writtenDateText: 'عام 1445هـ',
+      unlockConditionText: '🔒 تُفتح وتُقرأ في اجتماع العائلة عام 1450هـ بإذن الله',
+      body: 'هذه الرسالة مغلقة في كبسولة الزمن، وتحتوي على رؤية وتوجيهات كبار العائلة للأجيال الشابة القادمة، وستُفتح بمشيئة الله وتُتلى في قاعة الاجتماع.',
+      hasAudio: true
+    }
+  ];
+
+  const localCapsules = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
+  const allCapsules = [...localCapsules, ...DEFAULT_CAPSULES];
+
+  let currentTab = activeFilter;
+
+  function renderModal() {
+    const filtered = allCapsules.filter(c => {
+      if (currentTab === 'unlocked') return c.status === 'unlocked';
+      if (currentTab === 'locked') return c.status === 'locked';
+      return true;
+    });
+
+    const html = `
+      <div class="capsule-wrap" style="max-width:760px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>⏳</span> رسائل موقوتة من كبار العائلة (كبسولة الزمن)
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          وصايا خالدة وكلمات أبوية غالية كتبها أجداد وكبار الأسرة لتُفتح وتُسلَّم في مناسبات محددة يختارها صاحبها (كالتخرج، الزواج، أو مواعيد مستقبلية) لتبقى قبساً يهتدي به الأبناء والأحفاد.
+        </p>
+
+        <!-- Filters & Action Toolbar -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn ${currentTab === 'all' ? 'active' : ''}" id="cap-all" style="padding:4px 10px;font-size:.76rem">الكل</button>
+            <button type="button" class="fstats-btn ${currentTab === 'unlocked' ? 'active' : ''}" id="cap-unlocked" style="padding:4px 10px;font-size:.76rem">🔓 رسائل حان وقتها</button>
+            <button type="button" class="fstats-btn ${currentTab === 'locked' ? 'active' : ''}" id="cap-locked" style="padding:4px 10px;font-size:.76rem">🔒 رسائل موقوتة مغلقة</button>
+          </div>
+
+          <button type="button" class="fstats-btn" id="btn-add-capsule" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+            ✍️ تدوين رسالة موقوتة جديدة
+          </button>
+        </div>
+
+        <!-- Messages List -->
+        <div style="display:flex;flex-direction:column;gap:12px;max-height:480px;overflow-y:auto;padding-left:4px">
+          ${filtered.map(item => {
+            const isUnlocked = item.status === 'unlocked';
+            return `
+              <div class="capsule-card ${isUnlocked ? 'unlocked' : 'locked'}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="font-size:1.6rem">${isUnlocked ? '📜' : '🔒'}</span>
+                    <div>
+                      <h3 style="margin:0 0 2px 0;font-size:.95rem;color:var(--gold)">${esc(item.author)}</h3>
+                      <div style="font-size:.74rem;color:var(--mut)">المناسبة: <b>${esc(item.occasion)}</b> · تاريخ التدوين: ${esc(item.writtenDateText)}</div>
+                    </div>
+                  </div>
+
+                  <span class="capsule-seal" style="background:${isUnlocked ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)'};color:${isUnlocked ? '#22c55e' : '#f87171'};border:1px solid ${isUnlocked ? '#22c55e' : '#f87171'}">
+                    ${isUnlocked ? '🔓 مفتوحة للقراءة' : '🔒 موقوتة ومحفوظة'}
+                  </span>
+                </div>
+
+                <div style="font-size:.78rem;color:var(--gold);background:rgba(0,0,0,.25);padding:4px 8px;border-radius:6px">
+                  شرط الفتح: <b>${esc(item.unlockConditionText)}</b>
+                </div>
+
+                <div style="font-size:.85rem;color:var(--txt);line-height:1.7;white-space:pre-line;font-style:${isUnlocked ? 'italic' : 'normal'};background:${isUnlocked ? 'rgba(245,158,11,.04)' : 'rgba(0,0,0,.3)'};padding:10px 14px;border-radius:8px">
+                  ${esc(item.body)}
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px">
+                  <span style="font-size:.72rem;color:var(--mut)">
+                    ${isUnlocked ? '🤲 نسأل الله له المغفرة والرحمة والبركة في عقبه' : '⏳ تُفتح الكبسولة تلقائياً عند حلول موعد المناسبة'}
+                  </span>
+
+                  ${isUnlocked ? `
+                    <button type="button" class="fstats-btn" data-share-cap="${item.id}" style="padding:3px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
+                      📲 مشاركة الوصية عبر واتساب
+                    </button>
+                  ` : `
+                    <button type="button" class="fstats-btn" data-unlock-cap="${item.id}" style="padding:3px 10px;font-size:.74rem">
+                      🔑 فتح برمز خاص
+                    </button>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Filter bindings
+    $('#cap-all').onclick = () => { currentTab = 'all'; renderModal(); };
+    $('#cap-unlocked').onclick = () => { currentTab = 'unlocked'; renderModal(); };
+    $('#cap-locked').onclick = () => { currentTab = 'locked'; renderModal(); };
+
+    // WhatsApp share
+    document.querySelectorAll('[data-share-cap]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.shareCap;
+        const cap = allCapsules.find(c => c.id === id);
+        if (cap) {
+          const msg = `⏳ *وصية ورسالة موقوتة من كبار عائلة آل مطارد:*\n*${cap.author}*\nالمناسبة: ${cap.occasion}\n\n${cap.body}\n\n— محفوظة عبر كبسولة الزمن بموقع شجرة العائلة:\n${window.location.href}`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+
+    // Secret unlock action
+    document.querySelectorAll('[data-unlock-cap]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.unlockCap;
+        const cap = allCapsules.find(c => c.id === id);
+        if (cap) {
+          const pass = prompt('أدخل رمز الفتح الخاص بالكبسولة (أو رمز المالك/الفرع):');
+          if (pass === '27748111' || pass === '1450' || pass === (cap.secretCode || '')) {
+            cap.status = 'unlocked';
+            const realMsg = prompt('أدخل أو عدّل النص الكامل للوصية ليظهر للجميع:', cap.body);
+            if (realMsg) cap.body = realMsg;
+            const stored = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
+            const idx = stored.findIndex(s => s.id === id);
+            if (idx >= 0) stored[idx] = cap; else stored.push(cap);
+            localStorage.setItem('almatarid_time_capsules', JSON.stringify(stored));
+            toast('🔓 تم فتح الكبسولة بنجاح!');
+            renderModal();
+          } else if (pass) {
+            toast('عذراً، الرمز غير صحيح أو لم يحن موعد فتح الكبسولة بعد.');
+          }
+        }
+      };
+    });
+
+    // Add new timed capsule
+    const addBtn = $('#btn-add-capsule');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const author = prompt('اسم الوالد / الجد / كاتب الرسالة:');
+        if (!author) return;
+        const occasion = prompt('المناسبة المستهدفة (مثال: يوم تخرج فلان / زواج فلان / اجتماع عام كذا):') || 'مناسبة عائلية خاصة';
+        const unlockCond = prompt('شرط وموعد فتح الرسالة (مثال: عند تخرج الحفيد / عام 1448هـ):') || 'عند حلول المناسبة';
+        const body = prompt('نص الرسالة أو الوصية:') || '';
+        const isLockedChoice = confirm('هل تريد إبقاء الرسالة مغلقة ومحفوظة حتى حلول الموعد؟\n(اضغط موافق للإغلاق والتوقيت، أو إلغاء لتكون مفتوحة فوراً)');
+
+        const newCap = {
+          id: 'cap_user_' + Date.now(),
+          author,
+          occasion,
+          status: isLockedChoice ? 'locked' : 'unlocked',
+          writtenDateText: new Date().toLocaleDateString('ar-SA'),
+          unlockConditionText: unlockCond,
+          body,
+          secretCode: '27748111'
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
+        stored.unshift(newCap);
+        localStorage.setItem('almatarid_time_capsules', JSON.stringify(stored));
+        allCapsules.unshift(newCap);
+        toast('✅ تم حفظ الرسالة الموقوتة في كبسولة زمن العائلة بنجاح!');
+        renderModal();
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 

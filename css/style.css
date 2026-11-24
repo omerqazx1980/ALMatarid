@@ -1173,6 +1173,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .career-card:hover { border-color: var(--gold); transform: translateY(-2px); }
 .career-badge { background: rgba(245,158,11,.15); color: var(--gold); border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700; display: inline-block; }
 
+/* ---------- 91) رسائل موقوتة من كبار العائلة ---------- */
+.capsule-wrap { display: flex; flex-direction: column; gap: 14px; }
+.capsule-card { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: all .15s ease; }
+.capsule-card.unlocked { border-color: var(--gold); background: linear-gradient(135deg, rgba(245,158,11,.08) 0%, rgba(15,23,42,.9) 100%); }
+.capsule-card.locked { opacity: .85; border-style: dashed; }
+.capsule-seal { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 12px; font-size: .74rem; font-weight: 700; }
+
+
 
 
 
