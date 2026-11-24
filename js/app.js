@@ -4731,3 +4731,153 @@ function openAnnualCalendar(viewYear = null, viewMonth = null) {
 }
 
 $('#m-calendar').onclick = menuClose(() => openAnnualCalendar());
+
+/* ---------- 59) وضع الأطفال المبسط (فرع تجربة) ---------- */
+function openKidsMode(selectedMid = null) {
+  const existing = document.querySelector('.kids-overlay');
+  if (existing) existing.remove();
+
+  const membersWithKids = S.members.filter(m => (S.kids.get(m.id) || []).length > 0 && !m.name_masked);
+  const curMember = selectedMid ? (S.byId.get(selectedMid) || membersWithKids[0]) : (membersWithKids[0] || S.members[0]);
+
+  const father = curMember.father_id ? S.byId.get(curMember.father_id) : null;
+  const grandfather = father && father.father_id ? S.byId.get(father.father_id) : null;
+  const children = S.kids.get(curMember.id) || [];
+  const brothers = father ? (S.kids.get(father.id) || []).filter(k => k.id !== curMember.id) : [];
+  const uncles = grandfather ? (S.kids.get(grandfather.id) || []).filter(k => k.id !== father.id) : [];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'kids-overlay';
+  overlay.innerHTML = `
+    <div class="kids-top">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:2rem">🧒</span>
+        <div>
+          <b style="color:#facc15;font-size:1.2rem">وضع أبطال العائلة المبسط للأطفال</b>
+          <div style="font-size:.8rem;color:#cbd5e1">استكشف أسرتك وأجدادك وتعلّم شجرتك بأمتع طريقة!</div>
+        </div>
+      </div>
+      <button type="button" id="btn-kids-exit" style="background:rgba(239,68,68,.25);border:2px solid #ef4444;color:#fca5a5;border-radius:12px;padding:8px 18px;font-size:.9rem;font-weight:800;cursor:pointer">
+        ✕ خروج للوضع الكامل
+      </button>
+    </div>
+
+    <div class="kids-hero">
+      <h1>🌟 مرحباً بك يا بطل! 🌟</h1>
+      <p>اختر اسمك أو اسم والدك لتكتشف عائلتك وإخوانك وأعمامك بكل سهولة</p>
+
+      <div style="max-width:400px;margin:16px auto;display:flex;gap:8px;align-items:center">
+        <label for="kids-sel" style="font-weight:700;color:#facc15;font-size:1rem">اختر:</label>
+        <select id="kids-sel" style="flex:1;padding:10px 14px;border-radius:12px;background:rgba(0,0,0,.6);border:2px solid #38bdf8;color:#fff;font-size:1rem;font-weight:700">
+          ${membersWithKids.map(m => `<option value="${m.id}" ${m.id === curMember.id ? 'selected' : ''}>${esc(m.full_name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-bottom:8px">
+      <span style="font-size:1.1rem;color:#facc15;font-weight:800">🏡 دائرة الأسرة القريبة لـ (${esc(curMember.full_name)}):</span>
+    </div>
+
+    <div class="kids-circle">
+      <!-- الأب -->
+      <div class="kids-card" data-kid-target="${father ? father.id : ''}">
+        <div class="kids-card-avatar">🧔</div>
+        <span class="kids-card-rel">أبي</span>
+        <div class="kids-card-name">${father ? esc(father.full_name) : 'الجد المؤسس'}</div>
+        <div style="font-size:.78rem;color:#94a3b8;margin-top:4px">اضغط للتعرف على عائلته</div>
+      </div>
+
+      <!-- الجد -->
+      <div class="kids-card" data-kid-target="${grandfather ? grandfather.id : ''}">
+        <div class="kids-card-avatar">👴</div>
+        <span class="kids-card-rel">جدي</span>
+        <div class="kids-card-name">${grandfather ? esc(grandfather.full_name) : 'من كبار الأجداد'}</div>
+        <div style="font-size:.78rem;color:#94a3b8;margin-top:4px">فخرنا وتاريخنا</div>
+      </div>
+
+      <!-- الأبناء -->
+      <div class="kids-card">
+        <div class="kids-card-avatar">👦👧</div>
+        <span class="kids-card-rel">الأبناء والبنات (${children.length})</span>
+        <div class="kids-card-name" style="font-size:.95rem">
+          ${children.length ? children.map(c => esc(c.first || c.full_name.split(' ')[0])).join(' · ') : 'لا يوجد مسجلين'}
+        </div>
+      </div>
+
+      <!-- الإخوة -->
+      <div class="kids-card">
+        <div class="kids-card-avatar">🤝</div>
+        <span class="kids-card-rel">الإخوة والأخوات (${brothers.length})</span>
+        <div class="kids-card-name" style="font-size:.95rem">
+          ${brothers.length ? brothers.map(b => esc(b.first || b.full_name.split(' ')[0])).slice(0, 5).join(' · ') : 'لا يوجد مسجلين'}
+        </div>
+      </div>
+
+      <!-- الأعمام -->
+      <div class="kids-card">
+        <div class="kids-card-avatar">👥</div>
+        <span class="kids-card-rel">الأعمام والعمات (${uncles.length})</span>
+        <div class="kids-card-name" style="font-size:.95rem">
+          ${uncles.length ? uncles.map(u => esc(u.first || u.full_name.split(' ')[0])).slice(0, 5).join(' · ') : 'لا يوجد مسجلين'}
+        </div>
+      </div>
+    </div>
+
+    <div class="kids-actions-bar">
+      <button type="button" class="kids-big-btn" id="kids-btn-game">
+        <span>🎮 العب لعبة اعرف قريبك واربح النجوم!</span>
+      </button>
+      <button type="button" class="kids-big-btn" id="kids-btn-audio" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff">
+        <span>🎙️ استمع لقصة صوتية من الأجداد</span>
+      </button>
+      <button type="button" class="kids-big-btn" id="kids-btn-card" style="background:linear-gradient(135deg,#059669,#047857);color:#fff">
+        <span>📇 احصل على بطاقة نسبك للواتساب</span>
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const sel = overlay.querySelector('#kids-sel');
+  if (sel) {
+    sel.onchange = () => openKidsMode(sel.value);
+  }
+
+  const exitBtn = overlay.querySelector('#btn-kids-exit');
+  if (exitBtn) {
+    exitBtn.onclick = () => overlay.remove();
+  }
+
+  overlay.querySelectorAll('[data-kid-target]').forEach(c => {
+    c.onclick = () => {
+      const tid = c.dataset.kidTarget;
+      if (tid) openKidsMode(tid);
+    };
+  });
+
+  const gameBtn = overlay.querySelector('#kids-btn-game');
+  if (gameBtn) {
+    gameBtn.onclick = () => {
+      overlay.remove();
+      openFamilyGame();
+    };
+  }
+
+  const audioBtn = overlay.querySelector('#kids-btn-audio');
+  if (audioBtn) {
+    audioBtn.onclick = () => {
+      overlay.remove();
+      openAudioStories();
+    };
+  }
+
+  const cardBtn = overlay.querySelector('#kids-btn-card');
+  if (cardBtn) {
+    cardBtn.onclick = () => {
+      overlay.remove();
+      openLineageCard(curMember.id);
+    };
+  }
+}
+
+$('#m-kids-mode').onclick = menuClose(() => openKidsMode());
