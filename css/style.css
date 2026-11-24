@@ -934,3 +934,20 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .wa-tpl-btn.active{background:rgba(37,211,102,.15);border-color:#25d366;color:#25d366}
 .wa-preview-box{background:#0b141a;border:1px solid #1f2c34;border-radius:12px;padding:14px;position:relative}
 .wa-bubble{background:#005c4b;color:#e9edef;border-radius:8px;padding:12px;font-size:.85rem;line-height:1.7;white-space:pre-wrap;box-shadow:0 2px 5px rgba(0,0,0,.3)}
+
+/* ---------- 61) قسم وبوابة نساء العائلة (فرع تجربة) ---------- */
+.women-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.women-gate-card{background:linear-gradient(135deg,#1f132b,#2d1537);border:2px solid #ec4899;border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(236,72,153,.2);text-align:center}
+.women-gate-title{font-size:1.35rem;font-weight:900;color:#f472b6;margin-bottom:6px}
+.women-form{display:flex;flex-direction:column;gap:10px;text-align:start;margin-top:12px}
+.women-form label{font-size:.78rem;font-weight:700;color:#fbcfe8}
+.women-form input,.women-form select{width:100%;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.4);border:1.5px solid rgba(236,72,153,.4);color:#fff;font-size:.85rem}
+.women-form input:focus,.women-form select:focus{border-color:#f472b6;outline:none}
+.women-btn-submit{background:linear-gradient(135deg,#ec4899,#db2777);color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:.92rem;font-weight:800;cursor:pointer;margin-top:6px;box-shadow:0 4px 14px rgba(236,72,153,.4)}
+.women-portal-view{display:flex;flex-direction:column;gap:12px}
+.women-banner{background:linear-gradient(135deg,#2e1065,#3b0764);border:1.5px solid #c084fc;border-radius:14px;padding:16px;color:#f3e8ff;display:flex;justify-content:space-between;align-items:center}
+.women-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:6px}
+.women-card{background:linear-gradient(145deg,#160b29,#231138);border:1.5px solid rgba(236,72,153,.35);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.women-card:hover{border-color:#f472b6}
+.women-card-name{font-size:1.05rem;font-weight:800;color:#fbcfe8}
+.women-pill{background:rgba(236,72,153,.15);border:1px solid #ec4899;color:#f472b6;border-radius:99px;padding:2px 8px;font-size:.72rem;font-weight:700}

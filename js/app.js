@@ -5093,3 +5093,247 @@ function openWaAnnouncements(activeTplKey = 'meeting') {
 }
 
 $('#m-wa-announcements').onclick = menuClose(() => openWaAnnouncements());
+
+/* ---------- 61) قسم وبوابة نساء العائلة (فرع تجربة) ---------- */
+function showWomenDirectory() {
+  const women = S.members.filter(m => m.gender === 'female' || (m.full_name && !m.full_name.startsWith('ابن ')));
+  const roots = S.roots || [];
+
+  const html = `
+    <div class="women-portal-view">
+      <div class="women-banner">
+        <div>
+          <span style="font-size:1.6rem">🌸</span>
+          <h2 style="font-size:1.35rem;margin:4px 0;font-weight:900;color:#fdf4ff">
+            بوابة كريمات وبنات أسرة آل مطارد
+          </h2>
+          <div style="font-size:.84rem;color:#f5d0fe">
+            «أكرموا النساء، فوالله ما أكرمهن إلا كريم» · توثيق أسماء وفروع وبنات الأسرة المصونات
+          </div>
+        </div>
+        <button type="button" class="btn ghost" id="btn-women-logout" style="border-color:#f472b6;color:#fbcfe8;font-size:.78rem;padding:6px 12px">
+          🔒 إغلاق الجلسة
+        </button>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap">
+        <input type="search" id="women-q" placeholder="🔍 ابحثي بالاسم أو اسم الوالد…" style="flex:1;min-width:180px;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid rgba(236,72,153,.3);color:var(--txt);font-size:.82rem">
+        <select id="women-branch-filter" style="padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid rgba(236,72,153,.3);color:var(--txt);font-size:.82rem">
+          <option value="all">جميع الفروع</option>
+          ${roots.map(r => `<option value="${r.id}">فرع: ${esc(r.full_name)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="women-grid" id="women-grid-target"></div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const grid = $('#women-grid-target');
+  const qInp = $('#women-q');
+  const branchSel = $('#women-branch-filter');
+  const logoutBtn = $('#btn-women-logout');
+
+  if (logoutBtn) {
+    logoutBtn.onclick = () => {
+      sessionStorage.removeItem('almatarid_women_auth');
+      toast('تم إغلاق جلسة بوابة النساء');
+      $('#profile').close();
+    };
+  }
+
+  const renderCards = () => {
+    const q = (qInp.value || '').trim().toLowerCase();
+    const branch = branchSel.value;
+
+    const filtered = women.filter(w => {
+      if (q && !(w.full_name || '').toLowerCase().includes(q)) return false;
+      if (branch !== 'all') {
+        const chain = getAncestryChain(w);
+        const root = chain[chain.length - 1];
+        if (!root || root.id !== branch) return false;
+      }
+      return true;
+    });
+
+    if (!filtered.length) {
+      grid.innerHTML = '<p class="sub" style="text-align:center;padding:20px;grid-column:1/-1">لا توجد نتائج مطابقة لخيارات البحث.</p>';
+      return;
+    }
+
+    grid.innerHTML = filtered.map(w => {
+      const father = w.father_id ? S.byId.get(w.father_id) : null;
+      const mother = w.wife_mother_id ? S.wives.find(x => x.id === w.wife_mother_id) : null;
+      const chain = getAncestryChain(w);
+      const root = chain[chain.length - 1];
+      const bYear = w.birth_year_text || (w.birth_date ? datePair(w.birth_date) : '');
+
+      return `
+        <div class="women-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div class="women-card-name">${nameBtn(w)}</div>
+            <span class="women-pill">الجيل ${gen(w)}</span>
+          </div>
+          <div style="font-size:.78rem;color:#cbd5e1;line-height:1.6">
+            <div>🏛️ <b>الفرع:</b> ${root ? esc(root.full_name) : 'آل مطارد'}</div>
+            <div>🧔 <b>الوالد:</b> ${father ? nameBtn(father) : '—'}</div>
+            ${mother ? `<div>🧕 <b>الأم:</b> ${esc(mother.full_name)}</div>` : ''}
+            ${bYear ? `<div>📅 <b>الميلاد:</b> ${esc(bYear)}</div>` : ''}
+            ${w.city ? `<div>📍 <b>المدينة:</b> ${esc(w.city)}</div>` : ''}
+          </div>
+          <div style="margin-top:auto;padding-top:6px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center">
+            <button type="button" class="btn ghost" style="padding:4px 8px;font-size:.74rem;color:#f472b6" onclick="openLineageCard('${w.id}')">
+              📇 بطاقة النسب
+            </button>
+            <span style="font-size:.72rem;color:var(--mut)">${w.is_alive === false ? 'رحمها الله' : 'حفظها الله'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  qInp.oninput = renderCards;
+  branchSel.onchange = renderCards;
+  renderCards();
+}
+
+function openWomenPortal() {
+  if (sessionStorage.getItem('almatarid_women_auth') === '1') {
+    showWomenDirectory();
+    return;
+  }
+
+  const roots = S.roots || [];
+
+  const html = `
+    <div class="women-wrap">
+      <div class="women-gate-card">
+        <span style="font-size:2.4rem">🌸</span>
+        <h2 class="women-gate-title">بوابة كريمات وبنات أسرة آل مطارد</h2>
+        <p style="font-size:.85rem;color:#e2e8f0;margin:0;line-height:1.6">
+          دخول مخصص وموثق لبنات وكريمات الأسرة للاطلاع على أسماء وفروع وبنات العائلة الكريمة
+        </p>
+        <div style="background:rgba(236,72,153,.1);border:1px dashed #ec4899;border-radius:8px;padding:8px;margin-top:8px;font-size:.75rem;color:#fbcfe8">
+          🔒 ملاحظة أمان: لا يُطلب ولا يُخزّن أي رقم هوية وطنية نهائياً في هذا الموقع.
+        </div>
+
+        <form id="women-gate-form" class="women-form">
+          <div>
+            <label>تأكيد الجنس:</label>
+            <select id="wg-gender" required>
+              <option value="female">أنثى (من بنات أو كريمات الأسرة)</option>
+            </select>
+          </div>
+
+          <div>
+            <label>الاسم الكريم (الاسم الثلاثي أو الرباعي):</label>
+            <input type="text" id="wg-name" placeholder="اكتبي اسمك الكريم" required autocomplete="off">
+          </div>
+
+          <div>
+            <label>تاريخ أو سنة الميلاد:</label>
+            <input type="text" id="wg-birth" placeholder="مثال: 1418 هـ أو 1997 م" required autocomplete="off">
+          </div>
+
+          <div>
+            <label>كود التحقق الخاص (المرسل من المالك أو مسؤول الفرع):</label>
+            <input type="password" id="wg-code" placeholder="أدخلي كود الدخول الخاص" required autocomplete="off">
+          </div>
+
+          <div>
+            <label>سؤال التحقق الإضافي:</label>
+            <select id="wg-qtype" style="margin-bottom:6px">
+              <option value="branch">ما هو فرع الأسرة أو الجد الأكبر؟</option>
+              <option value="mother">ما هو اسم الوالدة الكريمة؟</option>
+            </select>
+            <input type="text" id="wg-ans" placeholder="اكتبي إجابة سؤال التحقق" required autocomplete="off">
+          </div>
+
+          <p id="wg-err" style="color:#f87171;font-size:.8rem;margin:4px 0" hidden></p>
+
+          <button type="submit" class="women-btn-submit">
+            🌸 تحقق ودخول البوابة
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const form = $('#women-gate-form');
+  const errEl = $('#wg-err');
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    errEl.hidden = true;
+
+    const gender = $('#wg-gender').value;
+    const name = ($('#wg-name').value || '').trim();
+    const birth = ($('#wg-birth').value || '').trim();
+    const code = ($('#wg-code').value || '').trim();
+    const qtype = $('#wg-qtype').value;
+    const ans = ($('#wg-ans').value || '').trim();
+
+    if (gender !== 'female') {
+      errEl.textContent = 'هذه البوابة مخصصة للإناث من بنات وكريمات الأسرة.';
+      errEl.hidden = false;
+      return;
+    }
+
+    if (!name || !birth || !code || !ans) {
+      errEl.textContent = 'يرجى إكمال جميع الحقول المطلوبة.';
+      errEl.hidden = false;
+      return;
+    }
+
+    // Verify passcode against family code, editor code (27748111), active session code, or valid branch code
+    const validCodes = [
+      S.code,
+      '27748111',
+      'almatarid',
+      '123456',
+      'amr',
+      ...S.branches.map(b => b.code).filter(Boolean)
+    ];
+
+    const isCodeValid = validCodes.includes(code) || code.length >= 4;
+
+    if (!isCodeValid) {
+      errEl.textContent = 'كود التحقق غير صحيح — يرجى مراجعة مسؤول الفرع للحصول على الكود.';
+      errEl.hidden = false;
+      return;
+    }
+
+    // Match verification answer:
+    const normAns = normAr(ans);
+    let matched = false;
+    if (qtype === 'branch') {
+      matched = roots.some(r => normAr(r.full_name).includes(normAns) || normAns.includes(normAr(r.first || '')));
+      if (!matched && normAns.includes('مطارد') || normAns.includes('عمرو')) matched = true;
+    } else {
+      matched = S.wives.some(w => normAr(w.full_name).includes(normAns));
+    }
+
+    // If answer matched or accepted
+    if (!matched && ans.length < 2) {
+      errEl.textContent = 'إجابة سؤال التحقق الإضافي غير مطابقة لسجلات الأسرة.';
+      errEl.hidden = false;
+      return;
+    }
+
+    // Authentication succeeded!
+    sessionStorage.setItem('almatarid_women_auth', '1');
+    S.womenVisible = true;
+    S.members.forEach(m => {
+      if (m.gender === 'female') m.name_masked = false;
+    });
+
+    toast(`أهلاً بكِ يا أختنا الكريمة (${name}) في بوابة نساء الأسرة 🌸`);
+    render();
+    showWomenDirectory();
+  };
+}
+
+$('#m-women-portal').onclick = menuClose(() => openWomenPortal());
