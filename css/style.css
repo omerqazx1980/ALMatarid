@@ -1232,6 +1232,11 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .reports-table td { padding: 6px 10px; border: 1px solid var(--line); color: var(--txt); }
 .reports-table tr:nth-child(even) { background: rgba(15,23,42,.4); }
 
+/* ---------- 100) تصدير الشجرة كصورة PNG أو ملف SVG ---------- */
+.export-media-wrap { display: flex; flex-direction: column; gap: 14px; }
+.export-media-preview { background: #06101e; border: 2px solid var(--gold); border-radius: 12px; padding: 14px; text-align: center; max-height: 48vh; overflow: auto; }
+
+
 
 
 

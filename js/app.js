@@ -3069,6 +3069,7 @@ function openPdfExport() {
 $('#m-pdf').onclick = menuClose(() => openPdfExport());
 $('#m-blank-tree').onclick = menuClose(() => openBlankTreeModal());
 $('#m-ready-reports').onclick = menuClose(() => openReadyReportsModal());
+$('#m-export-tree-media').onclick = menuClose(() => openExportTreeMediaModal());
 
 /* تصدير Excel (CSV بترميز يفتحه Excel بالعربية صحيحًا) */
 $('#m-csv').onclick = menuClose(() => {
@@ -14270,6 +14271,263 @@ function openReadyReportsModal(initialReportType = 'branch') {
 
   renderModal();
 }
+
+/* ---------- 100) تصدير الشجرة كصورة PNG أو ملف SVG (فرع تجربة) ---------- */
+function buildTreeExportSvg(scope = 'all', theme = 'dark', showPhotos = true) {
+  // Determine members to include
+  let membersToInclude = S.members;
+  if (scope !== 'all') {
+    membersToInclude = getSubtree(scope);
+  }
+
+  const isDark = (theme === 'dark');
+  const bgColor = isDark ? '#06101e' : '#ffffff';
+  const textColor = isDark ? '#f8fafc' : '#0f172a';
+  const cardBg = isDark ? '#0f172a' : '#fffbeb';
+  const borderColor = '#b45309';
+  const goldColor = '#f59e0b';
+  const lineColor = isDark ? '#d97706' : '#92400e';
+
+  // Calculate layout coordinates
+  // Root members (no father_id in set)
+  const roots = membersToInclude.filter(m => !m.father_id || !membersToInclude.some(x => x.id === m.father_id));
+  const nodeW = 150, nodeH = 55;
+  const colGap = 28, rowGap = 65;
+
+  // Level assignment
+  const levels = new Map();
+  function assignLevel(m, lvl) {
+    if (!levels.has(lvl)) levels.set(lvl, []);
+    levels.get(lvl).push(m);
+    const kids = membersToInclude.filter(k => k.father_id === m.id);
+    kids.forEach(k => assignLevel(k, lvl + 1));
+  }
+  roots.forEach(r => assignLevel(r, 0));
+
+  let maxCols = 1;
+  levels.forEach(list => { if (list.length > maxCols) maxCols = list.length; });
+
+  const totalWidth = Math.max(1200, maxCols * (nodeW + colGap) + 160);
+  const totalHeight = Math.max(700, (levels.size + 1) * (nodeH + rowGap) + 180);
+
+  const coords = new Map();
+  let currentY = 160;
+
+  levels.forEach((list, lvl) => {
+    const totalRowW = list.length * nodeW + (list.length - 1) * colGap;
+    const startX = (totalWidth - totalRowW) / 2;
+    list.forEach((m, idx) => {
+      coords.set(m.id, {
+        x: startX + idx * (nodeW + colGap) + nodeW / 2,
+        y: currentY + nodeH / 2
+      });
+    });
+    currentY += nodeH + rowGap;
+  });
+
+  let svgContent = '';
+
+  // Background & Decorative Borders
+  svgContent += `
+    <rect width="${totalWidth}" height="${totalHeight}" fill="${bgColor}"/>
+    <rect x="15" y="15" width="${totalWidth - 30}" height="${totalHeight - 30}" fill="none" stroke="${goldColor}" stroke-width="3"/>
+    <rect x="23" y="23" width="${totalWidth - 46}" height="${totalHeight - 46}" fill="none" stroke="${borderColor}" stroke-width="1.2" stroke-dasharray="6 3"/>
+
+    <!-- Header Banner -->
+    <g transform="translate(${totalWidth / 2}, 65)" text-anchor="middle" font-family="sans-serif">
+      <text y="-14" fill="${goldColor}" font-size="13">بِسْمِ اللَّـهِ الرَّحْمَـٰنِ الرَّحِيمِ</text>
+      <text y="16" fill="${goldColor}" font-size="26" font-weight="bold">شَجَرَةُ نَسَبِ وَتَارِيخِ آلِ مُطَارِدِ المُبَارَكَة</text>
+      <text y="40" fill="${textColor}" font-size="12" opacity="0.8">بَنُو عَمْرٍو · رِجَالُ الحَجْرِ · عَسِير · مَمْلَكَةُ الإِصَالَةِ وَالمَجْدِ (تَصْدِيرٌ مُعْتَمَدٌ ${new Date().toLocaleDateString('ar-SA')})</text>
+      <line x1="-280" y1="52" x2="280" y2="52" stroke="${goldColor}" stroke-width="1.5"/>
+    </g>
+  `;
+
+  // Draw connector lines
+  membersToInclude.forEach(m => {
+    if (m.father_id && coords.has(m.father_id) && coords.has(m.id)) {
+      const p = coords.get(m.father_id);
+      const c = coords.get(m.id);
+      svgContent += `
+        <path d="M ${p.x} ${p.y + nodeH / 2} C ${p.x} ${(p.y + c.y) / 2}, ${c.x} ${(p.y + c.y) / 2}, ${c.x} ${c.y - nodeH / 2}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-opacity="0.8"/>
+      `;
+    }
+  });
+
+  // Draw node boxes
+  membersToInclude.forEach(m => {
+    if (!coords.has(m.id)) return;
+    const pos = coords.get(m.id);
+    const bx = pos.x - nodeW / 2;
+    const by = pos.y - nodeH / 2;
+    const isAlive = m.is_alive;
+    const pUrl = S.photos.get(m.id);
+
+    svgContent += `
+      <g transform="translate(${bx}, ${by})">
+        <rect width="${nodeW}" height="${nodeH}" rx="8" fill="${cardBg}" stroke="${borderColor}" stroke-width="1.5"/>
+        <rect width="6" height="${nodeH}" rx="4" fill="${isAlive ? '#22c55e' : '#64748b'}"/>
+        
+        ${showPhotos && pUrl ? `
+          <image href="${esc(pUrl)}" x="8" y="8" width="38" height="38" clip-path="circle(19px at 19px 19px)"/>
+          <text x="54" y="24" fill="${goldColor}" font-size="11" font-weight="bold" font-family="sans-serif">${esc(m.full_name)}</text>
+          <text x="54" y="40" fill="${textColor}" font-size="9" opacity="0.8" font-family="sans-serif">📍 ${esc(m.city || 'النماص')}</text>
+        ` : `
+          <text x="${nodeW / 2 + 3}" y="25" fill="${goldColor}" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${esc(m.full_name)}</text>
+          <text x="${nodeW / 2 + 3}" y="42" fill="${textColor}" font-size="9.5" opacity="0.8" font-family="sans-serif" text-anchor="middle">📍 ${esc(m.city || 'النماص')}${m.birth_year_text ? ' · ' + esc(m.birth_year_text) : ''}</text>
+        `}
+      </g>
+    `;
+  });
+
+  // Footer block
+  svgContent += `
+    <g transform="translate(40, ${totalHeight - 35})" font-family="sans-serif" font-size="11" fill="${goldColor}">
+      <text x="0" y="0">© شجرة آل مطارد التفاعلية · جرى التصدير بدقة عالية</text>
+      <text x="${totalWidth - 300}" y="0" text-anchor="end">عدد الأفراد المشمولين في هذا المخطط: ${membersToInclude.length} فرد</text>
+    </g>
+  `;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${totalWidth} ${totalHeight}" width="${totalWidth}" height="${totalHeight}">
+  ${svgContent}
+</svg>`;
+}
+
+function openExportTreeMediaModal() {
+  let activeScope = 'all';
+  let activeTheme = 'dark'; // 'dark', 'light'
+  let showPhotos = true;
+
+  function renderModal() {
+    const svgData = buildTreeExportSvg(activeScope, activeTheme, showPhotos);
+
+    const html = `
+      <div class="export-media-wrap" style="max-width:850px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>🖼️</span> تصدير الشجرة كصورة (PNG) أو ملف رسومي (SVG)
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          تصدير مشجرة العائلة بملفات رسومية فائقة الدقة: ملف متجهي (SVG) مفتوح للطباعة الجدارية واللوحات دون فقدان للجودة، أو صورة رقمية (PNG) عريضة جاهزة للمشاركة في الواتساب والحفظ.
+        </p>
+
+        <!-- Config Toolbar -->
+        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 14px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex:1">
+            <span style="font-size:.78rem;color:var(--gold);font-weight:700">النطاق:</span>
+            <select id="export-scope-sel" class="fstats-btn" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
+              <option value="all" ${activeScope === 'all' ? 'selected' : ''}>🌐 الشجرة بالكامل (${S.members.length} فرد)</option>
+              ${S.branches.map(b => {
+                const rootObj = S.byId.get(b.root_id);
+                return `<option value="${b.root_id}" ${activeScope === b.root_id ? 'selected' : ''}>🌿 فرع ${esc(b.name || (rootObj ? rootObj.full_name : 'الفرع'))}</option>`;
+              }).join('')}
+            </select>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:.78rem;color:var(--gold);font-weight:700">السمة:</span>
+            <button type="button" class="fstats-btn ${activeTheme === 'dark' ? 'active' : ''}" id="btn-exp-dark" style="padding:4px 10px;font-size:.76rem">👑 داكن ملكي</button>
+            <button type="button" class="fstats-btn ${activeTheme === 'light' ? 'active' : ''}" id="btn-exp-light" style="padding:4px 10px;font-size:.76rem">📄 أبيض للطباعة</button>
+          </div>
+
+          <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--txt);cursor:pointer">
+            <input type="checkbox" id="export-inc-photos" ${showPhotos ? 'checked' : ''} style="accent-color:var(--gold)">
+            <span>إظهار الصور الشخصية</span>
+          </label>
+        </div>
+
+        <!-- Preview Box -->
+        <div class="export-media-preview" id="export-preview-container">
+          <div style="max-height:44vh;overflow:auto">
+            ${svgData}
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn" id="btn-dl-tree-svg" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
+              📄 تنزيل كملف متجهي (SVG)
+            </button>
+            <button type="button" class="fstats-btn" id="btn-dl-tree-png" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
+              💾 تنزيل كصورة عريضة (PNG)
+            </button>
+            <button type="button" class="fstats-btn" id="btn-share-tree-wa" style="background:#25d366;color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
+              📲 مشاركة بالواتساب
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Bind controls
+    const sSel = $('#export-scope-sel');
+    if (sSel) {
+      sSel.onchange = () => {
+        activeScope = sSel.value;
+        renderModal();
+      };
+    }
+
+    $('#btn-exp-dark').onclick = () => { activeTheme = 'dark'; renderModal(); };
+    $('#btn-exp-light').onclick = () => { activeTheme = 'light'; renderModal(); };
+
+    const pChk = $('#export-inc-photos');
+    if (pChk) {
+      pChk.onchange = () => {
+        showPhotos = pChk.checked;
+        renderModal();
+      };
+    }
+
+    // Download SVG
+    $('#btn-dl-tree-svg').onclick = () => {
+      const code = buildTreeExportSvg(activeScope, activeTheme, showPhotos);
+      const blob = new Blob([code], { type: 'image/svg+xml;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `almatarid-tree-${activeScope}-${activeTheme}.svg`;
+      a.click();
+      toast('📄 جاري تنزيل ملف SVG المتجهي للشجرة...');
+    };
+
+    // Download PNG
+    $('#btn-dl-tree-png').onclick = () => {
+      const code = buildTreeExportSvg(activeScope, activeTheme, showPhotos);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * 1.5;
+        canvas.height = img.height * 1.5;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `almatarid-tree-${activeScope}-${activeTheme}.png`;
+        a.click();
+        toast('💾 جاري تنزيل صورة PNG عالية الدقة للشجرة...');
+      };
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(code)));
+    };
+
+    // WhatsApp share
+    $('#btn-share-tree-wa').onclick = () => {
+      const msg = `🌳 *شجرة نسب عائلة آل مطارد المباركة*\nجرى تصدير الشجرة بنجاح كملف رسومي فائق الدقة.\n\nتصفح الشجرة التفاعلية مباشرة:\n${window.location.href}`;
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+  }
+
+  renderModal();
+}
+
 
 
 
