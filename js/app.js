@@ -3009,14 +3009,36 @@ $('#m-log').onclick = async () => {
     }).join('') || '<p class="sub">لا توجد تغييرات مسجّلة بعد.</p>'}`);
   } catch (err) { alert(err.message); }
 };
-$('#m-snap').onclick = async () => {
+$('#m-snap').onclick = () => openSnapshots(); /* ميزة 2: مدير اللقطات بدل اللقطة الفورية */
+
+/* ---------- 62-ب) استعادة نسخة سابقة من البيانات — لقطات القاعدة (فرع تجربة) ---------- */
+/* الاستعادة نفسها خادمية (secure_restore_snapshot ← admin_restore_snapshot) وتأخذ لقطة «قبل الاستعادة» تلقائيًا قبل أن تمسح شيئًا. */
+async function openSnapshots() {
   $('.more').open = false;
   if (CFG.DEMO) return alert('اللقطات تعمل مع القاعدة الحقيقية فقط.');
+  let items = null, rpcMissing = false;
   try {
-    const r = await rpc('secure_snapshot', { p_passcode: S.code });
-    alert(r.success ? `تم حفظ لقطة رقم ${r.id} داخل القاعدة (تُحفظ آخر 20). وهي لا تغني عن تصدير نسخة JSON وحفظها خارج Supabase.` : r.message);
-  } catch (err) { alert(err.message); }
-};
+    const r = await rpc('list_snapshots', { p_passcode: S.code });
+    if (!r.success) return alert(r.message);
+    items = r.items || [];
+  } catch (_) { rpcMissing = true; }
+  const row = s => `<div class="evrow"><div><b>لقطة رقم ${s.id} — ${esc(s.label || '')}</b><small>${esc(new Date(s.created_at).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' }))} · ${s.members} فردًا · ${s.wives} زوجة · ${s.events} مناسبة</small></div><button class="ghost" data-restore="${s.id}" data-label="${esc(s.label || '')}">↩ استعادة</button></div>`;
+  showInfo(`<h2>📸 اللقطات الاحتياطية</h2><p class="sub">تُحفظ آخر 20 لقطة تلقائيًا في القاعدة.</p>
+    ${rpcMissing ? '<p class="sub">قائمة اللقطات تحتاج تشغيل SQL التجريبي (02_trial_additions.sql) — يمكنك أخذ لقطة جديدة فقط الآن.</p>' : ''}
+    <div class="row"><button id="snap-new">📸 لقطة جديدة الآن</button></div>
+    ${items ? (items.map(row).join('') || '<p class="sub">لا توجد لقطات بعد.</p>') : ''}`);
+  $('#snap-new').onclick = async () => { try { const r = await rpc('secure_snapshot', { p_passcode: S.code }); alert(r.success ? `تم حفظ لقطة رقم ${r.id}` : r.message); if (r.success) openSnapshots(); } catch (err) { alert(err.message); } };
+  document.querySelectorAll('#profile-body [data-restore]').forEach(b => b.onclick = async () => {
+    const id = +b.dataset.restore;
+    if (!confirm(`استعادة اللقطة رقم ${id} (${b.dataset.label})؟\nستُلغى كل التغييرات بعدها، وتُحفظ لقطة «قبل الاستعادة» تلقائيًا.`)) return;
+    if (!confirm('تأكيد أخير: متابعة الاستعادة؟')) return;
+    try {
+      const r = await rpc('secure_restore_snapshot', { p_passcode: S.code, p_id: id, p_confirm: 'RESTORE' });
+      if (!r.success) return alert(r.message || 'تعذرت الاستعادة');
+      alert(r.message || 'تمت الاستعادة'); $('#profile').close(); await refresh();
+    } catch (err) { alert(err.message); }
+  });
+}
 
 /* ---------- بطاقات التهنئة والتعزية: تُنشأ تلقائيًا عند الإضافة/الوفاة، أو يدويًا من القائمة ---------- */
 /* ann40: بطاقات المناسبات — نصوص جاهزة لكل مناسبة (مذكر/مؤنث تلقائيًا) */
@@ -5551,7 +5573,8 @@ function confirmRestoreBackup(bk) {
         💍 عدد الزوجات: <b>${bk.stats?.wives || (bk.data.wives || []).length}</b><br>
         🎉 عدد المناسبات: <b>${bk.stats?.events || (bk.data.events || []).length}</b><br>
         <div style="margin-top:8px;border-top:1px dashed rgba(239,68,68,.4);padding-top:6px;font-size:.78rem">
-          تنبيه: يُنصح بالتأكد قبل الاسترجاع. سيتم حفظ الحالة الحالية كنسخة تلقائية قبل التبديل.
+          تنبيه: يُنصح بالتأكد قبل الاسترجاع. سيتم حفظ الحالة الحالية كنسخة تلقائية قبل التبديل.<br>
+          ⚠️ هذه استعادة محلية مؤقتة — تُفقد عند إعادة تحميل الصفحة. للاستعادة الدائمة استخدم «لقطات القاعدة» من سجل النسخ.
         </div>
       </div>
 
@@ -5579,7 +5602,7 @@ function confirmRestoreBackup(bk) {
       index();
       render();
       showEvent();
-      toast('✓ تم استعادة النسخة الاحتياطية وتحديث الشجرة بنجاح!');
+      toast('✓ تمت الاستعادة محلياً في هذه الجلسة — تُفقد عند إعادة التحميل؛ للاستعادة الدائمة استخدم لقطات القاعدة');
       $('#profile').close();
     };
   }
@@ -5599,6 +5622,11 @@ function openBackupsManager() {
       <div class="fstats-head">
         <h2>💾 سجل النسخ الاحتياطية التلقائية</h2>
         <p class="sub">نسخ احتياطي تلقائي دوري كل 24 ساعة مع الاحتفاظ بآخر 20 نسخة احتياطية للبيانات</p>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin:4px 0;padding:10px;border:1px solid var(--gold);border-radius:10px">
+        <span style="flex:1;font-size:.82rem;line-height:1.6">📸 <b>لقطات القاعدة</b> — استعادة دائمة تُحفظ في القاعدة (مع لقطة «قبل الاستعادة» تلقائيًا).</span>
+        <button type="button" class="btn" id="btn-db-snaps" style="font-size:.78rem;padding:6px 12px">فتح لقطات القاعدة</button>
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0">
@@ -5645,6 +5673,9 @@ function openBackupsManager() {
       }
     };
   }
+
+  const dbSnapsBtn = $('#btn-db-snaps');
+  if (dbSnapsBtn) dbSnapsBtn.onclick = () => openSnapshots();
 
   document.querySelectorAll('[data-restore-bk]').forEach(btn => {
     btn.onclick = () => {
