@@ -2384,6 +2384,313 @@ function openAudioStories(selectedStoryId = null) {
 
 $('#m-audio-stories').onclick = menuClose(() => openAudioStories());
 
+/* ---------- العرض السينمائي ثلاثي الأبعاد (فرع تجربة) ---------- */
+let anim3dId = null;
+function open3dView() {
+  if (anim3dId) { cancelAnimationFrame(anim3dId); anim3dId = null; }
+
+  const html = `
+    <div class="view3d-wrap">
+      <div class="view3d-controls">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:1.3rem">🌌</span>
+          <div>
+            <b style="color:var(--gold);font-size:.95rem">المشجر السينمائي ثلاثي الأبعاد</b>
+            <div style="font-size:.72rem;color:var(--mut)">إبحار حر 360° بين أجيال وأعلام الأسرة</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="v3d-gen-filter" style="font-size:.78rem;padding:4px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt)">
+            <option value="0">جميع الأجيال (1 - 7)</option>
+            <option value="1">الجيل 1 (المؤسسون)</option>
+            <option value="2">الجيل 2</option>
+            <option value="3">الجيل 3</option>
+            <option value="4">الجيل 4</option>
+            <option value="5">الجيل 5</option>
+            <option value="6">الجيل 6</option>
+            <option value="7">الجيل 7</option>
+          </select>
+          <button type="button" id="btn-v3d-orbit" style="font-size:.78rem;padding:4px 10px;border-radius:6px;background:var(--gold);color:#1c1204">
+            🎬 جولة مدارية
+          </button>
+        </div>
+      </div>
+
+      <div class="view3d-stage-box" id="v3d-stage">
+        <canvas class="view3d-canvas" id="v3d-canvas"></canvas>
+        <div id="v3d-info-card" class="view3d-info-card"></div>
+        <div class="view3d-hud">
+          <div class="view3d-hud-pill">🖱️ اسحب للتدوير · عجلة الماوس للتقريب · اضغط على أي نجم لرؤية الفرد</div>
+          <div class="view3d-hud-pill" id="v3d-count-pill">${S.members.length} فرد في الفضاء</div>
+        </div>
+      </div>
+    </div>`;
+
+  showInfo(html);
+
+  const canvas = $('#v3d-canvas');
+  const stage = $('#v3d-stage');
+  const infoCard = $('#v3d-info-card');
+  const orbitBtn = $('#btn-v3d-orbit');
+  const genFilter = $('#v3d-gen-filter');
+  if (!canvas || !stage) return;
+
+  const ctx = canvas.getContext('2d');
+  let width = canvas.width = stage.clientWidth;
+  let height = canvas.height = stage.clientHeight;
+
+  window.addEventListener('resize', () => {
+    if (!stage || !canvas) return;
+    width = canvas.width = stage.clientWidth;
+    height = canvas.height = stage.clientHeight;
+  });
+
+  const maxGen = Math.max(1, ...S.members.map(gen));
+  const genBuckets = new Map();
+  for (let g = 1; g <= maxGen; g++) genBuckets.set(g, []);
+  for (const m of S.members) {
+    const g = gen(m);
+    if (!genBuckets.has(g)) genBuckets.set(g, []);
+    genBuckets.get(g).push(m);
+  }
+
+  const stars = Array.from({ length: 90 }, () => ({
+    x: (Math.random() - 0.5) * 1400,
+    y: (Math.random() - 0.5) * 1200,
+    z: (Math.random() - 0.5) * 1400,
+    size: Math.random() * 1.5 + 0.5,
+    alpha: Math.random() * 0.7 + 0.3
+  }));
+
+  const nodes3d = [];
+  const nodeMap = new Map();
+
+  for (let g = 1; g <= maxGen; g++) {
+    const list = genBuckets.get(g) || [];
+    const radius = 60 + g * 75;
+    const yLevel = (g - (maxGen / 2)) * 85;
+    list.forEach((m, idx) => {
+      const theta = (idx / (list.length || 1)) * Math.PI * 2;
+      const x = radius * Math.cos(theta);
+      const z = radius * Math.sin(theta);
+      const node = {
+        m,
+        g,
+        x,
+        y: yLevel,
+        z,
+        isRoot: g === 1 || !m.father_id,
+        projX: 0,
+        projY: 0,
+        scale: 1,
+        z2: 0
+      };
+      nodes3d.push(node);
+      nodeMap.set(m.id, node);
+    });
+  }
+
+  let rotX = -0.3;
+  let rotY = 0.4;
+  let camDist = 450;
+  let isOrbiting = true;
+  let isDragging = false;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+  let selectedGen = 0;
+  let hoveredNode = null;
+
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+  window.addEventListener('mousemove', e => {
+    if (isDragging) {
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      rotY += dx * 0.008;
+      rotX += dy * 0.008;
+      rotX = Math.max(-1.4, Math.min(1.4, rotX));
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      isOrbiting = false;
+      if (orbitBtn) orbitBtn.textContent = '▶️ تفعيل الجولة';
+    } else {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      let closest = null;
+      let minDist = 22;
+      for (const n of nodes3d) {
+        if (selectedGen > 0 && n.g !== selectedGen) continue;
+        const d = Math.hypot(n.projX - mx, n.projY - my);
+        if (d < minDist) {
+          minDist = d;
+          closest = n;
+        }
+      }
+      hoveredNode = closest;
+    }
+  });
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    camDist += e.deltaY * 0.5;
+    camDist = Math.max(100, Math.min(1200, camDist));
+  }, { passive: false });
+
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    let closest = null;
+    let minDist = 24;
+    for (const n of nodes3d) {
+      if (selectedGen > 0 && n.g !== selectedGen) continue;
+      const d = Math.hypot(n.projX - mx, n.projY - my);
+      if (d < minDist) {
+        minDist = d;
+        closest = n;
+      }
+    }
+    if (closest && infoCard) {
+      const m = closest.m;
+      infoCard.style.display = 'block';
+      infoCard.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <b style="color:var(--gold)">${esc(m.full_name)}</b>
+          <button type="button" class="x" onclick="document.getElementById('v3d-info-card').style.display='none'" style="font-size:.7rem;padding:0 4px">✕</button>
+        </div>
+        <div style="font-size:.75rem;color:#cbd5e1">الجيل ${closest.g} · ${m.city || 'المدينة غير محددة'}</div>
+        <div style="margin-top:6px;display:flex;justify-content:flex-end">
+          ${nameBtn(m)}
+        </div>`;
+    }
+  });
+
+  if (orbitBtn) {
+    orbitBtn.onclick = () => {
+      isOrbiting = !isOrbiting;
+      orbitBtn.textContent = isOrbiting ? '⏸️ إيقاف مؤقت' : '🎬 جولة مدارية';
+    };
+  }
+
+  if (genFilter) {
+    genFilter.onchange = () => {
+      selectedGen = parseInt(genFilter.value, 10);
+      const filteredCount = selectedGen === 0 ? S.members.length : (genBuckets.get(selectedGen) || []).length;
+      $('#v3d-count-pill').textContent = `${filteredCount} فرد معروض`;
+    };
+  }
+
+  function render3d() {
+    if (!stage || !canvas) return;
+    const p = $('#profile');
+    if (!p || !p.open) {
+      if (anim3dId) cancelAnimationFrame(anim3dId);
+      return;
+    }
+
+    if (isOrbiting) {
+      rotY += 0.005;
+    }
+
+    ctx.clearRect(0, 0, width, height);
+    const cx = width / 2;
+    const cy = height / 2;
+    const fov = 500;
+
+    ctx.fillStyle = '#fff';
+    for (const s of stars) {
+      const x1 = s.x * Math.cos(rotY) - s.z * Math.sin(rotY);
+      const z1 = s.x * Math.sin(rotY) + s.z * Math.cos(rotY);
+      const y2 = s.y * Math.cos(rotX) - z1 * Math.sin(rotX);
+      const z2 = s.y * Math.sin(rotX) + z1 * Math.cos(rotX);
+
+      const depth = fov + z2 + camDist;
+      if (depth <= 10) continue;
+      const sc = fov / depth;
+      const px = cx + x1 * sc;
+      const py = cy + y2 * sc;
+
+      if (px >= 0 && px <= width && py >= 0 && py <= height) {
+        ctx.globalAlpha = s.alpha * Math.min(1, Math.max(0.1, sc));
+        ctx.beginPath();
+        ctx.arc(px, py, s.size * sc, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    for (const n of nodes3d) {
+      const x1 = n.x * Math.cos(rotY) - n.z * Math.sin(rotY);
+      const z1 = n.x * Math.sin(rotY) + n.z * Math.cos(rotY);
+      const y2 = n.y * Math.cos(rotX) - z1 * Math.sin(rotX);
+      const z2 = n.y * Math.sin(rotX) + z1 * Math.cos(rotX);
+
+      const depth = fov + z2 + camDist;
+      n.z2 = z2;
+      if (depth <= 10) {
+        n.scale = 0;
+        continue;
+      }
+      n.scale = fov / depth;
+      n.projX = cx + x1 * n.scale;
+      n.projY = cy + y2 * n.scale;
+    }
+
+    ctx.lineWidth = 1.2;
+    for (const n of nodes3d) {
+      if (selectedGen > 0 && n.g !== selectedGen) continue;
+      if (n.m.father_id && nodeMap.has(n.m.father_id)) {
+        const fn = nodeMap.get(n.m.father_id);
+        if (n.scale > 0 && fn.scale > 0) {
+          ctx.beginPath();
+          ctx.moveTo(fn.projX, fn.projY);
+          ctx.lineTo(n.projX, n.projY);
+          ctx.strokeStyle = n.isRoot ? 'rgba(245,158,11,0.5)' : 'rgba(56,189,248,0.25)';
+          ctx.stroke();
+        }
+      }
+    }
+
+    const sortedNodes = [...nodes3d].sort((a, b) => b.z2 - a.z2);
+
+    for (const n of sortedNodes) {
+      if (selectedGen > 0 && n.g !== selectedGen) continue;
+      if (n.scale <= 0) continue;
+
+      const isHovered = hoveredNode === n;
+      const r = (n.isRoot ? 9 : 5.5) * n.scale * (isHovered ? 1.5 : 1);
+
+      ctx.beginPath();
+      ctx.arc(n.projX, n.projY, r * 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = n.isRoot ? 'rgba(245,158,11,0.25)' : (n.m.is_alive !== false ? 'rgba(52,211,153,0.18)' : 'rgba(148,163,184,0.12)');
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(n.projX, n.projY, r, 0, Math.PI * 2);
+      ctx.fillStyle = n.isRoot ? '#f59e0b' : (n.m.is_alive !== false ? '#34d399' : '#94a3b8');
+      ctx.fill();
+
+      if (n.scale > 0.85 || isHovered || n.isRoot) {
+        ctx.font = `${Math.round(Math.max(9, 12 * n.scale))}px Cairo, Tahoma, sans-serif`;
+        ctx.fillStyle = isHovered ? '#fff' : (n.isRoot ? '#fbbf24' : '#cbd5e1');
+        ctx.textAlign = 'center';
+        ctx.fillText(n.m.first || n.m.full_name.split(' ')[0], n.projX, n.projY - r - 4);
+      }
+    }
+
+    anim3dId = requestAnimationFrame(render3d);
+  }
+
+  anim3dId = requestAnimationFrame(render3d);
+}
+
+$('#m-3d-view').onclick = menuClose(() => open3dView());
+
 /* ---------- تصدير الشجرة PDF والطباعة ومحرر المشجر الجداري (فرع تجربة) ---------- */
 function openPdfExport() {
   const roots = S.roots || [];

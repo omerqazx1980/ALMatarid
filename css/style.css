@@ -801,3 +801,13 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .as-item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;transition:.15s}
 .as-item:hover{border-color:var(--gold);background:rgba(245,158,11,.08)}
 .as-item.active{border-color:var(--gold);background:rgba(245,158,11,.15)}
+
+/* ---------- 50) العرض السينمائي ثلاثي الأبعاد (فرع تجربة) ---------- */
+.view3d-wrap{display:flex;flex-direction:column;gap:10px;height:78vh;max-height:700px}
+.view3d-controls{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;flex-wrap:wrap;gap:6px}
+.view3d-stage-box{flex:1;position:relative;background:#050811;border:1.5px solid rgba(245,158,11,.3);border-radius:14px;overflow:hidden;box-shadow:inset 0 0 50px rgba(0,0,0,.8)}
+.view3d-canvas{width:100%;height:100%;display:block;cursor:grab}
+.view3d-canvas:active{cursor:grabbing}
+.view3d-hud{position:absolute;bottom:12px;inset-inline:12px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+.view3d-hud-pill{background:rgba(15,23,42,.85);border:1px solid var(--line);border-radius:99px;padding:5px 12px;font-size:.75rem;color:var(--mut);backdrop-filter:blur(6px);pointer-events:auto}
+.view3d-info-card{position:absolute;top:12px;inset-inline-start:12px;background:rgba(15,23,42,.9);border:1px solid var(--gold);border-radius:10px;padding:8px 12px;max-width:260px;font-size:.82rem;backdrop-filter:blur(8px);display:none;pointer-events:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
