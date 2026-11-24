@@ -321,8 +321,8 @@ function collapseAll() { S.open = new Set(); for (const r of S.roots) { S.open.a
 /* ann24: على الجوال يبدأ العرض بالمؤسس فقط مطويًا (طلب المالك) */
 function collapseInitial() { if (window.matchMedia('(max-width: 640px)').matches) S.open = new Set(S.roots.map(r => r.id)); else collapseAll(); } /* ann48: المؤسس مفتوح بالجوال فتظهر الشجرة */
 /* أبناء العرض: نتجاوز العضوات المخفيات (لا بطاقة لهن عند الزوار بطلب المالك) ونُظهر أبناءهن إن وُجدوا في مكانهن */
-const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (S.filterMemberIds && !S.filterMemberIds.has(c.id)) continue; if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
-const dispRoots = () => { if (S.filterMode === 'descendants' && S.filterFocalId) { const focal = S.byId.get(S.filterFocalId); return focal ? [focal] : []; } if (S.filterMode === 'ancestors' && S.filterMemberIds) { const top = S.roots.find(r => S.filterMemberIds.has(r.id)); if (top) return [top]; } const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
+const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (S.filterMemberIds && !S.filterMemberIds.has(c.id)) continue; if (S.hiddenBranches && S.hiddenBranches.has(c.id)) continue; if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
+const dispRoots = () => { if (S.filterMode === 'descendants' && S.filterFocalId) { const focal = S.byId.get(S.filterFocalId); return focal ? [focal] : []; } if (S.filterMode === 'ancestors' && S.filterMemberIds) { const top = S.roots.find(r => S.filterMemberIds.has(r.id)); if (top) return [top]; } const out = []; const push = m => { if (S.hiddenBranches && S.hiddenBranches.has(m.id)) return; if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
 /* نص عدد الأبناء والبنات محسوبًا من كامل الأبناء (يشمل المخفيات) ليظهر في بطاقة الأب */
 const kidsTxt = m => { const ks = S.kids.get(m.id) || []; if (!ks.length) return ''; const s = ks.filter(c => c.gender === 'male').length, d = ks.length - s; return [s ? `👦 ${s}` : '', d ? `👧 ${d}` : ''].filter(Boolean).join(' · '); };
 const kidsOf = m => S.open.has(m.id) ? dispKids(m) : [];
@@ -7488,3 +7488,180 @@ if (mMemberDir) {
     toast('📖 تم فتح دليل الأعضاء الكامل');
   });
 }
+
+/* ============================================================
+   71) أشجار منفصلة وإظهار/إخفاء الفروع
+   ============================================================ */
+S.hiddenBranches = S.hiddenBranches || new Set();
+
+function getMajorBranches() {
+  const list = [];
+  const seenRoots = new Set();
+  (S.branches || []).forEach(b => {
+    if (b.root_id && S.byId.has(b.root_id) && !seenRoots.has(b.root_id)) {
+      seenRoots.add(b.root_id);
+      const m = S.byId.get(b.root_id);
+      list.push({
+        id: b.root_id,
+        name: b.label ? `فرع ${b.label}` : `فرع ${m.full_name}`,
+        root: m
+      });
+    }
+  });
+
+  if (S.roots && S.roots.length > 0) {
+    S.roots.forEach(r => {
+      const kids = S.kids.get(r.id) || [];
+      kids.forEach(k => {
+        if (!seenRoots.has(k.id)) {
+          seenRoots.add(k.id);
+          list.push({
+            id: k.id,
+            name: `فرع ${k.full_name}`,
+            root: k
+          });
+        }
+      });
+    });
+  }
+  return list;
+}
+
+function updateBranchVisibilityBar() {
+  const bar = $('#branch-visibility-bar');
+  const chipsList = $('#branch-chips-list');
+  if (!bar || !chipsList) return;
+
+  const branches = getMajorBranches();
+  if (!branches.length) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  chipsList.innerHTML = branches.map(b => {
+    const isHidden = S.hiddenBranches.has(b.id);
+    return `
+      <button type="button" class="branch-chip ${isHidden ? 'hidden-branch' : 'active'}" data-branch-toggle="${b.id}" title="${isHidden ? 'انقر لإظهار هذا الفرع' : 'انقر لإخفاء هذا الفرع'}">
+        <span>${isHidden ? '👁️‍🗨️' : '👁️'}</span>
+        <span>${esc(b.name)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function toggleBranch(branchId) {
+  if (S.hiddenBranches.has(branchId)) {
+    S.hiddenBranches.delete(branchId);
+    toast('تم إظهار الفرع');
+  } else {
+    S.hiddenBranches.add(branchId);
+    toast('تم إخفاء الفرع من الشجرة');
+  }
+  updateBranchVisibilityBar();
+  render(true);
+}
+
+function isolateBranch(branchId) {
+  const branches = getMajorBranches();
+  S.hiddenBranches = new Set(branches.filter(b => b.id !== branchId).map(b => b.id));
+  updateBranchVisibilityBar();
+  render(true);
+  const target = branches.find(b => b.id === branchId);
+  toast(`🌿 تم عزل وعرض «${target ? target.name : ''}» فقط`);
+}
+
+function showAllBranches() {
+  S.hiddenBranches.clear();
+  updateBranchVisibilityBar();
+  render(true);
+  toast('تم إظهار جميع فروع الشجرة');
+}
+
+function openBranchTreesModal() {
+  const branches = getMajorBranches();
+
+  const countBranch = (rootId) => {
+    let count = 0;
+    const q = [rootId];
+    while (q.length) {
+      const cur = q.shift();
+      count++;
+      const ks = S.kids.get(cur) || [];
+      ks.forEach(k => q.push(k.id));
+    }
+    return count;
+  };
+
+  const html = `
+    <div style="max-width:560px">
+      <div class="fstats-head">
+        <h2>🌿 أشجار الفروع: إظهار وإخفاء</h2>
+        <p class="sub">فصل فروع العائلة للتركيز على فرع مستقل أو إخفاء الفروع الأخرى من الشجرة</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px 0">
+        <span style="font-size:.85rem;color:var(--gold);font-weight:700">فروع العائلة الكبرى (${branches.length} فروع):</span>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="bmodal-show-all" class="fstats-btn" style="padding:4px 10px;font-size:.75rem">إظهار الكل</button>
+          <button type="button" id="bmodal-hide-all" class="fstats-btn" style="padding:4px 10px;font-size:.75rem;background:transparent;border-color:var(--line);color:var(--mut)">إخفاء الكل</button>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;padding-left:4px">
+        ${branches.map(b => {
+          const isHidden = S.hiddenBranches.has(b.id);
+          const totalInBranch = countBranch(b.id);
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.85);border:1.5px solid ${isHidden ? 'var(--line)' : 'var(--gold)'};border-radius:10px;padding:10px 14px;gap:10px">
+              <div>
+                <b style="font-size:.95rem;color:${isHidden ? 'var(--mut)' : '#f8fafc'}">${esc(b.name)}</b>
+                <div style="font-size:.75rem;color:var(--mut);margin-top:2px">
+                  رأس الفرع: ${esc(b.root.full_name)} · 👥 ${totalInBranch} فرد
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button type="button" class="fstats-btn" data-isolate-branch="${b.id}" style="padding:4px 10px;font-size:.75rem;background:rgba(245,158,11,.15);border-color:var(--gold);color:var(--gold)">
+                  عزل هذا الفرع فقط
+                </button>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:.8rem;color:${isHidden ? '#ef4444' : '#10b981'};font-weight:700">
+                  <input type="checkbox" data-modal-branch-toggle="${b.id}" ${isHidden ? '' : 'checked'}>
+                  <span>${isHidden ? 'مخفي' : 'ظاهر'}</span>
+                </label>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const bShowAll = $('#bmodal-show-all');
+  if (bShowAll) bShowAll.onclick = () => { showAllBranches(); openBranchTreesModal(); };
+  const bHideAll = $('#bmodal-hide-all');
+  if (bHideAll) bHideAll.onclick = () => { S.hiddenBranches = new Set(branches.map(b => b.id)); updateBranchVisibilityBar(); render(true); openBranchTreesModal(); };
+  document.querySelectorAll('[data-modal-branch-toggle]').forEach(ch => {
+    ch.onchange = () => { toggleBranch(ch.dataset.modalBranchToggle); openBranchTreesModal(); };
+  });
+  document.querySelectorAll('[data-isolate-branch]').forEach(btn => {
+    btn.onclick = () => { isolateBranch(btn.dataset.isolateBranch); $('#profile').close(); };
+  });
+}
+
+document.addEventListener('click', e => {
+  const chip = e.target.closest('[data-branch-toggle]');
+  if (chip) {
+    toggleBranch(chip.dataset.branchToggle);
+    return;
+  }
+});
+
+const branchVisAll = $('#branch-vis-all');
+if (branchVisAll) branchVisAll.onclick = showAllBranches;
+
+const mBranchTrees = $('#m-branch-trees');
+if (mBranchTrees) mBranchTrees.onclick = menuClose(() => openBranchTreesModal());
+
+setTimeout(updateBranchVisibilityBar, 300);
