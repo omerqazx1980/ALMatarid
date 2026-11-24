@@ -118,6 +118,9 @@ function stats() {
   const c = [['👥', 'الإجمالي', S.members.length, 'total'], ['👨', 'الذكور', n(m => m.gender === 'male'), 'male'], ['👩', 'الإناث', n(m => m.gender === 'female'), 'female'],
     ['🟢', 'الأحياء', n(m => m.is_alive), 'alive'], ['⚪', 'المتوفون', n(m => m.is_alive === false), 'dead'], ['📜', 'الأجيال', gens, 'gens']];
   $('#chips').innerHTML = c.map(([i, l, v, k]) => `<span class="chip" data-k="${k}">${i} <span class="chl">${l}</span> <b>${v}</b></span>`).join(''); /* ann48: بالجوال رموز وأرقام فقط · ann54: الأحياء/المتوفون مخفيان بالجوال */
+  $('#chips').style.cursor = 'pointer';
+  $('#chips').title = 'اضغط لفتح إحصائيات العائلة الشاملة';
+  $('#chips').onclick = () => openFamilyStats();
 }
 const evList = () => (S.events || []).map(e => ({ ...e, t: new Date(e.event_date).getTime() })).filter(e => e.t > Date.now()).sort((a, b) => a.t - b.t);
 let evRot = null, evTick = null, evHold = false;
@@ -1286,6 +1289,248 @@ function openCityMap(selectedCity = null, viewMode = 'map') {
 
 $('#m-cities').onclick = menuClose(() => openCityMap());
 
+/* ---------- صفحة إحصائيات العائلة الشاملة (فرع تجربة) ---------- */
+function openFamilyStats() {
+  const total = S.members.length || 1;
+  const alive = S.members.filter(m => m.is_alive !== false).length;
+  const dead = S.members.filter(m => m.is_alive === false).length;
+  const males = S.members.filter(m => m.gender !== 'female').length;
+  const females = S.members.filter(m => m.gender === 'female').length;
+  const maxGen = Math.max(1, ...S.members.map(gen));
+  
+  const alivePct = Math.round((alive / total) * 100);
+  const deadPct = 100 - alivePct;
+  const malePct = Math.round((males / total) * 100);
+  const femalePct = 100 - malePct;
+
+  // توزيع الأجيال
+  const genCounts = new Map();
+  for (let g = 1; g <= maxGen; g++) genCounts.set(g, { total: 0, alive: 0, dead: 0 });
+  for (const m of S.members) {
+    const g = gen(m);
+    if (!genCounts.has(g)) genCounts.set(g, { total: 0, alive: 0, dead: 0 });
+    const itm = genCounts.get(g);
+    itm.total++;
+    if (m.is_alive === false) itm.dead++; else itm.alive++;
+  }
+  const maxGenTotal = Math.max(1, ...[...genCounts.values()].map(v => v.total));
+
+  const genRowsHtml = [...genCounts.entries()].map(([g, d]) => {
+    const p = Math.round((d.total / maxGenTotal) * 100);
+    return `
+      <div class="gen-bar-row">
+        <div class="gen-bar-label">الجيل ${g}</div>
+        <div class="gen-bar-track">
+          <div class="gen-bar-fill" style="width:${Math.max(p, 4)}%"></div>
+        </div>
+        <div class="gen-bar-counts">
+          <b>${d.total}</b> <small>(${d.alive} حي)</small>
+        </div>
+      </div>`;
+  }).join('');
+
+  // أكثر الأسماء الأولى تكراراً
+  const nameCounts = new Map();
+  for (const m of S.members) {
+    if (m.name_masked) continue;
+    const first = (m.first || m.full_name.split(' ')[0] || '').trim();
+    if (first && first.length >= 2 && !['بن', 'بنت', 'آل'].includes(first)) {
+      nameCounts.set(first, (nameCounts.get(first) || 0) + 1);
+    }
+  }
+  const topNames = [...nameCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const topNamesHtml = topNames.map(([name, count]) => `
+    <button type="button" class="top-name-pill" data-name-search="${esc(name)}" title="اضغط للبحث عن كل من يحمل اسم ${esc(name)} في المشجر">
+      <b>${esc(name)}</b>
+      <span>${count}</span>
+    </button>
+  `).join('');
+
+  // الزوجات والعائلات المصاهرة
+  const wivesTotal = S.wives.length;
+  const wivesFromFamily = S.wives.filter(w => w.member_id).length;
+  const wivesOutside = wivesTotal - wivesFromFamily;
+
+  // حساب متوسط عدد الأبناء
+  const fathers = S.members.filter(m => (S.kids.get(m.id) || []).length > 0);
+  const totalKidsCount = fathers.reduce((sum, f) => sum + (S.kids.get(f.id) || []).length, 0);
+  const avgKids = fathers.length ? (totalKidsCount / fathers.length).toFixed(1) : '—';
+
+  // الشارات والإنجازات
+  const badgeCounts = new Map();
+  for (const m of S.members) {
+    if (m.achievement_badge && !m.badge_is_job) {
+      badgeCounts.set(m.achievement_badge, (badgeCounts.get(m.achievement_badge) || 0) + 1);
+    }
+  }
+  const badgeList = [...badgeCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const totalBadges = badgeList.reduce((acc, [, c]) => acc + c, 0);
+  const badgesHtml = badgeList.length ? badgeList.map(([badge, count]) => `
+    <div class="bstat-item">
+      <span>🏅 ${esc(badge)}</span>
+      <b>${count}</b>
+    </div>
+  `).join('') : '<p class="sub">لا توجد شارات مسجلة بعد.</p>';
+
+  // الفروع الرئيسية
+  const rootsStats = (S.roots || []).map(r => {
+    let count = 0;
+    const q = [r.id];
+    while (q.length) {
+      const curId = q.shift();
+      count++;
+      const kids = S.kids.get(curId) || [];
+      for (const k of kids) q.push(k.id);
+    }
+    return { root: r, count };
+  }).sort((a, b) => b.count - a.count);
+
+  const rootsHtml = rootsStats.map(({ root, count }) => {
+    const p = Math.round((count / total) * 100);
+    return `
+      <div class="gen-bar-row">
+        <div class="gen-bar-label" style="width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(root.full_name)}</div>
+        <div class="gen-bar-track">
+          <div class="gen-bar-fill" style="width:${Math.max(p, 4)}%;background:var(--gold)"></div>
+        </div>
+        <div class="gen-bar-counts">
+          <b>${count}</b> <small>(${p}%)</small>
+        </div>
+      </div>`;
+  }).join('');
+
+  const html = `
+    <div class="fstats-wrap">
+      <div class="fstats-head">
+        <h2>📊 إحصائيات أسرة آل مطارد الشاملة</h2>
+        <p class="sub">تحليل إحصائي مرئي لبيانات الأسرة وشجرة النسب</p>
+      </div>
+
+      <!-- بطاقات رقمية كبرى -->
+      <div class="fstats-cards">
+        <div class="fsc gold">
+          <div class="fsc-top"><span>إجمالي الأسرة</span><span>👥</span></div>
+          <div class="fsc-val">${total}</div>
+          <div class="fsc-sub">${maxGen} أجيال موثقة</div>
+        </div>
+        <div class="fsc green">
+          <div class="fsc-top"><span>الأحياء (حفظهم الله)</span><span>🌱</span></div>
+          <div class="fsc-val">${alive}</div>
+          <div class="fsc-sub">${alivePct}% من إجمالي الأسرة</div>
+        </div>
+        <div class="fsc blue">
+          <div class="fsc-top"><span>الذكور</span><span>👨</span></div>
+          <div class="fsc-val">${males}</div>
+          <div class="fsc-sub">${malePct}% من الأسرة</div>
+        </div>
+        <div class="fsc purple">
+          <div class="fsc-top"><span>الإناث</span><span>👩</span></div>
+          <div class="fsc-val">${females}</div>
+          <div class="fsc-sub">${femalePct}% من الأسرة</div>
+        </div>
+      </div>
+
+      <!-- توزيع الحالة والحياة -->
+      <div class="fstats-section">
+        <div class="fstats-sec-title">
+          <span>الحالة والتوزيع</span>
+          <small>${alive} حي · ${dead} متوفى</small>
+        </div>
+        <div class="dist-bar-wrap">
+          <div class="dist-bar">
+            <div class="dist-segment" style="width:${alivePct}%;background:var(--green)" title="الأحياء: ${alive} (${alivePct}%)"></div>
+            <div class="dist-segment" style="width:${deadPct}%;background:#64748b" title="المتوفون: ${dead} (${deadPct}%)"></div>
+          </div>
+          <div class="dist-labels">
+            <span>🟢 الأحياء: <b>${alive}</b> (${alivePct}%)</span>
+            <span>⚪ المتوفون (رحمهم الله): <b>${dead}</b> (${deadPct}%)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- توزيع الأجيال وتتابع الذرية -->
+      <div class="fstats-section">
+        <div class="fstats-sec-title">
+          <span>تتابع الذرية عبر الأجيال</span>
+          <small>${maxGen} أجيال</small>
+        </div>
+        <div class="gen-bars-list">
+          ${genRowsHtml}
+        </div>
+      </div>
+
+      <!-- أكثر الأسماء شيوعاً بالأسرة -->
+      <div class="fstats-section">
+        <div class="fstats-sec-title">
+          <span>الأسماء الأكثر شيوعاً بالأسرة</span>
+          <small>اضغط على أي اسم للبحث في المشجر</small>
+        </div>
+        <div class="top-names-grid">
+          ${topNamesHtml}
+        </div>
+      </div>
+
+      <!-- الفروع الرئيسية للأسرة -->
+      ${rootsStats.length > 1 ? `
+      <div class="fstats-section">
+        <div class="fstats-sec-title">
+          <span>أحجام الفروع الرئيسية</span>
+          <small>${rootsStats.length} فروع</small>
+        </div>
+        <div class="gen-bars-list">
+          ${rootsHtml}
+        </div>
+      </div>` : ''}
+
+      <!-- المؤشرات الأسرية والمصاهرة -->
+      <div class="fstats-cards">
+        <div class="fsc">
+          <div class="fsc-top"><span>متوسط الأبناء لكل أسرة</span><span>👨‍👩‍👧‍👦</span></div>
+          <div class="fsc-val">${avgKids}</div>
+          <div class="fsc-sub">${fathers.length} رب أسرة موثق</div>
+        </div>
+        <div class="fsc">
+          <div class="fsc-top"><span>الزوجات الموثقات</span><span>💍</span></div>
+          <div class="fsc-val">${wivesTotal}</div>
+          <div class="fsc-sub">${wivesFromFamily} من الأسرة · ${wivesOutside} مصاهرة</div>
+        </div>
+      </div>
+
+      <!-- الشارات ولوحة الإنجازات -->
+      ${totalBadges ? `
+      <div class="fstats-section">
+        <div class="fstats-sec-title">
+          <span>أصحاب الإنجازات والشارات</span>
+          <small>${totalBadges} شارة موثقة</small>
+        </div>
+        <div class="badge-cloud">
+          ${badgesHtml}
+        </div>
+      </div>` : ''}
+
+    </div>`;
+
+  showInfo(html);
+
+  // ربط البحث السريع بالأسماء
+  const pb = $('#profile-body');
+  if (pb) {
+    pb.querySelectorAll('[data-name-search]').forEach(btn => {
+      btn.onclick = () => {
+        $('#profile').close();
+        const q = $('#q');
+        if (q) {
+          q.value = btn.dataset.nameSearch;
+          q.dispatchEvent(new Event('input', { bubbles: true }));
+          q.focus();
+        }
+      };
+    });
+  }
+}
+
+$('#m-fullstats').onclick = menuClose(() => openFamilyStats());
+
 $('#m-honor').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) if (m.achievement_badge && !m.badge_is_job) (g.get(m.achievement_badge) || g.set(m.achievement_badge, []).get(m.achievement_badge)).push(m);
   showInfo(`<h2>🏅 لوحة الشرف</h2>${[...g].map(([b, L]) => `<h3>${esc(b)} (${L.length})</h3>${L.sort(byName).map(nameBtn).join('')}`).join('') || '<p class="sub">لا توجد شارات بعد. تُضاف الشارة من نموذج تعديل الفرد.</p>'}`);
@@ -1711,7 +1956,7 @@ $('#m-family').onclick = menuClose(() => familyEditor(null));
 /* ---------- الأقسام المُبرزة بالشريط العلوي (ann25) ---------- */
 /* المالك والمحرر يفعّلان ⭐ من قائمة الأقسام نفسها، فتظهر كأزرار بارزة أعلى الصفحة لكل الزوار */
 const FEAT = [
-  ['cities', '🗺️ خريطة المدن', '#m-cities'], ['names', '📋 جميع الأسماء', '#m-names'],
+  ['cities', '🗺️ خريطة المدن', '#m-cities'], ['fullstats', '📊 الإحصائيات', '#m-fullstats'], ['names', '📋 جميع الأسماء', '#m-names'],
   ['events', '🎉 مناسبات الأسرة', '#m-events'], ['honor', '🏅 لوحة الشرف', '#m-honor'],
   ['cards', '💌 بطاقات التهاني والتعازي', '#m-cards'], ['kin', '🧭 مستكشف القرابة', '#m-kin'],
   ['suggest', '📝 اقتراح وتصحيح', '#m-suggest'], ['csv', '📊 تصدير إكسل', '#m-csv']

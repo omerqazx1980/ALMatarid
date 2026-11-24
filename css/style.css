@@ -619,3 +619,47 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .cli-count{font-size:.88rem;color:var(--mut);font-weight:600;white-space:nowrap}
 .cli-count small{font-size:.75rem}
 .cli-body{padding-top:8px;margin-top:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:3px}
+
+/* ---------- 43) صفحة إحصائيات العائلة الشاملة (فرع تجربة) ---------- */
+.fstats-wrap{display:flex;flex-direction:column;gap:14px;padding:2px 0}
+.fstats-head h2{font-size:1.2rem;margin-bottom:2px}
+.fstats-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.fsc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.fsc.gold{border-color:rgba(245,158,11,.45);background:linear-gradient(135deg,rgba(245,158,11,.12),var(--panel))}
+.fsc.green{border-color:rgba(52,211,153,.45);background:linear-gradient(135deg,rgba(52,211,153,.12),var(--panel))}
+.fsc.blue{border-color:rgba(56,189,248,.45);background:linear-gradient(135deg,rgba(56,189,248,.12),var(--panel))}
+.fsc.purple{border-color:rgba(192,132,252,.45);background:linear-gradient(135deg,rgba(192,132,252,.12),var(--panel))}
+.fsc .fsc-top{display:flex;justify-content:space-between;align-items:center;font-size:.75rem;color:var(--mut)}
+.fsc .fsc-val{font-size:1.4rem;font-weight:800;color:var(--txt);line-height:1.2}
+.fsc.gold .fsc-val{color:var(--gold)}
+.fsc.green .fsc-val{color:var(--green)}
+.fsc.blue .fsc-val{color:var(--blue)}
+.fsc.purple .fsc-val{color:#c084fc}
+.fsc .fsc-sub{font-size:.75rem;color:var(--mut)}
+
+.fstats-section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.fstats-sec-title{font-size:.95rem;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;align-items:center}
+.fstats-sec-title small{font-size:.75rem;color:var(--mut);font-weight:400}
+
+.dist-bar-wrap{display:flex;flex-direction:column;gap:6px}
+.dist-bar{height:12px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;display:flex}
+.dist-segment{height:100%;transition:width .4s ease}
+.dist-labels{display:flex;justify-content:space-between;font-size:.78rem;color:var(--mut)}
+.dist-labels span b{color:var(--txt)}
+
+.gen-bars-list{display:flex;flex-direction:column;gap:7px}
+.gen-bar-row{display:flex;align-items:center;gap:10px;font-size:.82rem}
+.gen-bar-label{width:75px;flex:none;font-weight:600}
+.gen-bar-track{flex:1;height:10px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;position:relative}
+.gen-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:99px}
+.gen-bar-counts{width:70px;flex:none;text-align:end;font-size:.78rem;color:var(--mut)}
+.gen-bar-counts b{color:var(--txt)}
+
+.top-names-grid{display:flex;flex-wrap:wrap;gap:6px}
+.top-name-pill{background:rgba(0,0,0,.3);border:1px solid var(--line);color:var(--txt);border-radius:99px;padding:4px 10px;font-size:.82rem;display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:.15s}
+.top-name-pill:hover{border-color:var(--gold);background:rgba(245,158,11,.15);color:var(--gold)}
+.top-name-pill span{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:99px;font-size:.72rem}
+
+.badge-cloud{display:flex;flex-wrap:wrap;gap:6px}
+.bstat-item{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:5px 9px;font-size:.8rem;color:var(--gold);display:flex;align-items:center;gap:6px}
+.bstat-item b{background:var(--gold);color:#1c1204;padding:0 5px;border-radius:99px;font-size:.72rem}
