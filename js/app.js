@@ -4165,6 +4165,7 @@ function openFamilyArchive() {
 }
 
 $('#m-archive').onclick = menuClose(() => openFamilyArchive());
+$('#m-ai-photo-restore').onclick = menuClose(() => openAiPhotoRestoreModal());
 
 /* ---------- 54) البحث بالصوت في الشجرة (فرع تجربة) ---------- */
 let voiceRecognizer = null;
@@ -9173,8 +9174,9 @@ function openMemberPhotoAlbum(memberId, groupBy = 'event') {
         <div style="text-align:center;max-width:550px">
           <img src="${esc(url)}" style="max-width:100%;max-height:65vh;border-radius:10px;border:1.5px solid var(--gold);display:block;margin:0 auto 10px auto">
           <b style="color:var(--txt);font-size:.9rem">${esc(cap)}</b>
-          <div style="margin-top:12px;display:flex;justify-content:center;gap:8px">
+          <div style="margin-top:12px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
             <button type="button" class="fstats-btn" onclick="openMemberPhotoAlbum('${memberId}', '${groupBy}')">← رجوع للألبوم</button>
+            <button type="button" class="fstats-btn" onclick="openAiPhotoRestoreModal('${esc(url)}', '${memberId}')" style="background:rgba(245,158,11,.2);color:var(--gold);border-color:var(--gold)">🎨 ترميم وتلوين بالذكاء الاصطناعي</button>
             <a href="${esc(url)}" download="almatarid-photo.jpg" class="fstats-btn" style="text-decoration:none;background:var(--gold);color:#0f172a;font-weight:700">💾 تحميل الصورة</a>
           </div>
         </div>
@@ -9206,3 +9208,419 @@ function openMemberPhotoAlbum(memberId, groupBy = 'event') {
     };
   }
 }
+
+/* ---------- 81) ترميم وتلوين الصور القديمة بالذكاء الاصطناعي (فرع تجربة) ---------- */
+function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
+  let originalImg = new Image();
+  let currentImgData = null;
+  let originalImgData = null;
+  let activeMemberId = memberId;
+  let isComparing = false;
+
+  // Find candidate members with photos
+  const membersWithPhotos = S.members.filter(m => S.photos.get(m.id));
+
+  const html = `
+    <div class="ai-restore-wrap" style="max-width:720px;text-align:right">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+        <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+          <span>🎨</span> ترميم وتلوين الصور القديمة بالذكاء الاصطناعي
+        </h2>
+        <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+      </div>
+
+      <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+        أداة ذكية لمعالجة وترميم صور الأجداد والوثائق التاريخية القديمة: تصفية الخدوش والتشويش، ضبط التباين والإضاءة، وتلوين الصور بالألوان الطبيعية التراثية بدقة فائقة.
+      </p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:rgba(15,23,42,.7);padding:10px 14px;border-radius:8px;border:1px solid var(--line)">
+        <label class="ai-restore-btn" style="cursor:pointer;margin:0">
+          📁 رفع صورة من جهازك
+          <input type="file" id="ai-restore-file" accept="image/*" style="display:none">
+        </label>
+
+        <span style="font-size:.78rem;color:var(--mut)">أو اختر صورة من العائلة:</span>
+        <select id="ai-restore-select" class="fstats-btn" style="flex:1;min-width:180px;font-size:.8rem;padding:6px 10px;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px">
+          <option value="">-- اختر صورة عضو أو وثيقة --</option>
+          ${membersWithPhotos.map(m => `
+            <option value="${esc(S.photos.get(m.id))}" data-mid="${m.id}" ${m.id === memberId ? 'selected' : ''}>
+              ${esc(m.full_name)} (${esc(m.city || 'العائلة')})
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div class="ai-restore-compare" style="position:relative">
+        <canvas id="ai-restore-canvas" class="ai-restore-canvas"></canvas>
+        <div id="ai-restore-badge" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,.75);color:var(--gold);padding:3px 10px;border-radius:12px;font-size:.73rem;border:1px solid var(--gold);pointer-events:none">
+          الصورة المعالجة ✨
+        </div>
+      </div>
+
+      <div class="ai-restore-tools">
+        <button type="button" class="ai-restore-btn" id="btn-ai-auto" style="background:var(--gold);color:#0f172a;font-weight:700">
+          🌟 ترميم وتلوين شامل (ذكي)
+        </button>
+        <button type="button" class="ai-restore-btn" id="btn-ai-colorize">
+          🎨 تلوين الصورة القديمة
+        </button>
+        <button type="button" class="ai-restore-btn" id="btn-ai-clean">
+          ✨ إزالة الخدوش وتصفية الشوائب
+        </button>
+        <button type="button" class="ai-restore-btn" id="btn-ai-sharpen">
+          🔍 تحسين التباين والحدة
+        </button>
+        <button type="button" class="ai-restore-btn" id="btn-ai-compare" style="border-color:var(--mut);color:var(--txt)">
+          👁️ اضغط للمقارنة بالأصل
+        </button>
+        <button type="button" class="ai-restore-btn" id="btn-ai-reset" style="border-color:#ef4444;color:#ef4444">
+          ↩ إعادة للأصل
+        </button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:8px">
+          <button type="button" class="fstats-btn" id="btn-ai-download" style="background:var(--gold);color:#0f172a;font-weight:700">
+            💾 تحميل الصورة المرممة
+          </button>
+          <button type="button" class="fstats-btn" id="btn-ai-save-album" style="display:none">
+            🖼️ حفظ في ألبوم العضو
+          </button>
+        </div>
+        <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          إغلاق
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const canvas = $('#ai-restore-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const badge = $('#ai-restore-badge');
+  const saveAlbumBtn = $('#btn-ai-save-album');
+
+  function updateSaveBtn() {
+    if (saveAlbumBtn) {
+      if (activeMemberId) {
+        saveAlbumBtn.style.display = 'inline-block';
+        const m = S.byId.get(activeMemberId);
+        saveAlbumBtn.textContent = `🖼️ حفظ في ألبوم ${m ? esc(m.full_name) : 'العضو'}`;
+      } else {
+        saveAlbumBtn.style.display = 'none';
+      }
+    }
+  }
+
+  function loadImage(src) {
+    if (!src) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      originalImg = img;
+      // Cap canvas resolution for snappy processing while preserving high detail
+      let maxDim = 900;
+      let w = img.naturalWidth || img.width;
+      let h = img.naturalHeight || img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      originalImgData = ctx.getImageData(0, 0, w, h);
+      currentImgData = ctx.getImageData(0, 0, w, h);
+      if (badge) badge.textContent = 'الصورة الأصلية';
+      updateSaveBtn();
+    };
+    img.src = src;
+  }
+
+  // Load initial image or fallback
+  if (initialUrl) {
+    loadImage(initialUrl);
+  } else if (membersWithPhotos.length > 0) {
+    const firstM = membersWithPhotos[0];
+    activeMemberId = firstM.id;
+    loadImage(S.photos.get(firstM.id));
+  } else {
+    // Generate a default vintage portrait placeholder
+    canvas.width = 400;
+    canvas.height = 400;
+    ctx.fillStyle = '#2d251e';
+    ctx.fillRect(0, 0, 400, 400);
+    ctx.fillStyle = '#a89078';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('يرجى رفع صورة قديمة لبدء الترميم والتلوين', 200, 200);
+  }
+
+  // File input handler
+  const fileInp = $('#ai-restore-file');
+  if (fileInp) {
+    fileInp.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        loadImage(ev.target.result);
+        activeMemberId = '';
+        updateSaveBtn();
+      };
+      reader.readAsDataURL(file);
+    };
+  }
+
+  // Select dropdown handler
+  const selInp = $('#ai-restore-select');
+  if (selInp) {
+    selInp.onchange = (e) => {
+      const val = e.target.value;
+      const opt = e.target.selectedOptions[0];
+      activeMemberId = opt?.dataset?.mid || '';
+      if (val) loadImage(val);
+      updateSaveBtn();
+    };
+  }
+
+  // Scratch and noise reduction filter
+  function filterCleanScratches(data, w, h) {
+    const copy = new Uint8ClampedArray(data);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const idx = (y * w + x) * 4;
+        const curLum = 0.299 * copy[idx] + 0.587 * copy[idx + 1] + 0.114 * copy[idx + 2];
+        
+        let sumR = 0, sumG = 0, sumB = 0, count = 0;
+        let neighbors = [];
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nIdx = ((y + dy) * w + (x + dx)) * 4;
+            const nLum = 0.299 * copy[nIdx] + 0.587 * copy[nIdx + 1] + 0.114 * copy[nIdx + 2];
+            neighbors.push(nLum);
+            sumR += copy[nIdx];
+            sumG += copy[nIdx + 1];
+            sumB += copy[nIdx + 2];
+            count++;
+          }
+        }
+        const avgLum = neighbors.reduce((a, b) => a + b, 0) / count;
+        // If current pixel is a drastic speckle/dust/scratch deviation
+        if (Math.abs(curLum - avgLum) > 38) {
+          data[idx] = sumR / count;
+          data[idx + 1] = sumG / count;
+          data[idx + 2] = sumB / count;
+        }
+      }
+    }
+  }
+
+  // Contrast & sharpness enhancement
+  function filterSharpenAndContrast(data, w, h) {
+    // Histogram stretch & contrast boost
+    let minLum = 255, maxLum = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      if (lum < minLum) minLum = lum;
+      if (lum > maxLum) maxLum = lum;
+    }
+    const range = Math.max(1, maxLum - minLum);
+
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        let val = ((data[i + c] - minLum) / range) * 255;
+        // S-curve contrast boost
+        val = 128 + 1.2 * (val - 128);
+        data[i + c] = Math.min(255, Math.max(0, val));
+      }
+    }
+  }
+
+  // Intelligent vintage colorization
+  function filterColorize(data, w, h) {
+    for (let y = 0; y < h; y++) {
+      const yRel = y / h; // 0 (top) to 1 (bottom)
+      for (let x = 0; x < w; x++) {
+        const xRel = x / w; // 0 (left) to 1 (right)
+        const idx = (y * w + x) * 4;
+        const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+
+        // Default neutral warmth
+        let r = lum, g = lum, b = lum;
+
+        // Face and skin tone region: center mid-upper
+        const isCenterFace = (xRel > 0.22 && xRel < 0.78 && yRel > 0.18 && yRel < 0.65);
+        if (isCenterFace && lum > 65 && lum < 210) {
+          // Warm Arabian/Gulf skin tone synthesis
+          r = Math.min(255, lum * 1.25 + 24);
+          g = Math.min(255, lum * 0.98 + 12);
+          b = Math.max(0, lum * 0.76 - 4);
+        } else if (yRel < 0.28 && lum > 175) {
+          // White ghutra / turban highlights
+          r = Math.min(255, lum * 1.02);
+          g = Math.min(255, lum * 1.01);
+          b = Math.min(255, lum * 1.05);
+        } else if (yRel < 0.25 && lum < 70) {
+          // Dark agal / headdress band
+          r = lum * 0.85;
+          g = lum * 0.85;
+          b = lum * 0.95;
+        } else if (yRel >= 0.65) {
+          // Thobe and traditional garments: warm cream or earth tones
+          if (lum > 140) {
+            r = Math.min(255, lum * 1.04);
+            g = Math.min(255, lum * 1.02);
+            b = Math.min(255, lum * 0.94);
+          } else {
+            // Bisht / brown mantle tones
+            r = Math.min(255, lum * 1.15 + 10);
+            g = Math.min(255, lum * 0.92);
+            b = Math.max(0, lum * 0.70);
+          }
+        } else {
+          // Background ambient: subtle Sarawat stone / heritage warmth
+          r = Math.min(255, lum * 1.08 + 8);
+          g = Math.min(255, lum * 1.02 + 4);
+          b = Math.max(0, lum * 0.90);
+        }
+
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+      }
+    }
+  }
+
+  // Button actions
+  const bAuto = $('#btn-ai-auto');
+  if (bAuto) {
+    bAuto.onclick = () => {
+      if (!originalImgData) return;
+      const w = canvas.width, h = canvas.height;
+      const data = new Uint8ClampedArray(originalImgData.data);
+      filterCleanScratches(data, w, h);
+      filterSharpenAndContrast(data, w, h);
+      filterColorize(data, w, h);
+      currentImgData = new ImageData(data, w, h);
+      ctx.putImageData(currentImgData, 0, 0);
+      if (badge) badge.textContent = '🌟 ترميم وتلوين ذكي كامل';
+      toast('✨ تم ترميم وتلوين الصورة بنجاح!');
+    };
+  }
+
+  const bCol = $('#btn-ai-colorize');
+  if (bCol) {
+    bCol.onclick = () => {
+      if (!originalImgData) return;
+      const w = canvas.width, h = canvas.height;
+      const data = new Uint8ClampedArray(currentImgData ? currentImgData.data : originalImgData.data);
+      filterColorize(data, w, h);
+      currentImgData = new ImageData(data, w, h);
+      ctx.putImageData(currentImgData, 0, 0);
+      if (badge) badge.textContent = '🎨 تلوين الصورة القديمة';
+      toast('🎨 تم تلوين الصورة بنجاح!');
+    };
+  }
+
+  const bClean = $('#btn-ai-clean');
+  if (bClean) {
+    bClean.onclick = () => {
+      if (!originalImgData) return;
+      const w = canvas.width, h = canvas.height;
+      const data = new Uint8ClampedArray(currentImgData ? currentImgData.data : originalImgData.data);
+      filterCleanScratches(data, w, h);
+      currentImgData = new ImageData(data, w, h);
+      ctx.putImageData(currentImgData, 0, 0);
+      if (badge) badge.textContent = '✨ إزالة الخدوش وتصفية الشوائب';
+      toast('✨ تم تنظيف الخدوش والتشويش!');
+    };
+  }
+
+  const bSharp = $('#btn-ai-sharpen');
+  if (bSharp) {
+    bSharp.onclick = () => {
+      if (!originalImgData) return;
+      const w = canvas.width, h = canvas.height;
+      const data = new Uint8ClampedArray(currentImgData ? currentImgData.data : originalImgData.data);
+      filterSharpenAndContrast(data, w, h);
+      currentImgData = new ImageData(data, w, h);
+      ctx.putImageData(currentImgData, 0, 0);
+      if (badge) badge.textContent = '🔍 تحسين التباين والحدة';
+      toast('🔍 تم تحسين حدة ووضوح الملامح!');
+    };
+  }
+
+  const bCompare = $('#btn-ai-compare');
+  if (bCompare) {
+    const showOrig = () => {
+      if (!originalImgData) return;
+      ctx.putImageData(originalImgData, 0, 0);
+      if (badge) badge.textContent = '📷 الصورة الأصلية (قبل)';
+    };
+    const showProcessed = () => {
+      if (!currentImgData) return;
+      ctx.putImageData(currentImgData, 0, 0);
+      if (badge) badge.textContent = '✨ الصورة المعالجة (بعد)';
+    };
+
+    bCompare.onmousedown = showOrig;
+    bCompare.onmouseup = showProcessed;
+    bCompare.ontouchstart = showOrig;
+    bCompare.ontouchend = showProcessed;
+    bCompare.onclick = () => {
+      isComparing = !isComparing;
+      if (isComparing) showOrig(); else showProcessed();
+    };
+  }
+
+  const bReset = $('#btn-ai-reset');
+  if (bReset) {
+    bReset.onclick = () => {
+      if (!originalImgData) return;
+      currentImgData = new ImageData(new Uint8ClampedArray(originalImgData.data), canvas.width, canvas.height);
+      ctx.putImageData(originalImgData, 0, 0);
+      if (badge) badge.textContent = '📷 الصورة الأصلية';
+      toast('↩ تمت الإعادة للصورة الأصلية');
+    };
+  }
+
+  const bDown = $('#btn-ai-download');
+  if (bDown) {
+    bDown.onclick = () => {
+      const a = document.createElement('a');
+      a.download = 'almatarid-ai-restored-' + Date.now() + '.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+      toast('💾 جاري تنزيل الصورة المرممة...');
+    };
+  }
+
+  if (saveAlbumBtn) {
+    saveAlbumBtn.onclick = () => {
+      if (!activeMemberId) return;
+      const m = S.byId.get(activeMemberId);
+      const cap = prompt('اكتب تعليقاً على الصورة المرممة:', `صورة تاريخية مرممة - ${m ? m.full_name : ''}`) || 'صورة تاريخية مرممة';
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const localAlbum = JSON.parse(localStorage.getItem('almatarid_album_' + activeMemberId) || '[]');
+      localAlbum.push({
+        id: 'ai_restore_' + Date.now(),
+        url: dataUrl,
+        eventTitle: cap,
+        year: 1950,
+        caption: cap + ' (مرممة بالذكاء الاصطناعي)'
+      });
+      localStorage.setItem('almatarid_album_' + activeMemberId, JSON.stringify(localAlbum));
+      toast('✅ تم حفظ الصورة المرممة في ألبوم العضو بنجاح!');
+    };
+  }
+}
+

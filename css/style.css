@@ -1091,3 +1091,12 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .mem-album-card:hover{border-color:var(--gold);transform:scale(1.02)}
 .mem-album-img{width:100%;height:115px;object-fit:cover;display:block}
 .mem-album-cap{padding:6px 8px;font-size:.73rem;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(15,23,42,.95)}
+
+/* ---------- 81) ترميم وتلوين الصور القديمة بالذكاء الاصطناعي ---------- */
+.ai-restore-wrap { display: flex; flex-direction: column; gap: 12px; }
+.ai-restore-compare { position: relative; width: 100%; max-height: 50vh; overflow: hidden; border-radius: 10px; border: 1.5px solid var(--gold); background: #000; display: flex; justify-content: center; align-items: center; }
+.ai-restore-canvas { max-width: 100%; max-height: 50vh; display: block; object-fit: contain; }
+.ai-restore-tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ai-restore-btn { background: rgba(245,158,11,.15); border: 1px solid var(--gold); color: var(--gold); border-radius: 6px; padding: 6px 12px; font-size: .8rem; font-weight: 700; cursor: pointer; transition: all .15s ease; }
+.ai-restore-btn:hover, .ai-restore-btn.active { background: var(--gold); color: #0f172a; }
+
