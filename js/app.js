@@ -6,7 +6,7 @@ function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
-const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [], tagCounts: null, tagEvents: null, _tagCountsP: null };
+const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [], tagCounts: null, tagEvents: null, _tagCountsP: null, visibleFeatures: ['living-privacy'], pinnedFeatures: [] };
 const V = { x: 0, y: 0, k: 1 };
 
 /* ---------- بيانات وهمية للتصميم ---------- */
@@ -31,6 +31,7 @@ async function load(code) {
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
   S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
   S.featured = Array.isArray(b.featured_sections) ? b.featured_sections : ['events', 'honor'];
+  loadFeatureFlags(); /* نظام الإخفاء — تحميل أعلام الميزات (خادم ثم localStorage) وتطبيقها */
   const day = n => new Date(Date.now() + n * 864e5 + 2 * 36e5).toISOString();
   S.events = CFG.DEMO ? [
     { id: 'e1', title: 'حفل زواج (تجريبي)', event_date: day(33), location_name: 'قاعة المناسبات الكبرى', location_url: 'https://maps.google.com', description: 'عقد قران وزواج 💍 — المستضيف: أسرة تجريبية\nالدعوة عامة للعائلة.' },
@@ -38,7 +39,10 @@ async function load(code) {
     { id: 'e3', title: 'ملتقى الأبناء (تجريبي)', event_date: day(100), location_name: 'مركز الأحياء', description: 'ملتقى 🎓 — المستضيف: لجنة الشباب' }
   ] : (b.events || []);
   index(); collapseInitial(); render(true); showEvent();
-  applyRole(); renderFeat();
+  /* في DEMO يعمل load() متزامناً أثناء تقييم السكربت وقبل تعريف FEAT — تأجيل microtask يتيح
+     اكتمال التقييم قبل applyRole/renderFeat (في الإنتاج load() ينتظر RPC أصلاً فلا أثر)؛
+     وإلا رمى TDZ على FEAT وابتلعه catch الإقلاع فبقي الشريط فارغاً عند الإقلاع */
+  queueMicrotask(() => { applyRole(); renderFeat(); });
   checkAnnouncements();
   inboxBadge();
   setTimeout(fetchPhotos, 400);
@@ -63,8 +67,10 @@ $('#gate-form').addEventListener('submit', async e => {
 });
 $('#gate-x').onclick = () => $('#gate').close();
 const canEdit = () => ['owner', 'editor'].includes(S.role);
-/* ميزة 3: الزائر (أو من لم يدخل بعد) لا يرى بيانات الأحياء الشخصية (ميلاد تفصيلي/مدينة/هاتف/كنية/نبذة/صورة/صوت) — تظهر للأقارب المسجلين فقط */
-const livingHidden = m => ((S.role === 'visitor' || !S.role) && !S.code) && m.is_alive !== false;
+/* ميزة 3: الزائر (أو من لم يدخل بعد) لا يرى بيانات الأحياء الشخصية (ميلاد تفصيلي/مدينة/هاتف/كنية/نبذة/صورة/صوت) — تظهر للأقارب المسجلين فقط — والمالك يستطيع إيقاف الحماية من جدول الميزات */
+const livingHidden = m => featOn('living-privacy') && ((S.role === 'visitor' || !S.role) && !S.code) && m.is_alive !== false;
+/* هل الميزة ظاهرة؟ (نظام الإخفاء — الجولة الخامسة) — الافتراضي: الكل مخفي إلا حماية الأحياء */
+const featOn = k => (S.visibleFeatures || []).includes(k);
 const delegateName = b => S.byId.get(b?.delegate_id)?.full_name || b?.label || '';
 const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.father_id), i++) if (p.id === S.branch?.root_id) return true; return false; };
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
@@ -72,6 +78,7 @@ function applyRole() {
   $('#btn-login').textContent = ['visitor', 'family', 'reader'].includes(S.role) ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
   $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = $('#m-backups').hidden = S.role !== 'owner'; $('#m-inbox').hidden = S.role !== 'owner'; /* ann59: صندوق الاقتراحات والشكاوى للمالك فقط */ $('#m-family').hidden = !canEdit();
   $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
+  applyFeatureVisibility(); /* نظام الإخفاء — يعيد تطبيق إظهار/إخفاء أزرار الميزات عند تبديل الدور */
   initFeatToggles();
   syncToggles();
 }
@@ -659,7 +666,7 @@ function profile(id) {
   const datePair = iso => { if (!iso) return ''; const h = hijriShort(new Date(iso + 'T00:00:00Z')); return `${h} (${iso.replaceAll('-', '/')}م)`; };
   const isVisitor = (S.role === 'visitor' || !S.role) && !S.code;
   const isLiving = m.is_alive !== false;
-  const lh = isVisitor && isLiving; /* ميزة 3: إخفاء بيانات الأحياء عن الزوار */
+  const lh = livingHidden(m); /* ميزة 3: إخفاء بيانات الأحياء عن الزوار — يحترم مفتاح الإظهار (إيقاف الحماية من جدول الميزات يُظهرها) */
   const born = isVisitor && isLiving ? (m.birth_year_text ? `${esc(m.birth_year_text)} (التاريخ التفصيلي محمي 🔒)` : 'محمي للأقارب المسجلين 🔒') : (m.birth_date ? datePair(m.birth_date) : (m.birth_year_text || ''));
   const died = m.is_alive === false ? (m.death_date ? datePair(m.death_date) : (m.death_year_text || 'غير معروف')) : '';
   $('#profile-body').dataset.id = id;
@@ -675,11 +682,11 @@ function profile(id) {
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? (isVisitor ? 'محمية 🔒' : esc(mother.full_name)) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
       ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
-      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${lh ? '' : row('المدينة', esc(m.city))}${row('ألبوم الصور', `<span style="display:inline-flex;align-items:center;gap:6px"><span>${tagCountText(id) || 'صور ومناسبات'}</span><button type="button" class="x" data-act="open-album" style="color:var(--gold);font-weight:700">🖼️ فتح الألبوم ←</button></span>`)}${row('المشاركات', partText(id))}
+      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${lh ? '' : row('المدينة', esc(m.city))}${featOn('photo-album') ? row('ألبوم الصور', `<span style="display:inline-flex;align-items:center;gap:6px"><span>${tagCountText(id) || 'صور ومناسبات'}</span><button type="button" class="x" data-act="open-album" style="color:var(--gold);font-weight:700">🖼️ فتح الألبوم ←</button></span>`) : ''}${row('المشاركات', partText(id))}
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${featOn('photo-album') ? '<button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button>' : ''}<button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm">${featOn('photo-album') ? '<button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button>' : ''}<button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -832,7 +839,7 @@ function memberForm(m, parentId) {
     { type: 'raw', html: `<div class="pairrow"><label class="fl">الجنس<select name="gender"><option value="male"${(m?.gender || 'male') === 'male' ? ' selected' : ''}>ذكر</option><option value="female"${m?.gender === 'female' ? ' selected' : ''}>أنثى</option></select></label><label class="fl">الحالة<select name="alive"><option value="1"${m?.is_alive === false ? '' : ' selected'}>حي</option><option value="0"${m?.is_alive === false ? ' selected' : ''}>متوفى</option></select></label></div>` },
     { type: 'raw', html: hdateRow('bd', 'تاريخ الميلاد', m?.birth_date) },
     { type: 'raw', html: hdateRow('dd', 'تاريخ الوفاة', m?.death_date) },
-    { type: 'raw', html: `<div style="background:rgba(245,158,11,.06);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+    { type: 'raw', html: featOn('approx-dates') ? `<div style="background:rgba(245,158,11,.06);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
       <label class="fl" style="margin-bottom:0">
         صيغة التاريخ التقريبي للأجداد القدامى (نحو / قبل / بين عامين)
         <div class="pairrow" style="margin-top:4px">
@@ -840,7 +847,7 @@ function memberForm(m, parentId) {
           <input name="approx_death" type="text" placeholder="الوفاة: مثلاً: نحو 1380 هـ أو قبل 1400" value="${esc(m?.death_year_text || '')}" autocomplete="off">
         </div>
       </label>
-    </div>` },
+    </div>` : '' }, /* ميزة 8: حقلا التاريخ التقريبي يظهران فقط إن أظهر المالك الميزة من جدول الميزات */
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''),
     { type: 'raw', html: `<div class="pairrow"><label class="fl">الهاتف<input name="phone" type="tel" value="${esc(m?.phone ?? '')}" autocomplete="off"></label><label class="fl">الشارة<input name="badge" type="text" value="${esc(m?.achievement_badge ?? '')}" autocomplete="off"></label></div>` },
@@ -3509,9 +3516,12 @@ function renderFeat() {
   const nav = $('#feat');
   if (nav) {
     const list = FEAT.filter(([k]) => (S.featured || []).includes(k) && (k !== 'cards' || ['owner', 'editor', 'branch'].includes(S.role))); /* ann44 */
-    nav.hidden = !list.length;
-    nav.innerHTML = list.map(([k, label, sel]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${label}</button>`).join('');
-    nav.querySelectorAll('[data-feat-go]').forEach(b => b.onclick = () => { const t = $(FEAT.find(([k]) => k === b.dataset.featGo)[2]); if (t) t.click(); });
+    /* نظام الإخفاء: بطاقات الميزات المثبّتة (من الـ64) تُلحق ببطاقات الأقسام الأساسية — المجموع سقفه 6 */
+    const pins = (S.pinnedFeatures || []).filter(k => { const f = FEATURES.find(x => x.key === k); return f && f.btn && featOn(k) && featRoleOk(f); }).map(k => [k, FEATURES.find(x => x.key === k).name]);
+    const all = list.concat(pins);
+    nav.hidden = !all.length;
+    nav.innerHTML = all.map(([k, label]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${esc(label)}</button>`).join('');
+    nav.querySelectorAll('[data-feat-go]').forEach(b => b.onclick = () => { const t = FEAT.find(([k]) => k === b.dataset.featGo); if (t) { const el = $(t[2]); if (el) el.click(); } else openFeature(b.dataset.featGo); });
   }
   document.querySelectorAll('.feat-tg').forEach(s => {
     const on = (S.featured || []).includes(s.dataset.featTg);
@@ -3521,6 +3531,7 @@ function renderFeat() {
 }
 async function toggleFeat(key) {
   const cur = new Set(S.featured || []);
+  if (!cur.has(key) && pinTotal() >= 6) { toast('الشريط يتسع لست بطاقات فقط — ألغِ تثبيت بطاقة أولاً'); return; } /* سقف 6 بطاقات (أساسية + ميزات) */
   cur.has(key) ? cur.delete(key) : cur.add(key);
   S.featured = FEAT.map(([k]) => k).filter(k => cur.has(k));
   renderFeat();
@@ -3540,6 +3551,206 @@ function initFeatToggles() {
   });
   renderFeat();
 }
+
+/* ---------- نظام إخفاء الميزات + جدول المنبثقة + الشريط المثبّت (الجولة الخامسة) ---------- */
+/* أمر المالك 2026-11-24: كل الميزات الـ64 (الـ44 + الـ19 + بوابة النساء) مخفية افتراضياً، والمالك وحده
+   يظهرها من جدول منبثق (مجمّع حسب الفئة + بحث) بمفتاح مستقل لكل ميزة؛ والرئيسية تحمل فقط المثبّت
+   (شريط واحد حتى 6 بطاقات). التخزين خادمي (system_settings.visible_features / pinned_features)
+   عبر get_feature_flags / secure_set_feature_flags في 02_trial_additions.sql، مع احتياط localStorage. */
+const FEAT_CATS = [['backup', '💾 النسخ والأمان'], ['privacy', '🔒 الخصوصية والأعضاء'], ['data', '📋 البيانات والجودة'], ['charts', '📊 المخططات والعرض'], ['search', '🔍 البحث واللغات'], ['events', '🎉 المناسبات والخرائط'], ['heritage', '📜 التراث والقصص'], ['media', '🖼️ الصور والوثائق'], ['share', '🤝 التواصل والمشاركة'], ['council', '🏛️ المجلس والتقارير']];
+/* key: مفتاح ثابت | btn: زر القائمة (null = بلا زر: إعداد أو في الملف) | cat: الفئة | role: 'owner' = مالك فقط */
+const FEATURES = [
+  /* النسخ والأمان */
+  { key: 'daily-backup', btn: '#m-backups', cat: 'backup', role: 'owner', name: '💾 النسخ الاحتياطي التلقائي اليومي', desc: 'نسخة يومية من قاعدة البيانات مع إشعار للمالك' },
+  { key: 'snapshot-restore', btn: '#m-snap', cat: 'backup', role: 'owner', name: '📸 استعادة من لقطة', desc: 'استعادة الشجرة من لقطة سابقة مع تأكيد مزدوج' },
+  { key: 'owner-2fa', btn: '#m-settings', cat: 'backup', role: 'owner', name: '🔐 المصادقة الثنائية للمالك', desc: 'رمز PIN يحمي الإعدادات الحساسة' },
+  /* الخصوصية والأعضاء */
+  { key: 'living-privacy', btn: null, cat: 'privacy', kind: 'setting', name: '🙈 إخفاء الأحياء عن الزوار', desc: 'بيانات الأحياء (المدينة والكنية والنبذة والصورة) مخفية عن الزوار — مفعّلة افتراضياً' },
+  { key: 'approx-dates', btn: null, cat: 'privacy', kind: 'setting', name: '📅 التواريخ التقريبية', desc: '«نحو 1320 هـ» و«بين عامين» للأجداد القدامى في نموذج العضو' },
+  { key: 'this-is-me', btn: '#m-this-is-me', cat: 'privacy', name: '👤 زر «هذا أنا»', desc: 'حدّد موقعك في الشجرة لعرض أقاربك وتوسيطها عليك' },
+  { key: 'photo-album', btn: null, cat: 'privacy', kind: 'profile', name: '🖼️ ألبوم صور لكل عضو', desc: 'صور كل عضو مجمّعة في ألبومه (يُفتح من ملف العضو)' },
+  /* البيانات والجودة */
+  { key: 'data-quality', btn: '#m-data-quality', cat: 'data', name: '✅ لوحة جودة البيانات', desc: 'تنبيهات عن البيانات الناقصة أو المتناقضة في الشجرة' },
+  { key: 'date-conflicts', btn: '#m-data-quality', cat: 'data', name: '⚠️ كشف تناقض التواريخ', desc: 'تنبيه عند وفاة قبل الميلاد أو تواريخ مستحيلة' },
+  { key: 'completion-hints', btn: '#m-completion-hints', cat: 'data', name: '💡 تلميحات إكمال الشجرة', desc: 'اقتراحات لسد الفجوات في الشجرة' },
+  { key: 'csv-import', btn: '#m-csv-import', cat: 'data', name: '📥 استيراد جماعي من Excel/CSV', desc: 'إضافة أعضاء دفعة واحدة مع معاينة، بلا حذف' },
+  /* المخططات والعرض */
+  { key: 'alt-charts', btn: '#m-alt-charts', cat: 'charts', name: '📊 مخططات بديلة', desc: 'مروحة الأجداد والساعة الرملية والنسل' },
+  { key: 'network-graph', btn: '#m-network-graph', cat: 'charts', name: '🕸️ مخطط شبكة علاقات', desc: 'شبكة القرابة الكاملة في مخطط واحد' },
+  { key: 'anc-desc-filter', btn: '#m-anc-desc', cat: 'charts', name: '🎯 عرض أسلاف فقط / نسل فقط', desc: 'تصفية الشجرة على أسلاف شخص أو نسله' },
+  { key: 'member-directory', btn: '#m-member-directory', cat: 'charts', name: '📖 دليل أعضاء كامل', desc: 'قائمة كل الأعضاء مرتبة بالجيل والأبجدية' },
+  { key: 'branch-trees', btn: '#m-branch-trees', cat: 'charts', name: '🌿 أشجار منفصلة لكل فرع', desc: 'عرض فرع واحد مع إخفاء/إظهار الفروع' },
+  { key: 'reorder-tree', btn: '#m-reorder-tree', cat: 'charts', name: '↕️ إعادة ترتيب بالسحب والإفلات', desc: 'ترتيب الأبناء بالسحب (مالك/محرر/فرع)' },
+  { key: 'antique-map', btn: '#m-antique-map', cat: 'charts', name: '🗺️ طبقة خرائط تاريخية', desc: 'خرائط قديمة فوق الخريطة الحالية' },
+  { key: '3d-view', btn: '#m-3d-view', cat: 'charts', name: '🌌 العرض السينمائي ثلاثي الأبعاد', desc: 'المشجر السينمائي ثلاثي الأبعاد' },
+  { key: 'family-display', btn: '#m-kiosk', cat: 'charts', name: '📺 وضع العرض العائلي', desc: 'عرض تلقائي للشاشات والاجتماعات' },
+  { key: 'kin-quiz', btn: '#m-game', cat: 'charts', name: '🎮 لعبة «اعرف قريبك»', desc: 'لعبة أسئلة عن أقاربك' },
+  { key: 'kids-mode', btn: '#m-kids-mode', cat: 'charts', name: '🧒 وضع الأطفال', desc: 'عرض مبسّط للأطفال' },
+  /* البحث واللغات */
+  { key: 'lang-toggle', btn: '#m-lang-toggle', cat: 'search', name: '🌐 واجهة عربي / إنجليزي', desc: 'تبديل لغة الواجهة' },
+  { key: 'adv-search', btn: '#m-adv-search', cat: 'search', name: '🔎 بحث متقدم بفلاتر', desc: 'بحث بالجيل والمدينة والحالة مع بدائل إملائية' },
+  { key: 'voice-search', btn: '#m-voice-search', cat: 'search', name: '🎙️ بحث صوتي', desc: 'ابحث بالصوت عن أي اسم' },
+  { key: 'ai-kin', btn: '#m-ai-kin', cat: 'search', name: '🤖 مساعد الأنساب', desc: 'مساعد ذكاء اصطناعي يجيب عن أسئلة النسب' },
+  /* المناسبات والخرائط */
+  { key: 'events-map', btn: '#m-events-map', cat: 'events', name: '📍 خريطة مناسبات العائلة', desc: 'أماكن المناسبات على الخريطة مع فلتر زمني' },
+  { key: 'branch-alerts', btn: '#m-branch-alerts', cat: 'events', name: '🔔 تنبيهات فرعك', desc: 'تنبيه عند تعديل فرعك أو إضافة قريب جديد' },
+  { key: 'anniversaries', btn: '#m-anniversaries', cat: 'events', name: '💍 تذكير بذكرى الزواج', desc: 'تذكير سنوي بذكرى زواج أفراد العائلة' },
+  { key: 'events-reminders', btn: '#m-events', cat: 'events', name: '🎉 تذكير المناسبات والعد التنازلي', desc: 'مناسبات قادمة مع عد تنازلي' },
+  { key: 'annual-calendar', btn: '#m-calendar', cat: 'events', name: '🗓️ التقويم السنوي', desc: 'تقويم العائلة هجري وميلادي' },
+  { key: 'dua-deceased', btn: '#m-dua-deceased', cat: 'events', name: '🤲 تذكير الدعاء للمتوفين', desc: 'تذكير بالدعاء لمن رحلوا' },
+  { key: 'map-spread', btn: '#m-cities', cat: 'events', name: '🗺️ خريطة انتشار العائلة', desc: 'انتشار الأعضاء على خريطة المدن' },
+  /* التراث والقصص */
+  { key: 'surname-origin', btn: '#m-surname-origin', cat: 'heritage', name: '🏺 أصل لقب «آل مطارد»', desc: 'صفحة تاريخ اللقب والجذور' },
+  { key: 'life-story', btn: '#m-life-story', cat: 'heritage', name: '📖 صفحة «قصة حياة»', desc: 'محطات حياة كل عضو من بياناته المسجلة' },
+  { key: 'member-stories', btn: '#m-member-stories', cat: 'heritage', name: '📜 قصص مكتوبة', desc: 'قصص أفراد العائلة مربوطة بأصحابها' },
+  { key: 'rules-biographies', btn: '#m-rules-biographies', cat: 'heritage', name: '📜 قواعد العائلة وتراجم الأعلام', desc: 'ميثاق العائلة وتراجم أعلامها' },
+  { key: 'timeline', btn: '#m-timeline', cat: 'heritage', name: '⏳ الخط الزمني التفاعلي', desc: 'أحداث العائلة على خط زمني' },
+  { key: 'audio-stories', btn: '#m-audio-stories', cat: 'heritage', name: '🎙️ مكتبة القصص الصوتية', desc: 'قصص العائلة مسموعة' },
+  { key: 'doc-archive', btn: '#m-archive', cat: 'heritage', name: '🗄️ أرشيف الوثائق', desc: 'وثائق العائلة القديمة محفوظة' },
+  { key: 'family-book', btn: '#m-family-book', cat: 'heritage', name: '📒 دفتر العائلة', desc: 'دفتر العائلة: المواليد والمناسبات' },
+  { key: 'cemeteries', btn: '#m-cemeteries', cat: 'heritage', name: '🪦 قسم القبور', desc: 'مواقع قبور أفراد العائلة فقط' },
+  /* الصور والوثائق */
+  { key: 'ai-photo-restore', btn: '#m-ai-photo-restore', cat: 'media', name: '✨ ترميم وتلوين الصور القديمة', desc: 'ترميم الصور القديمة بالذكاء الاصطناعي' },
+  { key: 'photo-analysis', btn: '#m-photo-analysis', cat: 'media', name: '🔬 تحليل صور بالذكاء الاصطناعي', desc: 'تحليل الصور واستخراج تفاصيلها' },
+  { key: 'exif-map', btn: '#m-exif-map', cat: 'media', name: '📷 بيانات EXIF والموقع', desc: 'مواقع الصور من بياناتها على الخريطة' },
+  { key: 'transcribe', btn: '#m-transcribe', cat: 'media', name: '✍️ نسخ الوثائق والتسجيلات', desc: 'تحويل المخطوطات والتسجيلات إلى نص قابل للبحث' },
+  /* التواصل والمشاركة */
+  { key: 'help-requests', btn: '#m-help-requests', cat: 'share', name: '🆘 طلبات مساعدة للأقارب', desc: 'اطلب مساعدة من أقاربك أو قدّمها' },
+  { key: 'qr-share', btn: '#m-qr-share', cat: 'share', name: '📱 مشاركة QR مع كود', desc: 'رمز QR للدخول مع كود العائلة' },
+  { key: 'personal-invites', btn: '#m-personal-invites', cat: 'share', name: '💌 روابط دعوة شخصية', desc: 'رابط دعوة يحمل اسم المدعو' },
+  { key: 'family-news', btn: '#m-family-news', cat: 'share', name: '📰 لوحة أخبار العائلة', desc: 'أخبار وإعلانات العائلة في لوحة واحدة' },
+  { key: 'family-vote', btn: '#m-family-vote', cat: 'share', name: '🗳️ تصويت العائلة', desc: 'استطلاعات وتصويت لأفراد العائلة' },
+  { key: 'careers-dir', btn: '#m-careers-dir', cat: 'share', name: '💼 دليل مهن وأعمال', desc: 'مهن وأعمال أفراد العائلة' },
+  { key: 'time-capsule', btn: '#m-time-capsule', cat: 'share', name: '⏳ رسائل موقوتة', desc: 'رسائل من كبار العائلة تُفتح في وقتها' },
+  { key: 'meeting-invites', btn: '#m-invites', cat: 'share', name: '📩 دعوات الاجتماعات مع RSVP', desc: 'دعوات الاجتماعات وتأكيد الحضور' },
+  { key: 'wa-announcements', btn: '#m-wa-announcements', cat: 'share', name: '💬 إشعارات واتساب', desc: 'إعلانات العائلة عبر واتساب' },
+  { key: 'women-portal', btn: '#m-women-portal', cat: 'share', name: '🚺 بوابة النساء', desc: 'بوابة النساء بأكواد فردية' },
+  { key: 'digital-card', btn: '#m-lcard', cat: 'share', name: '📇 بطاقة النسب الرقمية', desc: 'بطاقتك الرقمية في العائلة' },
+  /* المجلس والتقارير */
+  { key: 'council-decrees', btn: '#m-council-decrees', cat: 'council', name: '🏛️ صفحة مجلس العائلة', desc: 'قرارات ومحاضر مجلس العائلة' },
+  { key: 'family-fund', btn: '#m-family-fund', cat: 'council', name: '💰 صندوق العائلة', desc: 'مساهمات الصندوق وحملاته' },
+  { key: 'blank-tree', btn: '#m-blank-tree', cat: 'council', name: '🖨️ شجرة فارغة للطباعة', desc: 'شجرة فارغة 3–5 أجيال للطباعة والتعبئة' },
+  { key: 'ready-reports', btn: '#m-ready-reports', cat: 'council', name: '📑 تقارير جاهزة', desc: 'تقارير جاهزة عن الشجرة والأعضاء' },
+  { key: 'export-tree-media', btn: '#m-export-tree-media', cat: 'council', name: '🖼️ تصدير الشجرة PNG/SVG', desc: 'تصدير مخطط الشجرة كصورة أو ملف SVG' },
+  { key: 'pdf-export', btn: '#m-pdf', cat: 'council', name: '📄 تصدير PDF', desc: 'تصدير الشجرة أو التقارير كملف PDF' },
+  { key: 'fullstats', btn: '#m-fullstats', cat: 'council', name: '📊 الإحصائيات', desc: 'إحصائيات الشجرة: الأجيال والأعداد والمدن' }
+];
+const featByKey = k => FEATURES.find(f => f.key === k);
+const featRoleOk = f => f.role !== 'owner' || S.role === 'owner';
+const pinTotal = () => (S.featured || []).length + (S.pinnedFeatures || []).length;
+const LS_VIS = 'almatarid_visible_features', LS_PIN = 'almatarid_pinned_features';
+async function loadFeatureFlags() {
+  /* في DEMO يعمل load() متزامناً أثناء تقييم السكربت وقبل الوصول لتعريف FEATURES — انتظار microtask
+     واحد يؤجل تطبيق الأعلام إلى ما بعد اكتمال التقييم (في الإنتاج load() ينتظر RPC أصلاً فلا أثر) */
+  await Promise.resolve();
+  let v = null, p = null;
+  if (!CFG.DEMO) { try { const r = await rpc('get_feature_flags', {}); if (r && r.success !== false) { v = r.visible; p = r.pinned; } } catch (_) { /* SQL التجريبي لم يُشغَّل بعد — احتياط localStorage */ } }
+  if (v == null) { try { v = JSON.parse(localStorage.getItem(LS_VIS) || 'null'); p = JSON.parse(localStorage.getItem(LS_PIN) || 'null'); } catch (_) { } }
+  if (Array.isArray(v)) S.visibleFeatures = v.filter(k => featByKey(k));
+  if (Array.isArray(p)) S.pinnedFeatures = p.filter(k => { const f = featByKey(k); return f && f.btn; });
+  applyFeatureVisibility(); renderFeat();
+}
+async function saveFeatureFlags() {
+  try { localStorage.setItem(LS_VIS, JSON.stringify(S.visibleFeatures)); localStorage.setItem(LS_PIN, JSON.stringify(S.pinnedFeatures)); } catch (_) { }
+  if (CFG.DEMO) return;
+  try { await op('secure_set_feature_flags', { p_passcode: S.code, p_visible: S.visibleFeatures, p_pinned: S.pinnedFeatures }, () => { }); }
+  catch (_) { toast('حُفظ محلياً فقط — شغّل database/02_trial_additions.sql في Supabase'); }
+}
+/* تطبيق الإخفاء على أزرار القائمة + زرّي الترويسة المرتبطين بميزتين (التنبيهات 21، اللغة 17).
+   لا يُظهر زراً أخفاه applyRole حسب الدور أبداً — الإخفاء هنا إضافي فقط. */
+function applyFeatureVisibility() {
+  /* زر واحد قد يخدم ميزتين (m-data-quality للميزتين 5 و6) — يظهر إن أُظهرت أيٌّ منهما */
+  const byBtn = new Map();
+  FEATURES.forEach(f => { if (!f.btn) return; if (!byBtn.has(f.btn)) byBtn.set(f.btn, []); byBtn.get(f.btn).push(f); });
+  byBtn.forEach((fs, sel) => {
+    const b = $(sel); if (!b) return;
+    /* featRoleOk يطابق قفل الدور في applyRole (المالك فقط لـ m-backups/m-snap/m-settings) فلا يُظهر زراً مقفلاً حسب الدور */
+    b.hidden = !fs.some(f => featOn(f.key) && featRoleOk(f));
+  });
+  const ba = $('#btn-alerts'); if (ba) ba.hidden = !featOn('branch-alerts');
+  const bl = $('#btn-lang'); if (bl) bl.hidden = !featOn('lang-toggle');
+}
+function openFeature(key) {
+  const f = featByKey(key); if (!f) return;
+  if (!featOn(key)) { toast('هذه الميزة مخفية — أظهرها أولاً من جدول الميزات'); return; }
+  const p = $('#profile'); if (p && p.open) p.close(); /* إغلاق الجدول ليرى المستخدم الميزة */
+  if (f.btn) { const b = $(f.btn); if (b) { b.click(); return; } }
+  if (f.kind === 'profile') { const r = S.roots && S.roots[0]; if (r) profile(r.id); return; }
+  toast(f.desc);
+}
+async function toggleFeatureVisibility(key) {
+  if (S.role !== 'owner') { toast('الإظهار والإخفاء للمالك فقط'); return; }
+  const f = featByKey(key); if (!f) return;
+  const vis = new Set(S.visibleFeatures || []);
+  vis.has(key) ? vis.delete(key) : vis.add(key);
+  if (!vis.has(key)) S.pinnedFeatures = (S.pinnedFeatures || []).filter(k => k !== key); /* إخفاء ميزة مثبّتة يلغي تثبيتها */
+  S.visibleFeatures = FEATURES.map(x => x.key).filter(k => vis.has(k));
+  applyFeatureVisibility(); renderFeat(); openFeaturesTable();
+  await saveFeatureFlags();
+  toast(vis.has(key) ? 'أُظهرت الميزة: ' + f.name : 'أُخفيت الميزة: ' + f.name);
+}
+async function toggleFeaturePin(key) {
+  if (S.role !== 'owner') { toast('التثبيت للمالك فقط'); return; }
+  const f = featByKey(key); if (!f || !f.btn) return;
+  if (!featOn(key)) { toast('أظهر الميزة أولاً لتثبيتها'); return; }
+  const pins = new Set(S.pinnedFeatures || []);
+  if (!pins.has(key) && pinTotal() >= 6) { toast('الشريط يتسع لست بطاقات فقط — ألغِ تثبيت بطاقة أولاً'); return; }
+  pins.has(key) ? pins.delete(key) : pins.add(key);
+  S.pinnedFeatures = FEATURES.map(x => x.key).filter(k => pins.has(k));
+  renderFeat(); openFeaturesTable();
+  await saveFeatureFlags();
+  toast(pins.has(key) ? 'ثُبّتت في الشريط: ' + f.name : 'أُلغي تثبيتها من الشريط');
+}
+/* جدول الميزات المنبثق: مجمّع حسب الفئة + بحث أعلى الصفحة؛ الصف قابل للنقر لفتح الميزة؛
+   للمالك مفتاح إظهار/إخفاء + زر تثبيت في كل صف — الجدول نفسه لوحة تحكم الإظهار. */
+function openFeaturesTable() {
+  const isOwner = S.role === 'owner';
+  const prevQ = document.getElementById('feat-search')?.value || ''; /* حفظ نص البحث عند إعادة رسم الجدول بعد مفتاح */
+  const rows = f => {
+    const vis = featOn(f.key), pinned = (S.pinnedFeatures || []).includes(f.key);
+    const kindBadge = f.kind === 'setting' ? '<span class="ftag">إعداد</span>' : f.kind === 'profile' ? '<span class="ftag">في الملف</span>' : '';
+    const visBtn = isOwner ? `<button type="button" class="ftg ${vis ? 'on' : ''}" data-vis="${f.key}" title="${vis ? 'ظاهرة — اضغط للإخفاء' : 'مخفية — اضغط للإظهار'}">${vis ? '👁️ ظاهرة' : '🚫 مخفية'}</button>` : (vis ? '<span class="ftag on">ظاهرة</span>' : '');
+    const pinBtn = isOwner && f.btn ? `<button type="button" class="ftg ${pinned ? 'on' : ''}" data-pin="${f.key}" title="${pinned ? 'مثبّتة في الشريط — اضغط للإلغاء' : 'تثبيت في الشريط'}">${pinned ? '📌 مثبّتة' : '☆ تثبيت'}</button>` : '';
+    return `<tr data-fkey="${f.key}" data-ftext="${esc(stripKin(normAr(f.name + ' ' + f.desc)))}"><td class="fname" data-open="${f.key}"><b>${esc(f.name)}</b><small>${esc(f.desc)}</small>${kindBadge}</td><td class="fctl">${visBtn}${pinBtn}</td></tr>`;
+  };
+  const cats = FEAT_CATS.map(([ck, cl]) => {
+    const list = FEATURES.filter(f => f.cat === ck && (isOwner || (featOn(f.key) && featRoleOk(f))));
+    if (!list.length) return '';
+    return `<div class="fcat" data-cat="${ck}"><h4>${esc(cl)} <span class="fcnt">(${list.length})</span></h4><table class="ftbl"><tbody>${list.map(rows).join('')}</tbody></table></div>`;
+  }).join('');
+  const total = FEATURES.filter(f => isOwner || (featOn(f.key) && featRoleOk(f))).length;
+  showInfo(`<style>
+    .ftbl{width:100%;border-collapse:collapse;margin:0 0 10px}
+    .ftbl td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+    .ftbl tr:hover td{background:rgba(245,158,11,.05)}
+    .ftbl .fname{cursor:pointer}
+    .ftbl .fname b{display:block;font-size:.95rem}
+    .ftbl .fname small{display:block;color:var(--mut);font-size:.82rem;margin-top:2px}
+    .ftbl .fctl{white-space:nowrap;text-align:left;width:150px}
+    .ftg{border:1px solid var(--line);background:var(--bg2);border-radius:8px;padding:4px 8px;margin-inline-start:4px;cursor:pointer;font-size:.8rem}
+    .ftg.on{border-color:var(--gold);color:var(--gold)}
+    .ftag{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:.72rem;color:var(--mut);margin-top:4px}
+    .ftag.on{color:var(--gold);border-color:var(--gold)}
+    .fcat h4{margin:14px 0 4px;color:var(--gold)}
+    .fcnt{color:var(--mut);font-size:.8rem}
+    #feat-search{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);color:var(--tx);font-size:1rem;margin:6px 0 4px}
+    @media (max-width:640px){.ftbl,.ftbl tbody,.ftbl tr,.ftbl td{display:block;width:100%}.ftbl tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;padding:4px 8px}.ftbl td{border-bottom:none}.ftbl .fctl{width:auto;text-align:right;padding-top:0}}
+  </style>
+  <h2>✨ جدول الميزات</h2><p class="sub">${isOwner ? 'اضغط على اسم الميزة لفتحها، وعلى «ظاهرة/مخفية» لإظهارها أو إخفائها، وعلى «تثبيت» لإظهارها في الشريط أعلى الصفحة (حتى 6 بطاقات).' : 'الميزات التي أظهرها المالك — اضغط على اسم الميزة لفتحها.'} · ${total} من ${FEATURES.length} ميزة</p>
+  <input id="feat-search" type="search" placeholder="🔍 ابحث عن ميزة…" autocomplete="off">
+  <div id="feat-list">${cats || '<p class="sub">لا ميزات ظاهرة بعد.</p>'}</div>`);
+  const body = $('#profile-body'), inp = $('#feat-search');
+  if (inp) inp.oninput = () => {
+    const q = stripKin(normAr(inp.value || ''));
+    body.querySelectorAll('tr[data-fkey]').forEach(tr => { tr.style.display = !q || (tr.dataset.ftext || '').includes(q) ? '' : 'none'; });
+    body.querySelectorAll('.fcat').forEach(c => { c.style.display = [...c.querySelectorAll('tr[data-fkey]')].some(tr => tr.style.display !== 'none') ? '' : 'none'; });
+  };
+  if (inp && prevQ) { inp.value = prevQ; inp.oninput(); }
+  body.querySelectorAll('[data-open]').forEach(td => td.onclick = () => openFeature(td.dataset.open));
+  body.querySelectorAll('[data-vis]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFeatureVisibility(b.dataset.vis); });
+  body.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFeaturePin(b.dataset.pin); });
+}
+{ const bf = $('#btn-features'); if (bf) bf.onclick = () => openFeaturesTable(); const mf = $('#m-features'); if (mf) mf.onclick = () => openFeaturesTable(); }
 
 /* ---------- ann66: الشريط السفلي بالجوال + لوحة الملف ---------- */
 /* نقل قائمة الأقسام نفسها (details.more) بين الترويسة والشريط السفلي حسب العرض —
