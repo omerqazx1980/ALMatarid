@@ -4492,3 +4492,111 @@ function openFamilyBook(activeTab = 'births') {
 }
 
 $('#m-family-book').onclick = menuClose(() => openFamilyBook());
+
+/* ---------- 57) تذكير بالدعاء للمتوفين في ذكرى وفاتهم (فرع تجربة) ---------- */
+function renderDuaCards(list, sampleDua) {
+  if (!list.length) {
+    return '<p class="sub" style="text-align:center;padding:20px;grid-column:1/-1">لا توجد نتائج مطابقة.</p>';
+  }
+
+  return list.map(m => {
+    const chain = getAncestryChain(m);
+    const chainNames = chain.map(c => c.first || c.full_name.split(' ')[0]).join(' بن ');
+    const dDate = m.death_date ? datePair(m.death_date) : (m.death_year_text ? `${m.death_year_text} هـ (تقريباً)` : 'رحمه الله');
+    const duaText = sampleDua(m.full_name);
+
+    return `
+      <div class="dua-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="dua-card-title">${nameBtn(m)}</div>
+          <span class="bd" style="background:rgba(52,211,153,.15);border:1px solid #34d399;color:#34d399;padding:2px 8px;border-radius:99px;font-size:.7rem">الجيل ${gen(m)}</span>
+        </div>
+        <div class="dua-card-chain">
+          <b>النسب:</b> ${esc(chainNames)}
+        </div>
+        <div style="font-size:.76rem;color:var(--mut)">
+          📅 تاريخ/سنة الوفاة: <b>${esc(dDate)}</b> ${m.city ? `· 📍 ${esc(m.city)}` : ''}
+        </div>
+        <div class="dua-text-box">
+          ${esc(duaText)}
+        </div>
+        <button type="button" class="dua-btn-wa" data-mid="${esc(m.id)}">
+          💬 إرسال تذكير بالدعاء للواتساب
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+function bindDuaWaButtons(list, sampleDua) {
+  document.querySelectorAll('.dua-btn-wa').forEach(btn => {
+    btn.onclick = () => {
+      const m = list.find(x => x.id === btn.dataset.mid);
+      if (!m) return;
+      const dDate = m.death_date ? datePair(m.death_date) : (m.death_year_text ? `${m.death_year_text} هـ` : '');
+      const txt = `🕊️ *تذكير بالدعاء لفقيد أسرة آل مطارد (بنو عمرو)* 🕊️\n\n` +
+        `👤 *المتوفى:* ${m.full_name} (رحمه الله)\n` +
+        (dDate ? `📅 *سنة/تاريخ الوفاة:* ${dDate}\n` : '') +
+        `🤲 *دعاء:* «اللهم اغفر له وارحمه وعافه واعف عنه، وأكرم نزله ووسّع مدخله، واجعل قبره روضة من رياض الجنة وأسكنه الفردوس الأعلى من الجنة»\n\n` +
+        `نسألكم الدعاء له بالرحمة والمغفرة.\n` +
+        `🔗 شجرة العائلة: https://omerqazx1980.github.io/ALMatarid/`;
+
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
+    };
+  });
+}
+
+function openDuaMemorial() {
+  const deceased = S.members.filter(m => m.is_alive === false);
+  const now = new Date();
+  const curHijri = gregToHijri(now);
+
+  deceased.sort((a, b) => {
+    const ya = parseInt(a.death_year_text || (a.death_date ? a.death_date.slice(0, 4) : 0), 10) || 0;
+    const yb = parseInt(b.death_year_text || (b.death_date ? b.death_date.slice(0, 4) : 0), 10) || 0;
+    return ya - yb;
+  });
+
+  const sampleDua = (name) => `«اللهم اغفر لـ (${name}) وارحمه وعافه واعف عنه، وأكرم نزله ووسّع مدخله، واغسله بالماء والثلج والبرد، ونقّه من الخطايا كما ينقى الثوب الأبيض من الدنس، وأدخله الجنة وأعذه من عذاب القبر ومن عذاب النار... اللهم آمين»`;
+
+  const html = `
+    <div class="dua-wrap">
+      <div class="dua-banner">
+        <div style="font-size:1.6rem;margin-bottom:4px">🤲</div>
+        <h2 style="font-size:1.3rem;margin:0 0 6px 0;font-weight:800">«إِذَا مَاتَ ابْنُ آدَمَ انْقَطَعَ عَمَلُهُ إِلَّا مِنْ ثَلَاثٍ... أَوْ وَلَدٍ صَالِحٍ يَدْعُو لَهُ»</h2>
+        <p style="font-size:.85rem;margin:0;line-height:1.6;opacity:.95">
+          تذكير بالدعاء والصدقة والبر لأموات وأجداد أسرة آل مطارد - بنو عمرو الذين سبقونا بالإيمان<br>
+          الشهر الهجري الحالي: <b>${HJ_MONTHS[curHijri.m - 1]} ${curHijri.y} هـ</b>
+        </p>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin:4px 0">
+        <input type="search" id="dua-q" placeholder="🔍 ابحث بالاسم عن قريب أو جد متوفى…" style="flex:1;padding:6px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.82rem">
+      </div>
+
+      <div class="dua-grid" id="dua-grid-box">
+        ${renderDuaCards(deceased, sampleDua)}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const grid = $('#dua-grid-box');
+  const qInp = $('#dua-q');
+
+  const updateSearch = () => {
+    const q = (qInp.value || '').trim().toLowerCase();
+    const filtered = deceased.filter(m => {
+      if (!q) return true;
+      return (m.full_name || '').toLowerCase().includes(q) || (m.death_year_text || '').includes(q);
+    });
+    grid.innerHTML = renderDuaCards(filtered, sampleDua);
+    bindDuaWaButtons(filtered, sampleDua);
+  };
+
+  qInp.oninput = updateSearch;
+  bindDuaWaButtons(deceased, sampleDua);
+}
+
+$('#m-dua-deceased').onclick = menuClose(() => openDuaMemorial());

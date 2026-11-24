@@ -887,3 +887,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .fbook-table th{background:rgba(0,0,0,.3);color:var(--gold);padding:10px;border-bottom:1px solid var(--line);font-weight:700;white-space:nowrap}
 .fbook-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:#cbd5e1}
 .fbook-table tr:hover td{background:rgba(245,158,11,.05)}
+
+/* ---------- 57) تذكير بالدعاء للمتوفين (فرع تجربة) ---------- */
+.dua-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.dua-banner{background:linear-gradient(135deg,#064e3b,#065f46);border:1.5px solid #34d399;border-radius:12px;padding:16px;text-align:center;color:#ecfdf5;box-shadow:0 8px 24px rgba(6,78,59,.3)}
+.dua-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;margin-top:6px}
+.dua-card{background:linear-gradient(145deg,#0d1527,#16233b);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 6px 20px rgba(0,0,0,.4);position:relative}
+.dua-card::before{content:'';position:absolute;inset:4px;border:1px solid rgba(52,211,153,.15);border-radius:8px;pointer-events:none}
+.dua-card-title{font-size:1.05rem;font-weight:800;color:#6ee7b7}
+.dua-card-chain{font-size:.76rem;color:#cbd5e1;line-height:1.6;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px}
+.dua-text-box{font-size:.82rem;color:#d1fae5;line-height:1.7;background:rgba(6,78,59,.25);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:10px;font-style:italic}
+.dua-btn-wa{background:#059669;color:#fff;border-radius:8px;padding:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:.8rem;border:0}
