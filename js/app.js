@@ -431,16 +431,120 @@ function render(fitView) {
 $('#v-graph').onclick = () => { S.view = 'graph'; render(true); };
 $('#v-list').onclick = () => { S.view = 'list'; render(); };
 const norm = s => String(s ?? '').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
-$('#q').addEventListener('input', e => {
-  const q = stripKin(norm(e.target.value));
+S.advFilter = {
+  branchId: '',
+  city: '',
+  gen: '',
+  aliveStatus: 'all'
+};
+
+function hasActiveFilter() {
+  const f = S.advFilter;
+  return !!(f && (f.branchId || f.city || f.gen || (f.aliveStatus && f.aliveStatus !== 'all')));
+}
+
+function getArabicSpellingVariants(str) {
+  if (!str) return [];
+  const s = norm(str);
+  const variants = new Set([s]);
+
+  if (s.includes('عبد الله')) variants.add(s.replace(/عبد الله/g, 'عبدالله'));
+  if (s.includes('عبدالله')) variants.add(s.replace(/عبدالله/g, 'عبد الله'));
+  if (s.includes('بن ')) variants.add(s.replace(/بن /g, 'ابن '));
+  if (s.includes('ابن ')) variants.add(s.replace(/ابن /g, 'بن '));
+  if (s.includes('علي')) variants.add(s.replace(/علي/g, 'على'));
+  if (s.includes('على')) variants.add(s.replace(/على/g, 'علي'));
+  if (s.includes('يحيى')) variants.add(s.replace(/يحيى/g, 'يحيي'));
+  if (s.includes('ابراهيم')) variants.add(s.replace(/ابراهيم/g, 'إبراهيم'));
+  if (s.includes('اسماعيل')) variants.add(s.replace(/اسماعيل/g, 'إسماعيل'));
+
+  return Array.from(variants);
+}
+
+function matchesSearchAndFilter(m, query, filter) {
+  if (m.name_masked) return false;
+
+  if (filter?.aliveStatus === 'alive' && m.is_alive === false) return false;
+  if (filter?.aliveStatus === 'deceased' && m.is_alive !== false) return false;
+  if (filter?.gen && String(gen(m)) !== String(filter.gen)) return false;
+  if (filter?.city && (m.city || '').trim() !== filter.city.trim()) return false;
+  if (filter?.branchId && !underRoot(m, filter.branchId) && m.id !== filter.branchId) return false;
+
+  if (query && query.trim()) {
+    const q = stripKin(norm(query));
+    const variants = getArabicSpellingVariants(q);
+    const mNormName = stripKin(norm(m.full_name || ''));
+    const mNormNick = stripKin(norm(m.nickname || ''));
+
+    let matched = variants.some(v => mNormName.includes(v) || mNormNick.includes(v));
+    if (!matched) {
+      const tokens = q.split(' ').filter(Boolean);
+      const nameTokens = mNormName.split(' ');
+      matched = tokens.every(t => nameTokens.some(nt => nt.includes(t) || t.includes(nt)));
+    }
+    if (!matched) return false;
+  }
+
+  return true;
+}
+
+function executeSearchAndFilter() {
+  const qVal = $('#q')?.value || '';
+  const q = stripKin(norm(qVal));
+  const hasFilter = hasActiveFilter();
   S.curId = null;
-  if (!q) { if (S.saved) S.open = S.saved; S.saved = S.hit = null; return render(true); }
+
+  const qFilterBtn = $('#q-filter');
+  if (qFilterBtn) qFilterBtn.classList.toggle('active', hasFilter);
+
+  const activeBar = $('#adv-search-active-bar');
+  if (activeBar) {
+    if (hasFilter) {
+      const parts = [];
+      if (S.advFilter.branchId) parts.push(`الفرع: ${S.byId.get(S.advFilter.branchId)?.full_name || ''}`);
+      if (S.advFilter.city) parts.push(`المدينة: ${S.advFilter.city}`);
+      if (S.advFilter.gen) parts.push(`الجيل: ${S.advFilter.gen}`);
+      if (S.advFilter.aliveStatus === 'alive') parts.push('الأحياء فقط');
+      if (S.advFilter.aliveStatus === 'deceased') parts.push('المتوفون رحمهم الله');
+
+      activeBar.innerHTML = `
+        <span>⚙️ تصفية نشطة: <b>${parts.join(' · ')}</b></span>
+        <button type="button" id="adv-clear-filters" style="background:#ef4444;color:#fff;border:none;border-radius:12px;padding:2px 8px;font-size:.72rem;cursor:pointer;margin-right:auto">✕ مسح التصفية</button>
+      `;
+      activeBar.style.display = 'flex';
+      const clrBtn = $('#adv-clear-filters');
+      if (clrBtn) {
+        clrBtn.onclick = () => {
+          S.advFilter = { branchId: '', city: '', gen: '', aliveStatus: 'all' };
+          executeSearchAndFilter();
+        };
+      }
+    } else {
+      activeBar.style.display = 'none';
+    }
+  }
+
+  if (!q && !hasFilter) {
+    if (S.saved) S.open = S.saved;
+    S.saved = S.hit = null;
+    return render(true);
+  }
+
   if (!S.saved) S.saved = new Set(S.open);
-  S.hit = new Set(S.members.filter(m => !m.name_masked && (stripKin(norm(m.full_name)).includes(q) || stripKin(norm(m.nickname)).includes(q))).map(m => m.id));
-  S.open = new Set();  // تُفتح آباء النتائج فقط، وتبقى أزرار الطي والفتح تعمل
-  for (const id of S.hit) for (let a = S.byId.get(S.byId.get(id)?.father_id), i = 0; a && i < 30; a = S.byId.get(a.father_id), i++) S.open.add(a.id);
+
+  const matched = S.members.filter(m => matchesSearchAndFilter(m, qVal, S.advFilter));
+  S.hit = new Set(matched.map(m => m.id));
+
+  S.open = new Set();
+  for (const id of S.hit) {
+    for (let a = S.byId.get(S.byId.get(id)?.father_id), i = 0; a && i < 30; a = S.byId.get(a.father_id), i++) {
+      S.open.add(a.id);
+    }
+  }
   render('hit');
-});
+}
+
+$('#q').addEventListener('input', executeSearchAndFilter);
 function goHit(i) {  // الانتقال إلى نتيجة محددة (Enter للتالية، Shift+Enter للسابقة)
   const n = S.order.length; if (!n) return;
   S.curId = S.order[(i % n + n) % n];
@@ -7992,3 +8096,159 @@ if (mLangToggle) mLangToggle.onclick = menuClose(() => toggleLanguage());
 applyLanguage();
 
 setTimeout(updateBranchVisibilityBar, 300);
+
+/* ============================================================
+   74) نافذة البحث المتقدم والتصفية مع بدائل إملائية
+   ============================================================ */
+function openAdvancedSearchModal() {
+  const cities = [...new Set(S.members.map(m => m.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  const branches = getMajorBranches ? getMajorBranches() : [];
+  const maxGen = S.members.reduce((max, m) => Math.max(max, gen(m)), 1);
+  const gens = Array.from({ length: maxGen }, (_, i) => i + 1);
+
+  const f = S.advFilter || { branchId: '', city: '', gen: '', aliveStatus: 'all' };
+
+  const html = `
+    <div style="max-width:540px">
+      <div class="fstats-head">
+        <h2>🔍 البحث المتقدم وتصفية شجرة العائلة</h2>
+        <p class="sub">تصفية دقيقة حسب الفرع والمدينة والجيل والحالة مع دعم البدائل الإملائية</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;margin:14px 0">
+        <div>
+          <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">الاسم أو اللقب (مع دعم البدائل الإملائية):</label>
+          <input type="text" id="adv-q-input" value="${esc($('#q')?.value || '')}" placeholder="اكتب اسماً للبحث (مثل: عبدالله، إبراهيم، علي...)" style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.88rem;box-sizing:border-box">
+          <div id="adv-spell-hints" style="margin-top:6px;font-size:.75rem;color:var(--mut)"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">فرع العائلة:</label>
+            <select id="adv-branch-sel" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.82rem">
+              <option value="">جميع الفروع</option>
+              ${branches.map(b => `
+                <option value="${b.id}" ${f.branchId === b.id ? 'selected' : ''}>${esc(b.name)}</option>
+              `).join('')}
+            </select>
+          </div>
+
+          <div>
+            <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">المدينة / الإقامة:</label>
+            <select id="adv-city-sel" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.82rem">
+              <option value="">جميع المدن</option>
+              ${cities.map(c => `
+                <option value="${c}" ${f.city === c ? 'selected' : ''}>📍 ${esc(c)}</option>
+              `).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">الجيل:</label>
+            <select id="adv-gen-sel" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.82rem">
+              <option value="">جميع الأجيال</option>
+              ${gens.map(g => `
+                <option value="${g}" ${String(f.gen) === String(g) ? 'selected' : ''}>الجيل ${g}</option>
+              `).join('')}
+            </select>
+          </div>
+
+          <div>
+            <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">الحالة:</label>
+            <select id="adv-status-sel" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.82rem">
+              <option value="all" ${f.aliveStatus === 'all' ? 'selected' : ''}>الجميع (أحياء ومتوفون)</option>
+              <option value="alive" ${f.aliveStatus === 'alive' ? 'selected' : ''}>الأحياء فقط</option>
+              <option value="deceased" ${f.aliveStatus === 'deceased' ? 'selected' : ''}>المتوفون رحمهم الله</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="adv-match-count" style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;font-size:.82rem;color:var(--gold);text-align:center">
+          ...
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px">
+          <button type="button" id="adv-apply-btn" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:8px 20px;font-size:.88rem">
+            تطبيق البحث والتصفية ←
+          </button>
+          <button type="button" id="adv-reset-btn" class="fstats-btn" style="background:transparent;border-color:#ef4444;color:#ef4444">
+            إعادة ضبط الكل
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  function updateModalCount() {
+    const q = $('#adv-q-input')?.value || '';
+    const tempFilter = {
+      branchId: $('#adv-branch-sel')?.value || '',
+      city: $('#adv-city-sel')?.value || '',
+      gen: $('#adv-gen-sel')?.value || '',
+      aliveStatus: $('#adv-status-sel')?.value || 'all'
+    };
+    const count = S.members.filter(m => matchesSearchAndFilter(m, q, tempFilter)).length;
+    const countEl = $('#adv-match-count');
+    if (countEl) {
+      countEl.innerHTML = `عدد المطابقين لهذه التصفية: <b>${count} فرد</b> من أصل ${S.members.length}`;
+    }
+
+    const hintsEl = $('#adv-spell-hints');
+    if (hintsEl && q.trim()) {
+      const variants = getArabicSpellingVariants(q.trim());
+      if (variants.length > 1) {
+        hintsEl.innerHTML = `💡 بدائل إملائية متطابقة تلقائياً: ${variants.map(v => `<span class="adv-spell-chip">${esc(v)}</span>`).join(' ')}`;
+      } else {
+        hintsEl.innerHTML = '';
+      }
+    }
+  }
+
+  ['adv-q-input', 'adv-branch-sel', 'adv-city-sel', 'adv-gen-sel', 'adv-status-sel'].forEach(id => {
+    const el = $(`#${id}`);
+    if (el) {
+      el.oninput = updateModalCount;
+      el.onchange = updateModalCount;
+    }
+  });
+
+  updateModalCount();
+
+  const applyBtn = $('#adv-apply-btn');
+  if (applyBtn) {
+    applyBtn.onclick = () => {
+      const qVal = $('#adv-q-input')?.value || '';
+      if ($('#q')) $('#q').value = qVal;
+      S.advFilter = {
+        branchId: $('#adv-branch-sel')?.value || '',
+        city: $('#adv-city-sel')?.value || '',
+        gen: $('#adv-gen-sel')?.value || '',
+        aliveStatus: $('#adv-status-sel')?.value || 'all'
+      };
+      $('#profile').close();
+      executeSearchAndFilter();
+      toast('✅ تم تطبيق التصفية والبحث المتقدم بنجاح!');
+    };
+  }
+
+  const resetBtn = $('#adv-reset-btn');
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      if ($('#q')) $('#q').value = '';
+      S.advFilter = { branchId: '', city: '', gen: '', aliveStatus: 'all' };
+      $('#profile').close();
+      executeSearchAndFilter();
+      toast('تمت إعادة ضبط البحث والتصفية.');
+    };
+  }
+}
+
+const qFilter = $('#q-filter');
+if (qFilter) qFilter.onclick = openAdvancedSearchModal;
+
+const mAdvSearch = $('#m-adv-search');
+if (mAdvSearch) mAdvSearch.onclick = menuClose(() => openAdvancedSearchModal());

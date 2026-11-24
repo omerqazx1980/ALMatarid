@@ -65,6 +65,7 @@
         <button id="m-branch-trees">🌿 أشجار الفروع (إظهار وإخفاء فروع العائلة)</button>
         <button id="m-reorder-tree">↕️ إعادة ترتيب الأبناء بالسحب والإفلات</button>
         <button id="m-lang-toggle">🌐 تغيير لغة الواجهة (العربية / English)</button>
+        <button id="m-adv-search">🔍 بحث متقدم وتصفية (فرع، مدينة، جيل، حالة، وبدائل إملائية)</button>
         <button id="m-lcard">📇 بطاقة النسب الرقمية للواتساب</button>
         <button id="m-invites">💌 دعوات وتأكيد حضور الاجتماعات</button>
         <button id="m-archive">📜 أرشيف وثائق وصور العائلة القديمة</button>
@@ -92,9 +93,11 @@
   <section class="stats"><div id="chips"></div><div class="ctl"><button id="btn-open" class="lnk" aria-label="فتح الكل"><span class="ic">➕</span>فتح الكل</button><button id="btn-close" class="lnk" aria-label="طي الكل"><span class="ic">➖</span>طي الكل</button></div></section>
   <div class="bar">
     <span class="qwrap"><input id="q" type="search" placeholder="ابحث بالاسم أو الكنية" autocomplete="off"><button id="q-voice" type="button" aria-label="بحث صوتي" title="تحدث للبحث بالاسم"><span aria-hidden="true">🎙️</span></button><button id="q-clear" type="button" aria-label="مسح البحث" title="مسح البحث" hidden><span aria-hidden="true">✕</span></button></span>
+    <button id="q-filter" type="button" class="btn-adv-search" title="تصفية وبحث متقدم">⚙️ تصفية</button>
     <div id="qn" hidden><button id="qp" class="ghost" aria-label="النتيجة السابقة">›</button><span id="qc"></span><button id="qx" class="ghost" aria-label="النتيجة التالية">‹</button></div>
     <div class="seg" role="group" aria-label="طريقة العرض"><button id="v-graph" aria-label="عرض المخطط"><span class="ic">🌳</span>مخطط</button><button id="v-list" aria-label="عرض القائمة"><span class="ic">☰</span>قائمة</button></div>
   </div>
+  <div id="adv-search-active-bar" class="adv-search-active-bar" style="display:none"></div>
   <section id="genstep" class="genstep"><button id="btn-gen-minus" aria-label="إخفاء جيل" title="إخفاء جيل">−</button><span id="genstep-val">الأجيال: 1 إلى 2</span><button id="btn-gen-plus" aria-label="إظهار جيل إضافي" title="إظهار جيل إضافي">+</button></section>
   <div id="branch-visibility-bar" class="branch-vis-bar" style="display:none">
     <span class="branch-vis-title">🌿 فروع الشجرة:</span>

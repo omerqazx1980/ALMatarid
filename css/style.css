@@ -1042,3 +1042,9 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 [dir="ltr"] .zoom{left:auto;right:14px}
 [dir="ltr"] .ctl{margin-right:0;margin-left:auto}
 [dir="ltr"] .dir-bar{flex-direction:row}
+
+/* ---------- 74) بحث متقدم وتصفية مع بدائل إملائية ---------- */
+.btn-adv-search{background:var(--bg);border:1px solid var(--line);color:var(--gold);border-radius:8px;padding:6px 10px;font-size:.8rem;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all .15s ease}
+.btn-adv-search.active{border-color:var(--gold);background:rgba(245,158,11,.15);font-weight:700}
+.adv-search-active-bar{display:flex;align-items:center;gap:8px;padding:4px 14px;background:rgba(245,158,11,.1);border-bottom:1px solid var(--gold);font-size:.78rem;color:var(--gold);flex-wrap:wrap}
+.adv-spell-chip{background:rgba(59,130,246,.15);border:1px solid #3b82f6;color:#93c5fd;border-radius:12px;padding:2px 8px;font-size:.75rem;cursor:pointer;display:inline-block;margin:2px}
