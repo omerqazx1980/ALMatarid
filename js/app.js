@@ -4281,3 +4281,214 @@ function openKioskMode() {
 }
 
 $('#m-kiosk').onclick = menuClose(() => openKioskMode());
+
+/* ---------- 56) دفتر العائلة - سجل المواليد والوفيات والزواجات (فرع تجربة) ---------- */
+function openFamilyBook(activeTab = 'births') {
+  const members = [...S.members];
+  const wives = [...(S.wives || [])];
+
+  const html = `
+    <div class="fbook-wrap">
+      <div class="fstats-head">
+        <h2>📖 دفتر العائلة وسجل الأنساب والوقائع</h2>
+        <p class="sub">السجل التوثيقي الشامل لمواليد ووفيات وزواجات ومصاهرات أسرة آل مطارد - بنو عمرو</p>
+      </div>
+
+      <div class="fbook-tabs">
+        <button type="button" class="fbook-tab-btn ${activeTab === 'births' ? 'active' : ''}" data-tab="births">
+          👶 سجل المواليد (${members.length})
+        </button>
+        <button type="button" class="fbook-tab-btn ${activeTab === 'deaths' ? 'active' : ''}" data-tab="deaths">
+          🕊️ سجل الوفيات (${members.filter(m => m.is_alive === false).length})
+        </button>
+        <button type="button" class="fbook-tab-btn ${activeTab === 'marriages' ? 'active' : ''}" data-tab="marriages">
+          💍 سجل الزواجات والمصاهرات (${wives.length})
+        </button>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin:4px 0">
+        <input type="search" id="fbook-q" placeholder="🔍 تصفية وبحث في السجل الحالى…" style="flex:1;padding:6px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.82rem">
+      </div>
+
+      <div id="fbook-content"></div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const container = $('#fbook-content');
+  const qInp = $('#fbook-q');
+
+  const renderBirths = (filterTxt = '') => {
+    let list = members.filter(m => !m.name_masked);
+    if (filterTxt) {
+      const q = filterTxt.toLowerCase();
+      list = list.filter(m => (m.full_name || '').toLowerCase().includes(q) || (m.birth_year_text || '').includes(q));
+    }
+    list.sort((a, b) => {
+      const ya = parseInt(a.birth_year_text || (a.birth_date ? a.birth_date.slice(0, 4) : 0), 10) || 0;
+      const yb = parseInt(b.birth_year_text || (b.birth_date ? b.birth_date.slice(0, 4) : 0), 10) || 0;
+      return ya - yb;
+    });
+
+    return `
+      <div class="fbook-table-box">
+        <table class="fbook-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم الكامل</th>
+              <th>الجيل</th>
+              <th>سنة / تاريخ الميلاد</th>
+              <th>الأب</th>
+              <th>الترتيب</th>
+              <th>المدينة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((m, i) => {
+              const father = m.father_id ? S.byId.get(m.father_id) : null;
+              const bYear = m.birth_year_text || (m.birth_date ? datePair(m.birth_date) : 'غير مدون');
+              return `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><b>${nameBtn(m)}</b></td>
+                  <td>الجيل ${gen(m)}</td>
+                  <td>${esc(bYear)}</td>
+                  <td>${father ? nameBtn(father) : '—'}</td>
+                  <td>${m.birth_order || '—'}</td>
+                  <td>${esc(m.city || 'الجنوب')}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const renderDeaths = (filterTxt = '') => {
+    let list = members.filter(m => m.is_alive === false);
+    if (filterTxt) {
+      const q = filterTxt.toLowerCase();
+      list = list.filter(m => (m.full_name || '').toLowerCase().includes(q) || (m.death_year_text || '').includes(q));
+    }
+    list.sort((a, b) => {
+      const ya = parseInt(a.death_year_text || (a.death_date ? a.death_date.slice(0, 4) : 0), 10) || 0;
+      const yb = parseInt(b.death_year_text || (b.death_date ? b.death_date.slice(0, 4) : 0), 10) || 0;
+      return ya - yb;
+    });
+
+    return `
+      <div class="fbook-table-box">
+        <table class="fbook-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم الكامل</th>
+              <th>الجيل</th>
+              <th>سنة / تاريخ الوفاة</th>
+              <th>الفرع</th>
+              <th>الدعاء المأثور</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((m, i) => {
+              const dYear = m.death_year_text || (m.death_date ? datePair(m.death_date) : 'غير مدون');
+              const chain = getAncestryChain(m);
+              const root = chain[chain.length - 1];
+              return `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><b>${nameBtn(m)}</b></td>
+                  <td>الجيل ${gen(m)}</td>
+                  <td>${esc(dYear)}</td>
+                  <td>${root ? esc(root.full_name) : 'آل مطارد'}</td>
+                  <td style="color:#6ee7b7">رحمه الله وأسكنه الفردوس الأعلى 🤲</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const renderMarriages = (filterTxt = '') => {
+    let list = wives;
+    if (filterTxt) {
+      const q = filterTxt.toLowerCase();
+      list = list.filter(w => (w.full_name || '').toLowerCase().includes(q) || (w.family_name || '').toLowerCase().includes(q));
+    }
+
+    // Kinship stats
+    const famCounts = {};
+    wives.forEach(w => {
+      const f = (w.family_name || '').trim();
+      if (f) famCounts[f] = (famCounts[f] || 0) + 1;
+    });
+    const topFams = Object.entries(famCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    return `
+      ${topFams.length ? `
+        <div style="background:rgba(245,158,11,.08);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:.78rem">
+          🏛️ <b>أبرز العائلات والقبائل المصاهرة لأسرة آل مطارد:</b> ${topFams.map(([f, c]) => `${esc(f)} (${c})`).join(' · ')}
+        </div>
+      ` : ''}
+
+      <div class="fbook-table-box">
+        <table class="fbook-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الزوج</th>
+              <th>الزوجة</th>
+              <th>العائلة / القبيلة المصاهرة</th>
+              <th>حالة الزواج</th>
+              <th>الأبناء</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((w, i) => {
+              const husband = w.husband_id ? S.byId.get(w.husband_id) : null;
+              const kids = S.members.filter(x => x.wife_mother_id === w.id);
+              return `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><b>${husband ? nameBtn(husband) : '—'}</b></td>
+                  <td>${esc(w.full_name)}</td>
+                  <td><span class="bd" style="background:rgba(56,189,248,.12);border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:99px;font-size:.72rem">${esc(w.family_name || 'غير محددة')}</span></td>
+                  <td>${w.marriage_status === 'divorced' ? '<span style="color:#f87171">زوجة سابقة (طلاق)</span>' : '<span style="color:#34d399">زواج قائم</span>'}</td>
+                  <td>${kids.length ? `${kids.length} أبناء (${kids.map(k => esc(k.first || k.full_name.split(' ')[0])).join('، ')})` : '—'}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const renderActive = () => {
+    const q = (qInp.value || '').trim();
+    if (activeTab === 'births') container.innerHTML = renderBirths(q);
+    else if (activeTab === 'deaths') container.innerHTML = renderDeaths(q);
+    else if (activeTab === 'marriages') container.innerHTML = renderMarriages(q);
+  };
+
+  renderActive();
+
+  qInp.oninput = renderActive;
+
+  document.querySelectorAll('.fbook-tab-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.fbook-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTab = btn.dataset.tab;
+      qInp.value = '';
+      renderActive();
+    };
+  });
+}
+
+$('#m-family-book').onclick = menuClose(() => openFamilyBook());

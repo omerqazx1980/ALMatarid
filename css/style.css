@@ -875,3 +875,15 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .kiosk-stat-box{background:rgba(15,23,42,.7);border:1.5px solid var(--gold);border-radius:14px;padding:18px 10px;text-align:center}
 .kiosk-stat-num{font-size:2.2rem;font-weight:900;color:var(--gold);line-height:1.2}
 .kiosk-stat-lbl{font-size:.9rem;color:#cbd5e1;margin-top:4px}
+
+/* ---------- 56) دفتر العائلة - سجل المواليد والوفيات والزواجات (فرع تجربة) ---------- */
+.fbook-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.fbook-tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:8px;flex-wrap:wrap}
+.fbook-tab-btn{padding:8px 14px;border-radius:8px;font-size:.82rem;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--txt);cursor:pointer;transition:.15s}
+.fbook-tab-btn:hover{border-color:var(--gold);color:var(--gold)}
+.fbook-tab-btn.active{background:var(--gold);color:#1c1204;border-color:var(--gold)}
+.fbook-table-box{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+.fbook-table{width:100%;border-collapse:collapse;font-size:.82rem;text-align:start}
+.fbook-table th{background:rgba(0,0,0,.3);color:var(--gold);padding:10px;border-bottom:1px solid var(--line);font-weight:700;white-space:nowrap}
+.fbook-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:#cbd5e1}
+.fbook-table tr:hover td{background:rgba(245,158,11,.05)}
