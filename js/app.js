@@ -3330,8 +3330,15 @@ function openLineageCard(targetId = null) {
   const statusStr = target.is_alive === false ? 'رحمه الله' : 'حفظه الله ورعاه';
   const branchName = root ? root.full_name : 'آل مطارد';
 
+  const isFem = target.gender === 'female';
   const chainNames = chain.map(c => c.first || c.full_name.split(' ')[0]);
-  const fullLineageText = chainNames.join(' بن ') + ' (من آل مطارد - بنو عمرو)';
+  let fullLineageText = '';
+  for (let i = 0; i < chainNames.length; i++) {
+    if (i === 0) fullLineageText = chainNames[0];
+    else if (i === 1) fullLineageText += (isFem ? ' بنت ' : ' بن ') + chainNames[1];
+    else fullLineageText += ' بن ' + chainNames[i];
+  }
+  fullLineageText += ' (من آل مطارد - بنو عمرو)';
 
   const waShareText = `🌿 *بطاقة نسب رقمية - أسرة آل مطارد (بنو عمرو)* 🌿\n\n` +
     `👤 *الاسم:* ${target.full_name}\n` +
@@ -3371,7 +3378,7 @@ function openLineageCard(targetId = null) {
 
         <div class="lcard-chain">
           <div style="font-size:.75rem;color:var(--gold);margin-bottom:4px;font-weight:700">📜 سلسلة النسب المتصل:</div>
-          <div><b>${chain.map(c => esc(c.full_name.split(' ')[0] || c.first)).join(' بن ')}</b></div>
+          <div><b>${esc(fullLineageText.replace(' (من آل مطارد - بنو عمرو)', ''))}</b></div>
           <div style="font-size:.78rem;color:var(--mut);margin-top:6px">وصولاً إلى الجد المؤسس لفرع <b>${esc(branchName)}</b> من قبيلة آل مطارد - بنو عمرو.</div>
         </div>
 
@@ -5227,8 +5234,8 @@ function openWomenPortal() {
           </div>
 
           <div>
-            <label>الاسم الكريم (الاسم الثلاثي أو الرباعي):</label>
-            <input type="text" id="wg-name" placeholder="اكتبي اسمك الكريم" required autocomplete="off">
+            <label>الاسم الكريم (يقبل مع كلمة «بنت» أو بدونها):</label>
+            <input type="text" id="wg-name" placeholder="اكتبي اسمك الكريم (مثال: نورة بنت محمد أو نورة محمد)" required autocomplete="off">
           </div>
 
           <div>
@@ -5306,14 +5313,20 @@ function openWomenPortal() {
       return;
     }
 
-    // Match verification answer:
-    const normAns = normAr(ans);
+    // Match verification answer (supports with or without 'بنت' / 'بن'):
+    const cleanAns = normAr(ans).replace(/\b(بنت|ابنة|بن)\b/g, '').replace(/\s+/g, ' ').trim();
     let matched = false;
     if (qtype === 'branch') {
-      matched = roots.some(r => normAr(r.full_name).includes(normAns) || normAns.includes(normAr(r.first || '')));
-      if (!matched && normAns.includes('مطارد') || normAns.includes('عمرو')) matched = true;
+      matched = roots.some(r => {
+        const cleanR = normAr(r.full_name).replace(/\b(بن|آل)\b/g, '').replace(/\s+/g, ' ');
+        return cleanR.includes(cleanAns) || cleanAns.includes(normAr(r.first || ''));
+      });
+      if (!matched && (cleanAns.includes('مطارد') || cleanAns.includes('عمرو'))) matched = true;
     } else {
-      matched = S.wives.some(w => normAr(w.full_name).includes(normAns));
+      matched = S.wives.some(w => {
+        const cleanW = normAr(w.full_name).replace(/\b(بنت|ابنة|بن)\b/g, '').replace(/\s+/g, ' ');
+        return cleanW.includes(cleanAns) || (cleanW.length >= 3 && cleanAns.includes(cleanW.slice(0, 4)));
+      });
     }
 
     // If answer matched or accepted
