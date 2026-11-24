@@ -407,6 +407,8 @@ function render(fitView) {
   stats();
   const g = S.view === 'graph', none = !!S.hit && S.hit.size === 0;
   $('#vp').hidden = !g || none; $('#tree').hidden = g || none;
+  const dirCtrls = $('#dir-ctrls');
+  if (dirCtrls) dirCtrls.hidden = g || none;
   $('#v-graph').setAttribute('aria-pressed', g); $('#v-list').setAttribute('aria-pressed', !g);
   S.order = [];
   if (!none) {
@@ -414,8 +416,8 @@ function render(fitView) {
       renderGraph(fitView);
       if (S.hit) S.order = [...S.hit].filter(id => S._pos.has(id)).sort((a, b) => S._pos.get(a).y - S._pos.get(b).y || S._X(S._pos.get(b).x) - S._X(S._pos.get(a).x));
     } else {
-      $('#tree').innerHTML = dispRoots().map(node).join('');
-      if (S.hit) S.order = [...$('#tree').querySelectorAll('.card.hit .nm')].map(el => el.dataset.p);
+      renderDirectoryList();
+      if (S.hit) S.order = [...$('#tree').querySelectorAll('[data-p]')].map(el => el.dataset.p);
     }
   }
   $('#qn').hidden = !S.order.length;
@@ -7307,3 +7309,151 @@ function openSetMeModal() {
 const zMe = $('#z-me');
 if (zMe) zMe.onclick = () => triggerThisIsMe();
 $('#m-this-is-me').onclick = menuClose(() => triggerThisIsMe(true));
+
+/* ============================================================
+   70) دليل الأعضاء الكامل (مرتب بالجيل أو الأبجدية مع عداد)
+   ============================================================ */
+S.dirMode = S.dirMode || 'gen';
+S.dirCollapsedGens = S.dirCollapsedGens || new Set();
+S.dirCollapsedLetters = S.dirCollapsedLetters || new Set();
+
+function renderDirectoryList() {
+  const mode = S.dirMode || 'gen';
+  const treeEl = $('#tree');
+  if (!treeEl) return;
+
+  document.querySelectorAll('[data-dir-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.dirMode === mode);
+  });
+
+  const list = S.members.filter(m => !m.name_masked && (!S.hit || S.hit.has(m.id)));
+
+  const counterSpan = $('#dir-counter span');
+  if (counterSpan) counterSpan.textContent = list.length;
+
+  if (mode === 'tree') {
+    treeEl.className = 'tree';
+    treeEl.innerHTML = dispRoots().map(node).join('');
+    return;
+  }
+
+  treeEl.className = 'tree dir-container';
+
+  if (mode === 'gen') {
+    const groups = new Map();
+    list.forEach(m => {
+      const g = gen(m);
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(m);
+    });
+
+    const sortedGens = Array.from(groups.keys()).sort((a, b) => a - b);
+    let html = '';
+    sortedGens.forEach(g => {
+      const mems = groups.get(g).sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
+      const isCollapsed = S.dirCollapsedGens.has(g);
+      html += `
+        <div class="dir-group-section">
+          <div class="dir-group-head" data-toggle-gen="${g}" tabindex="0" role="button">
+            <span>${g === 1 ? '👑 الجيل الأول (الآباء المؤسسون)' : `🌿 الجيل ${g}`}</span>
+            <span class="dir-group-count">${mems.length} فرد ${isCollapsed ? '◀' : '▼'}</span>
+          </div>
+          ${!isCollapsed ? `
+            <div class="dir-grid">
+              ${mems.map(renderDirCard).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+    treeEl.innerHTML = html || '<p style="text-align:center;color:var(--mut);padding:20px">لا توجد نتائج مطابقة</p>';
+  } else if (mode === 'alpha') {
+    const groups = new Map();
+    list.forEach(m => {
+      const clean = normAr(m.full_name.trim());
+      const char = clean.charAt(0) || 'أ';
+      if (!groups.has(char)) groups.set(char, []);
+      groups.get(char).push(m);
+    });
+
+    const sortedLetters = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, 'ar'));
+    let html = '';
+    sortedLetters.forEach(char => {
+      const mems = groups.get(char).sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
+      const isCollapsed = S.dirCollapsedLetters.has(char);
+      html += `
+        <div class="dir-group-section">
+          <div class="dir-group-head" data-toggle-letter="${char}" tabindex="0" role="button">
+            <span>حرف (${char})</span>
+            <span class="dir-group-count">${mems.length} فرد ${isCollapsed ? '◀' : '▼'}</span>
+          </div>
+          ${!isCollapsed ? `
+            <div class="dir-grid">
+              ${mems.map(renderDirCard).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+    treeEl.innerHTML = html || '<p style="text-align:center;color:var(--mut);padding:20px">لا توجد نتائج مطابقة</p>';
+  }
+}
+
+function renderDirCard(m) {
+  const photo = S.photos.get(m.id);
+  const isDead = m.is_alive === false;
+  const isMe = localStorage.getItem('almatarid_me_id') === m.id;
+  const hit = S.hit?.has(m.id);
+  return `
+    <div class="dir-card${hit ? ' hit' : ''}${isMe ? ' me-highlight' : ''}" data-p="${m.id}" tabindex="0" role="button">
+      ${photo ? `<img class="gimg2" src="${photo}" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold)">` : `<div style="width:38px;height:38px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">${isFemale(m) ? '👧' : '👤'}</div>`}
+      <div style="flex:1;min-width:0">
+        <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem;color:var(--txt)">${esc(cardName(m))}</b>
+        <div style="font-size:.72rem;color:var(--mut);display:flex;gap:6px;align-items:center;margin-top:2px;flex-wrap:wrap">
+          <span style="color:var(--gold)">الجيل ${gen(m)}</span>
+          ${m.city ? `<span>· 📍 ${esc(m.city)}</span>` : ''}
+          ${isDead ? `<span style="color:#94a3b8">· ${ripText(m)}</span>` : '<span style="color:#10b981">· حي</span>'}
+          ${isMe ? '<span style="color:#fbbf24;font-weight:700">· أنت ⭐</span>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Directory controls and clicks
+document.addEventListener('click', e => {
+  const tab = e.target.closest('[data-dir-mode]');
+  if (tab) {
+    S.dirMode = tab.dataset.dirMode;
+    render();
+    return;
+  }
+  const genHead = e.target.closest('[data-toggle-gen]');
+  if (genHead) {
+    const g = parseInt(genHead.dataset.toggleGen, 10);
+    if (S.dirCollapsedGens.has(g)) S.dirCollapsedGens.delete(g);
+    else S.dirCollapsedGens.add(g);
+    renderDirectoryList();
+    return;
+  }
+  const letterHead = e.target.closest('[data-toggle-letter]');
+  if (letterHead) {
+    const char = letterHead.dataset.toggleLetter;
+    if (S.dirCollapsedLetters.has(char)) S.dirCollapsedLetters.delete(char);
+    else S.dirCollapsedLetters.add(char);
+    renderDirectoryList();
+    return;
+  }
+});
+
+const mMemberDir = $('#m-member-directory');
+if (mMemberDir) {
+  mMemberDir.onclick = menuClose(() => {
+    S.view = 'list';
+    S.dirMode = 'gen';
+    render();
+    syncBbView?.();
+    $('#tree').scrollIntoView({ behavior: 'smooth' });
+    toast('📖 تم فتح دليل الأعضاء الكامل');
+  });
+}
