@@ -672,6 +672,9 @@ async function saveMember(m, fid, d) {
     return `${g.getUTCFullYear()}-${pad(g.getUTCMonth() + 1)}-${pad(g.getUTCDate())}`;
   };
   const birthD = hdate('bd'), deathD = d.alive === '1' ? null : hdate('dd');
+  if (birthD && deathD && new Date(deathD) < new Date(birthD)) {
+    throw new Error('تناقض في التواريخ: تاريخ الوفاة لا يمكن أن يسبق تاريخ الميلاد!');
+  }
   const r = await op('secure_save_member', { p_id: m?.id ?? null, p_full_name: v.full_name, p_nickname: v.nickname, p_gender: v.gender, p_father_id: fid,
     p_wife_mother_id: v.wife_mother_id, p_birth_order: v.birth_order, p_phone: v.phone, p_is_alive: v.is_alive, p_birth_year_text: v.birth_year_text,
     p_death_year_text: v.death_year_text, p_biography_story: v.biography_story, p_passcode: S.code },
@@ -5702,6 +5705,44 @@ function auditFamilyDataQuality() {
           openDataQualityDashboard();
         }
       });
+    }
+  });
+
+  // كشف التناقضات في التواريخ تلقائياً
+  S.members.forEach(m => {
+    const bYear = parseInt(m.birth_year_text || (m.birth_date ? m.birth_date.slice(0, 4) : 0), 10);
+    const dYear = parseInt(m.death_year_text || (m.death_date ? m.death_date.slice(0, 4) : 0), 10);
+
+    if (bYear && dYear && dYear < bYear) {
+      issues.push({
+        type: 'date_conflict',
+        typeName: 'تناقض وفاة قبل الميلاد',
+        icon: '⏰',
+        desc: `العضو «${m.full_name}» مسجل بوفاة (${dYear}) تسبق ولادته (${bYear})`,
+        fixLabel: 'تعديل تاريخ العضو',
+        action: () => {
+          $('#profile').close();
+          memberForm(m);
+        }
+      });
+    }
+
+    if (m.father_id && S.byId.has(m.father_id)) {
+      const father = S.byId.get(m.father_id);
+      const fbYear = parseInt(father.birth_year_text || (father.birth_date ? father.birth_date.slice(0, 4) : 0), 10);
+      if (bYear && fbYear && bYear <= fbYear + 10) {
+        issues.push({
+          type: 'date_conflict',
+          typeName: 'تناقض سن الأب والابن',
+          icon: '⏰',
+          desc: `ولادة «${m.full_name}» (${bYear}) متقاربة جداً أو تسبق ولادة والده «${father.full_name}» (${fbYear})`,
+          fixLabel: 'تعديل تاريخ العضو',
+          action: () => {
+            $('#profile').close();
+            memberForm(m);
+          }
+        });
+      }
     }
   });
 
