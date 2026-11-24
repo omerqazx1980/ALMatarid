@@ -3278,6 +3278,7 @@ $('#m-careers-dir').onclick = menuClose(() => openCareersDirectoryModal());
 $('#m-time-capsule').onclick = menuClose(() => openTimeCapsuleModal());
 $('#m-anniversaries').onclick = menuClose(() => openAnniversariesModal());
 $('#m-life-story').onclick = menuClose(() => openLifeStoryModal());
+$('#m-member-stories').onclick = menuClose(() => openMemberStoriesModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -12704,6 +12705,257 @@ function openLifeStoryModal(targetMemberId = null) {
 
   renderModal();
 }
+
+/* ---------- 94) قصص ومأثورات أفراد العائلة المكتوبة (فرع تجربة) ---------- */
+function openMemberStoriesModal(filterMemberId = null) {
+  const STORY_CATS = [
+    { key: 'all', label: 'الكل' },
+    { key: 'bravery', label: '⚔️ شجاعة ومروءة' },
+    { key: 'travel', label: '🐪 رحلات وذكريات' },
+    { key: 'waqf', label: '🏛️ أوقاف وبناء' },
+    { key: 'generosity', label: '☕ كرم وضيافة' }
+  ];
+
+  const DEFAULT_STORIES = [
+    {
+      id: 'story_1',
+      title: 'إجارة القوافل وإكرام الضيوف في عقبة سنان',
+      memberId: S.members[0] ? S.members[0].id : '',
+      memberName: 'الجد مسفر بن علي المطارد (رحمه الله)',
+      category: 'bravery',
+      categoryLabel: '⚔️ شجاعة ومروءة',
+      era: 'نحو عام 1345هـ (قبل قرن)',
+      narrator: 'رواية متواترة عن كبار السراة',
+      body: 'كان الجد مسفر رحمه الله مشهوراً بنجدة عابري السبيل في عقبة سنان الرابطة بين جبال السراة وتهامة. وفي إحدى سنوات الشدة حاصرت السيول الجارفة قافلة تجارية محملة بالمؤن، فخرج بنفسه ومعه إخوانه ورجال العائلة وقاموا بإنقاذ الركاب والدواب، واستضافوهم في مجلس الأسرة لأكثر من أسبوع حتى هدأ السيل، وقدم لهم الزاد والعتاد لإكمال سفرهم دون مقابل، في موقف سجلته ذاكرة أهل المنطقة بالثناء والدعاء.'
+    },
+    {
+      id: 'story_2',
+      title: 'رحلة الحج الشاقة على الأقدام والإبل',
+      memberId: S.members[1] ? S.members[1].id : '',
+      memberName: 'صالح بن مسفر المطارد',
+      category: 'travel',
+      categoryLabel: '🐪 رحلات وذكريات',
+      era: 'عام 1362هـ',
+      narrator: 'عن مذكرات الركب القديم',
+      body: 'انطلق ركب الحج من بلاد النماص في أواخر شهر ذي القعدة، وسلكوا المسالك الجبلية الوعرة عبر الأودية والشعاب. وكان لصالح بن مسفر دور القيادة ومعرفة موارد المياه والآبار في الطريق. ورغم شح الزاد ومخاطر الطريق، تحلت القافلة بالصبر والتكاتف حتى لاحت لهم مآذن الحرم المكي الشريف، وسجد الجميع شكراً لله على تمام النعمة ولقاء أبناء العمومة في مكة المكرمة.'
+    },
+    {
+      id: 'story_3',
+      title: 'عمارة قصر السراة وبئر الجماعة',
+      memberId: S.members[2] ? S.members[2].id : '',
+      memberName: 'علي بن صالح المطارد',
+      category: 'waqf',
+      categoryLabel: '🏛️ أوقاف وبناء',
+      era: 'نحو عام 1370هـ',
+      narrator: 'أعيان مجلس العائلة',
+      body: 'اجتمع أعيان العائلة بريادة علي بن صالح لتوسعة القصر الحجري التراثي وتجهيز بئر الجماعة لتكون سبيلاً جارياً لعموم أهل القرية وعابري السبيل. وتطوع أبناء الأسرة بنقل حجارة الجرانيت المشذبة من أطراف الوادي، وجعلوا ريع المزرعة المجاورة صدقة جارية لإطعام المحتاجين، وظلت البئر تفيض بالماء العذب لعقود طويلة شاهدة على بر الأجداد وتكاتفهم.'
+    }
+  ];
+
+  const localStories = JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]');
+  const allStories = [...localStories, ...DEFAULT_STORIES];
+
+  let activeCat = 'all';
+  let searchQuery = '';
+  let activeMid = filterMemberId || '';
+
+  function renderModal() {
+    const filtered = allStories.filter(s => {
+      if (activeCat !== 'all' && s.category !== activeCat) return false;
+      if (activeMid && s.memberId !== activeMid) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return s.title.toLowerCase().includes(q) ||
+          s.memberName.toLowerCase().includes(q) ||
+          s.body.toLowerCase().includes(q) ||
+          (s.era && s.era.toLowerCase().includes(q));
+      }
+      return true;
+    });
+
+    const html = `
+      <div class="mstory-wrap" style="max-width:800px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📜</span> قصص ومأثورات أفراد العائلة المكتوبة
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          ديوان القصص المكتوبة والحكايات التراثية الموثقة المنسوبة لأصحابها من أفراد وأعلام أسرة آل مطارد، لحفظ مآثر الأجداد والقدوات الصالحة للأجيال القادمة.
+        </p>
+
+        <!-- Search Bar and Add Button -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+          <input type="text" id="mstory-search-inp" value="${esc(searchQuery)}" placeholder="ابحث بعنوان القصة، اسم الشخص، الحقبة، أو كلمة مفتاحية..." style="flex:1;min-width:200px;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
+
+          <button type="button" class="fstats-btn" id="btn-add-story" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 12px;font-size:.78rem">
+            ✍️ تدوين وإضافة قصة جديدة
+          </button>
+        </div>
+
+        <!-- Category Filter Pills -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${STORY_CATS.map(c => `
+            <button type="button" class="fstats-btn ${activeCat === c.key ? 'active' : ''}" data-story-cat="${c.key}" style="padding:4px 10px;font-size:.76rem">
+              ${c.label}
+            </button>
+          `).join('')}
+        </div>
+
+        <!-- Stories Feed -->
+        <div style="display:flex;flex-direction:column;gap:14px;max-height:480px;overflow-y:auto;padding-left:4px">
+          ${filtered.length ? filtered.map(story => `
+            <div class="mstory-card">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+                <div>
+                  <h3 style="margin:0 0 4px 0;font-size:1.05rem;color:var(--gold);display:flex;align-items:center;gap:6px">
+                    <span>📖</span> ${esc(story.title)}
+                  </h3>
+                  <div style="font-size:.76rem;color:var(--mut)">
+                    صاحب القصة: <b style="color:var(--txt)">${esc(story.memberName)}</b> · 🕒 الحقبة: ${esc(story.era || 'زمن الأجداد')}
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span class="mstory-badge">${esc(story.categoryLabel)}</span>
+                </div>
+              </div>
+
+              <div style="font-size:.84rem;color:var(--txt);line-height:1.75;white-space:pre-line;background:rgba(0,0,0,.25);padding:12px 14px;border-radius:8px">
+                ${esc(story.body)}
+              </div>
+
+              ${story.narrator ? `
+                <div style="font-size:.73rem;color:var(--mut)">
+                  📜 مصدر الرواية: <i>${esc(story.narrator)}</i>
+                </div>
+              ` : ''}
+
+              <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;flex-wrap:wrap;gap:6px">
+                ${story.memberId ? `
+                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${story.memberId}')">
+                    👤 ملف صاحب القصة بالشجرة
+                  </button>
+                ` : `<span></span>`}
+
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="fstats-btn" data-share-story="${story.id}" style="padding:4px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
+                    📲 مشاركة بالواتساب
+                  </button>
+                  <button type="button" class="fstats-btn" data-copy-story="${story.id}" style="padding:4px 10px;font-size:.74rem">
+                    📋 نسخ القصة
+                  </button>
+                </div>
+              </div>
+            </div>
+          `).join('') : `
+            <div style="text-align:center;padding:40px 10px;color:var(--mut)">
+              <div style="font-size:2rem;margin-bottom:8px">📜</div>
+              <div>لا توجد قصص مطابقة، يمكنك تدوين وإضافة أول قصة عبر الزر أعلاه!</div>
+            </div>
+          `}
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
+          <span style="font-size:.74rem;color:var(--mut)">القصص والمأثورات الموثقة: <b>${allStories.length} قصة</b></span>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Bind category filters
+    document.querySelectorAll('[data-story-cat]').forEach(btn => {
+      btn.onclick = () => {
+        activeCat = btn.dataset.storyCat;
+        renderModal();
+      };
+    });
+
+    // Bind search
+    const sInp = $('#mstory-search-inp');
+    if (sInp) {
+      sInp.oninput = (e) => {
+        searchQuery = e.target.value;
+        renderModal();
+      };
+    }
+
+    // WhatsApp share
+    document.querySelectorAll('[data-share-story]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.shareStory;
+        const story = allStories.find(s => s.id === id);
+        if (story) {
+          const msg = `📜 *قصة من مآثر عائلة آل مطارد:*\n*${story.title}*\nصاحب القصة: ${story.memberName}\nالحقبة: ${story.era}\n\n${story.body}\n\n— موثقة عبر شجرة وتاريخ عائلة آل مطارد:\n${window.location.href}`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+
+    // Copy story
+    document.querySelectorAll('[data-copy-story]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.copyStory;
+        const story = allStories.find(s => s.id === id);
+        if (story) {
+          const text = `📜 ${story.title}\nصاحب القصة: ${story.memberName} (${story.era})\n\n${story.body}\n\n(عبر شجرة آل مطارد)`;
+          navigator.clipboard.writeText(text).then(() => {
+            toast('✅ تم نسخ نص القصة بنجاح!');
+          });
+        }
+      };
+    });
+
+    // Add new story
+    const addBtn = $('#btn-add-story');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const title = prompt('عنوان القصة أو المأثرة:');
+        if (!title) return;
+        const memberName = prompt('اسم صاحب القصة من أفراد العائلة (مثال: الجد مسفر المطارد):') || 'أحد الأجداد';
+        const era = prompt('الحقبة أو السنة التقريبية (مثال: نحو عام 1350هـ):') || 'زمن الأجداد';
+        const body = prompt('نص وتفاصيل القصة:') || '';
+        const narrator = prompt('مصدر الرواية أو الراوي (اختياري):') || 'رواية متواترة';
+        const catKey = prompt('رمز التصنيف: (bravery=شجاعة، travel=رحلات، waqf=أوقاف، generosity=كرم):') || 'bravery';
+
+        const catLabels = {
+          bravery: '⚔️ شجاعة ومروءة',
+          travel: '🐪 رحلات وذكريات',
+          waqf: '🏛️ أوقاف وبناء',
+          generosity: '☕ كرم وضيافة'
+        };
+
+        const newStory = {
+          id: 'story_user_' + Date.now(),
+          title,
+          memberId: '',
+          memberName,
+          category: catKey,
+          categoryLabel: catLabels[catKey] || '📜 مأثورات عامة',
+          era,
+          narrator,
+          body
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]');
+        stored.unshift(newStory);
+        localStorage.setItem('almatarid_written_stories', JSON.stringify(stored));
+        allStories.unshift(newStory);
+        toast('✅ تم حفظ وتوثيق القصة في ديوان العائلة بنجاح!');
+        renderModal();
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 

@@ -1194,6 +1194,13 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .lstory-node:hover { border-color: var(--gold); }
 .lstory-dot { position: absolute; right: -24px; top: 14px; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); border: 3px solid #0f172a; box-shadow: 0 0 8px rgba(245,158,11,.6); }
 
+/* ---------- 94) قصص ومأثورات أفراد العائلة المكتوبة ---------- */
+.mstory-wrap { display: flex; flex-direction: column; gap: 14px; }
+.mstory-card { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: all .15s ease; }
+.mstory-card:hover { border-color: var(--gold); }
+.mstory-badge { background: rgba(245,158,11,.15); color: var(--gold); border: 1px solid var(--gold); border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700; }
+
+
 
 
 
