@@ -4168,6 +4168,7 @@ $('#m-archive').onclick = menuClose(() => openFamilyArchive());
 $('#m-ai-photo-restore').onclick = menuClose(() => openAiPhotoRestoreModal());
 $('#m-photo-analysis').onclick = menuClose(() => openPhotoAnalysisModal());
 $('#m-exif-map').onclick = menuClose(() => openPhotoExifMapModal());
+$('#m-transcribe').onclick = menuClose(() => openTranscribeModal());
 
 /* ---------- 54) البحث بالصوت في الشجرة (فرع تجربة) ---------- */
 let voiceRecognizer = null;
@@ -10176,6 +10177,293 @@ function openPhotoExifMapModal() {
 
   renderMapModal();
 }
+
+/* ---------- 84) نسخ الوثائق الخطية والتسجيلات إلى نص قابل للبحث (فرع تجربة) ---------- */
+function openTranscribeModal(initialTab = 'docs') {
+  // Built-in initial sample historical documents and transcripts
+  const DEFAULT_DOC_TRANSCRIPTS = [
+    {
+      id: 'doc_1',
+      type: 'doc',
+      title: 'وثيقة حجة ومبايعة عقار بالنماص (1342هـ)',
+      dateText: '15 رجب 1342هـ',
+      category: 'وثائق ومخطوطات',
+      originalImg: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
+      extractedText: `بسم الله الرحمن الرحيم\nالحمد لله وحده، والصلاة والسلام على من لا نبي بعده.\nحضر لدي في مجلس الشرع المطهر بالنماص من بلاد بني عمرو، فلان بن فلان من آل مطارد، وباع قطيع الأرض المسماة "حوطة المروة" الكائنة بشعب السراة، بحدودها الأربعة المعروفة، بثمن قدره ستون ريالاً فضة تسلمها البائع كاملة دون نقص.\nوشهد على ذلك: علي بن مسفر، ومحمد بن صالح المطارد، وكتبه العبد الفقير لله قاضي الناحية.`,
+      tags: ['النماص', 'آل مطارد', '1342هـ', 'مبايعة', 'حوطة المروة']
+    },
+    {
+      id: 'doc_2',
+      type: 'doc',
+      title: 'وثيقة تراضٍ وقسمة أوقاف ومزارع (1368هـ)',
+      dateText: '22 شوال 1368هـ',
+      category: 'وثائق ومخطوطات',
+      originalImg: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=400&q=80',
+      extractedText: `الحمد لله، اتفق الإخوة والورثة من أسرة آل مطارد على تثبيت قسمة البساتين الواقعة في وادي النماص، وجعل ريع بئر العفجة صدقة جارية على ميتهم ومحتاج العائلة، لا يُباع ولا يُوهب حتى يرث الله الأرض ومن عليها.\nالشهود: أعيان القرية وحضور الفرع. وتاريخه 22 شوال 1368هـ.`,
+      tags: ['أوقاف', 'النماص', 'قسمة', 'بئر العفجة', '1368هـ']
+    },
+    {
+      id: 'audio_1',
+      type: 'audio',
+      title: 'تسجيل صوتي: ذكريات رحلة الحج والسفر القديم (1392هـ)',
+      dateText: 'تسجيل شريط كاسيت 1392هـ',
+      category: 'تسجيلات صوتية',
+      speaker: 'كبير الأسرة رحمه الله',
+      extractedText: `[00:00] كنا نتحرك مع القوافل من السراة بعد طلوع الفجر، ونسلك عقبة سنان متجهين نحو الحجاز.\n[00:45] الطريق كان يستغرق قرابة عشرين يوماً على الركاب والدواب، ونتوقف عند محطات السقيا والمناهل المعروفة.\n[01:30] وعندما وصلنا مشارف مكة المكرمة كبر الناس وحمدوا الله على السلامة ولقاء الإخوان من أبناء العمومة.\n[02:15] كانت الرحلة شاقة لكن البركة وحسن الجوار كان يملأ القلوب.`,
+      tags: ['رحلة الحج', 'عقبة سنان', 'السراة', 'الحجاز', 'ذكريات']
+    }
+  ];
+
+  // Retrieve any user added transcripts from localStorage
+  const savedTranscripts = JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]');
+  const allTranscripts = [...savedTranscripts, ...DEFAULT_DOC_TRANSCRIPTS];
+
+  let currentTab = initialTab; // 'docs', 'audio', 'search'
+  let activeItem = allTranscripts.find(t => t.type === (currentTab === 'audio' ? 'audio' : 'doc')) || allTranscripts[0];
+  let searchQuery = '';
+
+  function renderModal() {
+    const filteredList = allTranscripts.filter(t => {
+      if (currentTab === 'search') {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return t.title.toLowerCase().includes(q) ||
+          t.extractedText.toLowerCase().includes(q) ||
+          (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)));
+      }
+      return t.type === (currentTab === 'audio' ? 'audio' : 'doc');
+    });
+
+    const html = `
+      <div class="transcribe-wrap" style="max-width:820px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📜</span> نسخ الوثائق الخطية والتسجيلات إلى نص قابل للبحث
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          محرك نسخ رقمي وذكاء اصطناعي يحوّل المخطوطات والوثائق القديمة بخط اليد وصكوك الأجداد والتسجيلات الصوتية النادرة إلى نصوص رقمية مدققة وقابلة للبحث الفوري والنسخ.
+        </p>
+
+        <!-- Navigation Tabs -->
+        <div class="transcribe-tabs">
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'docs' ? 'active' : ''}" id="tab-btn-docs">
+            📜 نسخ الوثائق والمخطوطات الخطية (OCR)
+          </button>
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'audio' ? 'active' : ''}" id="tab-btn-audio">
+            🎙️ تفريغ التسجيلات الصوتية (Voice-to-Text)
+          </button>
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'search' ? 'active' : ''}" id="tab-btn-search">
+            🔍 البحث في كافة النصوص المنسوخة
+          </button>
+        </div>
+
+        <!-- Toolbar for active tab -->
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:rgba(15,23,42,.7);padding:10px 14px;border-radius:8px;border:1px solid var(--line)">
+          ${currentTab === 'search' ? `
+            <input type="text" id="transcribe-search-inp" value="${esc(searchQuery)}" placeholder="ابحث باسم الوثيقة، اسم شخص، مكان، أو سنة (مثال: النماص، 1342، حوطة)..." class="fstats-btn" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);text-align:right;padding:8px 12px;font-size:.84rem">
+          ` : `
+            <label class="ai-restore-btn" style="cursor:pointer;margin:0;background:var(--gold);color:#0f172a;font-weight:700">
+              ${currentTab === 'docs' ? '📄 رفع وثيقة جديدة لنسخها' : '🎙️ رفع تسجيل صوتي لتفريغه'}
+              <input type="file" id="transcribe-upload-input" accept="${currentTab === 'docs' ? 'image/*,.pdf' : 'audio/*,.mp3,.m4a,.wav'}" style="display:none">
+            </label>
+            <span style="font-size:.78rem;color:var(--mut)">
+              ${currentTab === 'docs' ? 'يقوم النظام بقراءة خط الرقعة والنسخ والخطوط القديمة واستخراج النص فوراً' : 'يقوم النظام بالتعرف على لهجة السراة وكلام كبار العائلة مع إضافة الطوابع الزمنية'}
+            </span>
+          `}
+        </div>
+
+        <!-- Main Body: Two Columns (List + Editor) -->
+        <div style="display:grid;grid-template-columns:260px 1fr;gap:14px">
+          <!-- Side list -->
+          <div style="max-height:420px;overflow-y:auto;border-left:1px solid var(--line);padding-left:10px">
+            <div style="font-size:.78rem;color:var(--mut);margin-bottom:8px">
+              القائمة (${filteredList.length} سجل متاح):
+            </div>
+            ${filteredList.map(item => `
+              <div class="transcribe-item-row" data-tr-id="${item.id}" style="cursor:pointer;border-color:${item === activeItem ? 'var(--gold)' : 'var(--line)'};background:${item === activeItem ? 'rgba(245,158,11,.1)' : 'rgba(15,23,42,.7)'}">
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:.8rem;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                    ${item.type === 'audio' ? '🎙️' : '📜'} ${esc(item.title)}
+                  </div>
+                  <div style="font-size:.7rem;color:var(--mut);margin-top:2px">${esc(item.dateText)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Active Document Viewer & Transcription Editor -->
+          <div class="transcribe-preview-box">
+            ${activeItem ? `
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px">
+                <div>
+                  <h3 style="margin:0 0 4px 0;color:var(--gold);font-size:.95rem">${esc(activeItem.title)}</h3>
+                  <div style="font-size:.75rem;color:var(--mut)">📅 ${esc(activeItem.dateText)} · 🏷️ ${(activeItem.tags || []).join('، ')}</div>
+                </div>
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="fstats-btn" id="btn-copy-transcription" style="padding:4px 10px;font-size:.76rem;background:var(--gold);color:#0f172a;font-weight:700">
+                    📋 نسخ النص
+                  </button>
+                  <button type="button" class="fstats-btn" id="btn-dl-transcription" style="padding:4px 10px;font-size:.76rem">
+                    💾 تنزيل ملف
+                  </button>
+                </div>
+              </div>
+
+              ${activeItem.originalImg ? `
+                <div style="margin-bottom:10px;text-align:center">
+                  <img src="${esc(activeItem.originalImg)}" style="max-height:120px;border-radius:6px;border:1px solid var(--line)">
+                </div>
+              ` : ''}
+
+              <div style="font-size:.76rem;color:var(--gold);margin-bottom:4px;font-weight:700">
+                النص المفرغ القابل للتحرير والبحث:
+              </div>
+              <textarea id="transcribe-edit-text" class="transcribe-text-area" rows="7">${esc(activeItem.extractedText)}</textarea>
+
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+                <button type="button" class="fstats-btn" id="btn-save-edits" style="font-size:.76rem;padding:4px 10px">
+                  💾 حفظ التعديلات على النص
+                </button>
+                <span id="transcribe-save-status" style="font-size:.74rem;color:#22c55e"></span>
+              </div>
+            ` : `
+              <div style="text-align:center;padding:40px 10px;color:var(--mut)">
+                <div style="font-size:2rem;margin-bottom:8px">📜</div>
+                <div>لا توجد عناصر مطابقة، اختر عنصراً أو ارفع وثيقة جديدة.</div>
+              </div>
+            `}
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Tab bindings
+    const bDocs = $('#tab-btn-docs');
+    if (bDocs) bDocs.onclick = () => { currentTab = 'docs'; activeItem = allTranscripts.find(t => t.type === 'doc'); renderModal(); };
+    const bAudio = $('#tab-btn-audio');
+    if (bAudio) bAudio.onclick = () => { currentTab = 'audio'; activeItem = allTranscripts.find(t => t.type === 'audio'); renderModal(); };
+    const bSearch = $('#tab-btn-search');
+    if (bSearch) bSearch.onclick = () => { currentTab = 'search'; renderModal(); };
+
+    // Search input binding
+    const sInp = $('#transcribe-search-inp');
+    if (sInp) {
+      sInp.oninput = (e) => {
+        searchQuery = e.target.value;
+        const matched = allTranscripts.filter(t => {
+          const q = searchQuery.toLowerCase();
+          return t.title.toLowerCase().includes(q) ||
+            t.extractedText.toLowerCase().includes(q) ||
+            (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)));
+        });
+        if (matched.length) activeItem = matched[0];
+        renderModal();
+      };
+    }
+
+    // Item selection binding
+    document.querySelectorAll('[data-tr-id]').forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.trId;
+        const found = allTranscripts.find(t => t.id === id);
+        if (found) {
+          activeItem = found;
+          renderModal();
+        }
+      };
+    });
+
+    // Copy & Download
+    const copyBtn = $('#btn-copy-transcription');
+    if (copyBtn && activeItem) {
+      copyBtn.onclick = () => {
+        const text = $('#transcribe-edit-text')?.value || activeItem.extractedText;
+        navigator.clipboard.writeText(text).then(() => {
+          toast('✅ تم نسخ النص المفرغ بنجاح!');
+        });
+      };
+    }
+
+    const dlBtn = $('#btn-dl-transcription');
+    if (dlBtn && activeItem) {
+      dlBtn.onclick = () => {
+        const text = $('#transcribe-edit-text')?.value || activeItem.extractedText;
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${activeItem.title.replace(/[\\/:*?"<>|]/g, '_')}.txt`;
+        a.click();
+        toast('💾 جاري تنزيل الملف النصي...');
+      };
+    }
+
+    // Save edits
+    const saveBtn = $('#btn-save-edits');
+    if (saveBtn && activeItem) {
+      saveBtn.onclick = () => {
+        const newText = $('#transcribe-edit-text')?.value || '';
+        activeItem.extractedText = newText;
+        // Save to localStorage
+        const stored = JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]');
+        const idx = stored.findIndex(s => s.id === activeItem.id);
+        if (idx >= 0) {
+          stored[idx].extractedText = newText;
+        } else {
+          stored.push(activeItem);
+        }
+        localStorage.setItem('almatarid_transcripts', JSON.stringify(stored));
+        const statusEl = $('#transcribe-save-status');
+        if (statusEl) statusEl.textContent = '✓ تم حفظ التعديل بنجاح';
+        toast('✅ تم حفظ التعديلات في السجل الرقمي!');
+      };
+    }
+
+    // Upload & AI transcribe simulation
+    const upInp = $('#transcribe-upload-input');
+    if (upInp) {
+      upInp.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        toast('⏳ جاري فحص الملف ونسخ المحتوى بواسطة الذكاء الاصطناعي...');
+        setTimeout(() => {
+          const isAudio = currentTab === 'audio';
+          const newDoc = {
+            id: 'tr_user_' + Date.now(),
+            type: isAudio ? 'audio' : 'doc',
+            title: file.name.replace(/\.[^/.]+$/, ""),
+            dateText: 'تاريخ الإدراج: ' + new Date().toLocaleDateString('ar-SA'),
+            category: isAudio ? 'تسجيلات صوتية' : 'وثائق ومخطوطات',
+            extractedText: isAudio ?
+              `[00:00] (تفريغ صوتي آلي من تسجيل: ${file.name})\n[00:18] الحديث عن اجتماع أعيان العائلة وحضور المناسبة المباركة.\n[00:55] والحمد لله اجتمعت الكلمة وساد الألفة والمحبة بين أبناء العمومة.` :
+              `بسم الله الرحمن الرحيم\n(نص منسوخ آلياً من الوثيقة: ${file.name})\nبتاريخ المحضر الحاضر، حضر من أسرة آل مطارد المعنيون بالأمر، وتم توثيق ما تضمنه الصك بأكمله وصحة التوقيعات والشهادات.\nكتبه وشهد به الحاضرون.`,
+            tags: ['وثيقة مضافة', 'نسخ آلي', isAudio ? 'صوت' : 'مخطوط']
+          };
+          const stored = JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]');
+          stored.unshift(newDoc);
+          localStorage.setItem('almatarid_transcripts', JSON.stringify(stored));
+          allTranscripts.unshift(newDoc);
+          activeItem = newDoc;
+          toast('✅ تم نسخ واستخراج النص بنجاح!');
+          renderModal();
+        }, 800);
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 
