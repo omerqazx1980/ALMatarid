@@ -1034,3 +1034,11 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .dnd-ctrls{display:flex;gap:4px;margin-right:auto}
 .dnd-btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.78rem}
 .dnd-btn:hover{border-color:var(--gold);color:var(--gold)}
+
+/* ---------- 73) واجهة ثنائية اللغة (AR / EN) ---------- */
+[lang="en"] body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+[dir="ltr"] .bar{flex-direction:row}
+[dir="ltr"] .qwrap button{right:auto;left:6px}
+[dir="ltr"] .zoom{left:auto;right:14px}
+[dir="ltr"] .ctl{margin-right:0;margin-left:auto}
+[dir="ltr"] .dir-bar{flex-direction:row}

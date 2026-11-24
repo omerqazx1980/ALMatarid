@@ -7876,4 +7876,119 @@ if (mReorderTree) {
   mReorderTree.onclick = menuClose(() => openSiblingReorderModal());
 }
 
+/* ============================================================
+   73) واجهة ثنائية اللغة (AR / EN)
+   ============================================================ */
+const I18N = {
+  ar: {
+    title: 'شجرة آل مطارد',
+    sub: 'بنو عمرو · النماص',
+    searchPlaceholder: 'ابحث بالاسم أو الكنية',
+    btnOpen: 'فتح الكل',
+    btnClose: 'طي الكل',
+    vGraph: 'مخطط',
+    vList: 'قائمة',
+    fitScreen: 'ملاءمة الشاشة',
+    thisIsMe: 'هذا أنا',
+    login: 'دخول',
+    logout: 'خروج',
+    langToggle: 'English 🌐',
+    emptyMsg: 'لا توجد نتائج لهذا البحث.',
+    dirGen: '🔢 حسب الجيل',
+    dirAlpha: '🔤 حسب الأبجدية (أ-ي)',
+    dirTree: '🌳 عرض الشجرة الهرمي',
+    branchTrees: '🌿 فروع الشجرة:',
+    showAll: 'إظهار الكل'
+  },
+  en: {
+    title: 'Al-Mutarid Tree',
+    sub: 'Banu Amr · Al-Namas',
+    searchPlaceholder: 'Search by name or nickname...',
+    btnOpen: 'Expand All',
+    btnClose: 'Collapse All',
+    vGraph: 'Tree View',
+    vList: 'List View',
+    fitScreen: 'Fit View',
+    thisIsMe: 'This is Me',
+    login: 'Login',
+    logout: 'Logout',
+    langToggle: 'عربي 🌐',
+    emptyMsg: 'No results found for this search.',
+    dirGen: '🔢 By Generation',
+    dirAlpha: '🔤 Alphabetical (A-Z)',
+    dirTree: '🌳 Hierarchical Tree',
+    branchTrees: '🌿 Family Branches:',
+    showAll: 'Show All'
+  }
+};
+
+function applyLanguage(lang) {
+  S.lang = lang || (localStorage.getItem('almatarid_lang') === 'en' ? 'en' : 'ar');
+  localStorage.setItem('almatarid_lang', S.lang);
+
+  const isEn = S.lang === 'en';
+  const t = I18N[S.lang] || I18N.ar;
+
+  document.documentElement.lang = S.lang;
+  document.documentElement.dir = isEn ? 'ltr' : 'rtl';
+
+  const titleEl = document.querySelector('header h1');
+  if (titleEl) titleEl.textContent = t.title;
+  const subEl = document.querySelector('header .sub');
+  if (subEl) subEl.textContent = t.sub;
+
+  const qInput = $('#q');
+  if (qInput) qInput.placeholder = t.searchPlaceholder;
+
+  const btnOpen = $('#btn-open');
+  if (btnOpen) btnOpen.innerHTML = `<span class="ic">➕</span>${t.btnOpen}`;
+  const btnClose = $('#btn-close');
+  if (btnClose) btnClose.innerHTML = `<span class="ic">➖</span>${t.btnClose}`;
+
+  const vGraph = $('#v-graph');
+  if (vGraph) vGraph.innerHTML = `<span class="ic">🌳</span>${t.vGraph}`;
+  const vList = $('#v-list');
+  if (vList) vList.innerHTML = `<span class="ic">☰</span>${t.vList}`;
+
+  const zFit = $('#z-fit');
+  if (zFit) zFit.innerHTML = t.fitScreen.replace(' ', '<br>');
+  const zMe = $('#z-me');
+  if (zMe) zMe.innerHTML = `👤<br>${t.thisIsMe}`;
+
+  const btnLang = $('#btn-lang');
+  if (btnLang) btnLang.textContent = isEn ? '🌐 عربي' : '🌐 EN';
+
+  if (S.role === 'visitor') {
+    const btnLogin = $('#btn-login');
+    if (btnLogin) btnLogin.textContent = t.login;
+  }
+
+  const dirGen = document.querySelector('[data-dir-mode="gen"]');
+  if (dirGen) dirGen.textContent = t.dirGen;
+  const dirAlpha = document.querySelector('[data-dir-mode="alpha"]');
+  if (dirAlpha) dirAlpha.textContent = t.dirAlpha;
+  const dirTree = document.querySelector('[data-dir-mode="tree"]');
+  if (dirTree) dirTree.textContent = t.dirTree;
+
+  const branchTitle = document.querySelector('.branch-vis-title');
+  if (branchTitle) branchTitle.textContent = t.branchTrees;
+  const branchVisAll = $('#branch-vis-all');
+  if (branchVisAll) branchVisAll.textContent = t.showAll;
+}
+
+function toggleLanguage() {
+  const nextLang = S.lang === 'en' ? 'ar' : 'en';
+  applyLanguage(nextLang);
+  render();
+  toast(nextLang === 'en' ? '🌐 Language switched to English' : '🌐 تم تغيير اللغة إلى العربية');
+}
+
+const btnLang = $('#btn-lang');
+if (btnLang) btnLang.onclick = toggleLanguage;
+
+const mLangToggle = $('#m-lang-toggle');
+if (mLangToggle) mLangToggle.onclick = menuClose(() => toggleLanguage());
+
+applyLanguage();
+
 setTimeout(updateBranchVisibilityBar, 300);
