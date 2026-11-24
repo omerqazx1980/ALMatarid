@@ -6219,3 +6219,183 @@ function openCsvImportModal() {
 }
 
 $('#m-csv-import').onclick = menuClose(() => openCsvImportModal());
+
+/* ---------- 66) المخططات البديلة: مروحة الأجداد والساعة الرملية والنسل (فرع تجربة) ---------- */
+function renderFanChartSvg(m) {
+  const chain = getAncestryChain(m);
+  const width = 640, height = 360, cx = 320, cy = 340;
+
+  // Level 0: Subject
+  // Level 1: Father (and Mother if known)
+  // Level 2: Grandfather...
+  let svg = `<svg class="fan-svg" viewBox="0 0 ${width} ${height}">`;
+  svg += `<defs><radialGradient id="fanGrad" cx="50%" cy="100%" r="100%"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0b1329"/></radialGradient></defs>`;
+  svg += `<rect width="${width}" height="${height}" fill="url(#fanGrad)" rx="12"/>`;
+
+  // Draw concentric arcs
+  const rings = [
+    { r: 70, label: 'الفرد' },
+    { r: 140, label: 'الآباء' },
+    { r: 210, label: 'الأجداد' },
+    { r: 280, label: 'أجداد الآباء' },
+    { r: 330, label: 'الجيل الأعلى' }
+  ];
+
+  rings.forEach((ring, idx) => {
+    svg += `<path d="M ${cx - ring.r} ${cy} A ${ring.r} ${ring.r} 0 0 1 ${cx + ring.r} ${cy}" fill="none" stroke="rgba(245,158,11,${0.2 + idx * 0.1})" stroke-width="1.5" stroke-dasharray="${idx === 0 ? 'none' : '4,4'}"/>`;
+  });
+
+  // Center hub for subject
+  svg += `<circle cx="${cx}" cy="${cy}" r="55" fill="#f59e0b" opacity="0.9"/>`;
+  svg += `<text x="${cx}" y="${cy - 20}" fill="#1c1204" font-size="12" font-weight="800" text-anchor="middle">${esc(m.first || m.full_name.split(' ')[0])}</text>`;
+  svg += `<text x="${cx}" y="${cy - 6}" fill="#1c1204" font-size="10" text-anchor="middle">الجيل ${gen(m)}</text>`;
+
+  // Draw fan slices for ancestors in chain
+  const levels = chain.slice(1, 5);
+  levels.forEach((anc, idx) => {
+    const ringRadius = 70 + (idx + 1) * 65;
+    const angle = (Math.PI / (levels.length + 1)) * (idx + 1);
+    const px = cx - Math.cos(angle) * (ringRadius - 30);
+    const py = cy - Math.sin(angle) * (ringRadius - 30);
+
+    svg += `<g style="cursor:pointer" onclick="openAlternativeCharts('${anc.id}', 'fan')">`;
+    svg += `<circle cx="${px}" cy="${py}" r="26" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>`;
+    svg += `<text x="${px}" y="${py + 3}" fill="#fff" font-size="9" font-weight="700" text-anchor="middle">${esc(anc.first || anc.full_name.split(' ')[0])}</text>`;
+    svg += `<text x="${px}" y="${py + 15}" fill="#38bdf8" font-size="8" text-anchor="middle">الجيل ${gen(anc)}</text>`;
+    svg += `</g>`;
+
+    // Connector line from center
+    svg += `<line x1="${cx}" y1="${cy - 45}" x2="${px}" y2="${py + 20}" stroke="rgba(56,189,248,0.4)" stroke-width="1.5"/>`;
+  });
+
+  svg += `</svg>`;
+  return svg;
+}
+
+function renderHourglassSvg(m) {
+  const ancestors = getAncestryChain(m).slice(1, 4);
+  const kids = S.kids.get(m.id) || [];
+  const width = 640, height = 440, cx = 320, cy = 220;
+
+  let svg = `<svg class="fan-svg" viewBox="0 0 ${width} ${height}">`;
+  svg += `<rect width="${width}" height="${height}" fill="#080e1e" rx="12"/>`;
+
+  // Draw upper triangle area (Ancestors)
+  svg += `<polygon points="${cx},${cy} 100,20 540,20" fill="rgba(245,158,11,0.06)" stroke="rgba(245,158,11,0.2)" stroke-dasharray="3,3"/>`;
+  // Draw lower triangle area (Descendants)
+  svg += `<polygon points="${cx},${cy} 100,420 540,420" fill="rgba(56,189,248,0.06)" stroke="rgba(56,189,248,0.2)" stroke-dasharray="3,3"/>`;
+
+  // Center node (Waist): Subject
+  svg += `<circle cx="${cx}" cy="${cy}" r="38" fill="#f59e0b" stroke="#fff" stroke-width="2"/>`;
+  svg += `<text x="${cx}" y="${cy - 4}" fill="#1c1204" font-size="11" font-weight="800" text-anchor="middle">${esc(m.first || m.full_name.split(' ')[0])}</text>`;
+  svg += `<text x="${cx}" y="${cy + 12}" fill="#1c1204" font-size="9" text-anchor="middle">مركز الساعة</text>`;
+
+  // Ancestors going up
+  ancestors.forEach((anc, i) => {
+    const y = 140 - i * 50;
+    const x = cx + (i % 2 === 0 ? -60 : 60) * (i + 1) * 0.6;
+    svg += `<g style="cursor:pointer" onclick="openAlternativeCharts('${anc.id}', 'hourglass')">`;
+    svg += `<rect x="${x - 45}" y="${y - 14}" width="90" height="28" rx="6" fill="#1e293b" stroke="#f59e0b"/>`;
+    svg += `<text x="${x}" y="${y + 4}" fill="#fff" font-size="9" font-weight="700" text-anchor="middle">👴 ${esc(anc.first || anc.full_name.split(' ')[0])}</text>`;
+    svg += `</g>`;
+    svg += `<line x1="${cx}" y1="${cy - 38}" x2="${x}" y2="${y + 14}" stroke="#f59e0b" stroke-width="1.2" opacity="0.6"/>`;
+  });
+
+  // Kids going down
+  kids.slice(0, 5).forEach((kid, i) => {
+    const count = Math.min(kids.length, 5);
+    const spacing = 460 / (count + 1);
+    const x = 90 + spacing * (i + 1);
+    const y = 340;
+    svg += `<g style="cursor:pointer" onclick="openAlternativeCharts('${kid.id}', 'hourglass')">`;
+    svg += `<rect x="${x - 40}" y="${y - 14}" width="80" height="28" rx="6" fill="#0f172a" stroke="#38bdf8"/>`;
+    svg += `<text x="${x}" y="${y + 4}" fill="#fff" font-size="9" font-weight="700" text-anchor="middle">${kid.gender === 'female' ? '👧' : '👦'} ${esc(kid.first || kid.full_name.split(' ')[0])}</text>`;
+    svg += `</g>`;
+    svg += `<line x1="${cx}" y1="${cy + 38}" x2="${x}" y2="${y - 14}" stroke="#38bdf8" stroke-width="1.2" opacity="0.6"/>`;
+  });
+
+  svg += `</svg>`;
+  return svg;
+}
+
+function renderDescendantsTreeHtml(m) {
+  const getSubTree = (person, depth = 0) => {
+    if (depth > 4) return '';
+    const children = S.kids.get(person.id) || [];
+    return `
+      <div style="margin-right:${depth ? '20px' : '0'};padding-right:${depth ? '12px' : '0'};border-right:${depth ? '2px solid rgba(245,158,11,.4)' : 'none'};margin-top:6px">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer" onclick="openAlternativeCharts('${person.id}', 'descendants')">
+          <span style="font-size:1.1rem">${person.gender === 'female' ? '🌸' : '🌿'}</span>
+          <b style="color:${depth === 0 ? 'var(--gold)' : '#fff'};font-size:.88rem">${esc(person.full_name)}</b>
+          <span class="bd" style="font-size:.68rem">الجيل ${gen(person)}</span>
+          ${children.length ? `<span style="font-size:.7rem;color:var(--mut)">(${children.length} أبناء)</span>` : ''}
+        </div>
+        ${children.length ? `
+          <div style="margin-top:4px">
+            ${children.map(child => getSubTree(child, depth + 1)).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+
+  return `
+    <div style="text-align:start;width:100%;max-width:600px;margin:0 auto">
+      ${getSubTree(m, 0)}
+    </div>
+  `;
+}
+
+function openAlternativeCharts(memberId = null, chartType = 'fan') {
+  const member = memberId ? (S.byId.get(memberId) || S.members[0]) : (S.roots[0] || S.members[0]);
+  if (!member) return;
+
+  const html = `
+    <div class="alt-charts-wrap">
+      <div class="fstats-head">
+        <h2>📊 المخططات البديلة لشجرة العائلة</h2>
+        <p class="sub">مروحة الأجداد الدائرية، مخطط الساعة الرملية، وشجرة النسل المتصلة</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px">
+          <button type="button" class="fbook-tab-btn ${chartType === 'fan' ? 'active' : ''}" data-ct="fan">
+            🪭 مروحة الأجداد (Fan)
+          </button>
+          <button type="button" class="fbook-tab-btn ${chartType === 'hourglass' ? 'active' : ''}" data-ct="hourglass">
+            ⏳ الساعة الرملية (Hourglass)
+          </button>
+          <button type="button" class="fbook-tab-btn ${chartType === 'descendants' ? 'active' : ''}" data-ct="descendants">
+            🌿 مخطط النسل (Descendant)
+          </button>
+        </div>
+
+        <div style="display:flex;gap:6px;align-items:center">
+          <label style="font-size:.8rem;color:var(--gold);font-weight:700">الفرد:</label>
+          <select id="alt-chart-mem-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+            ${S.members.filter(m => !m.name_masked).slice(0, 100).map(m => `
+              <option value="${m.id}" ${m.id === member.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+            `).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="alt-charts-stage" id="alt-charts-stage-box">
+        ${chartType === 'fan' ? renderFanChartSvg(member) : (chartType === 'hourglass' ? renderHourglassSvg(member) : renderDescendantsTreeHtml(member))}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  document.querySelectorAll('[data-ct]').forEach(b => {
+    b.onclick = () => openAlternativeCharts(member.id, b.dataset.ct);
+  });
+
+  const sel = $('#alt-chart-mem-sel');
+  if (sel) {
+    sel.onchange = () => openAlternativeCharts(sel.value, chartType);
+  }
+}
+
+$('#m-alt-charts').onclick = menuClose(() => openAlternativeCharts());
