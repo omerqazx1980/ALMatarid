@@ -3273,6 +3273,7 @@ $('#m-cards').onclick = menuClose(() => {
 });
 $('#m-family-news').onclick = menuClose(() => openFamilyNewsModal());
 $('#m-family-vote').onclick = menuClose(() => openFamilyVoteModal());
+$('#m-careers-dir').onclick = menuClose(() => openCareersDirectoryModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -11793,6 +11794,250 @@ function openFamilyVoteModal() {
 
   renderVoteModal();
 }
+
+/* ---------- 90) دليل مهن وأعمال أفراد العائلة (فرع تجربة) ---------- */
+function openCareersDirectoryModal() {
+  const CAREER_CATS = [
+    { key: 'all', label: 'الكل' },
+    { key: 'med', label: '🩺 الطب والصحة' },
+    { key: 'eng', label: '🏗️ الهندسة والتقنية' },
+    { key: 'law', label: '⚖️ القانون والعدل' },
+    { key: 'edu', label: '🎓 التعليم والأكاديميا' },
+    { key: 'biz', label: '💼 التجارة والأعمال' },
+    { key: 'gov', label: '🏛️ القطاع العام' },
+    { key: 'mil', label: '🎖️ السلك العسكري' }
+  ];
+
+  const DEFAULT_CAREERS = [
+    {
+      id: 'car_1',
+      name: 'د. فهد بن محمد المطارد',
+      category: 'med',
+      categoryLabel: '🩺 الطب والصحة',
+      title: 'استشاري جراحة وأستاذ مساعد',
+      workplace: 'مدينة الملك فهد الطبية - الرياض',
+      specialty: 'الجراحة العامة والمناظير',
+      city: 'الرياض',
+      phone: '0501112233'
+    },
+    {
+      id: 'car_2',
+      name: 'م. صالح بن علي المطارد',
+      category: 'eng',
+      categoryLabel: '🏗️ الهندسة والتقنية',
+      title: 'مهندس معماري ومستشار مشاريع',
+      workplace: 'مكتب السراة للاستشارات الهندسية',
+      specialty: 'التصميم التراثي والعمراني المستدام',
+      city: 'النماص',
+      phone: '0502223344'
+    },
+    {
+      id: 'car_3',
+      name: 'المستشار سلطان بن فهد المطارد',
+      category: 'law',
+      categoryLabel: '⚖️ القانون والعدل',
+      title: 'محامٍ ومحكم معتمد',
+      workplace: 'مجموعة المطارد للمحاماة والاستشارات',
+      specialty: 'القضايا التجارية والتركات والأوقاف',
+      city: 'جدة',
+      phone: '0503334455'
+    },
+    {
+      id: 'car_4',
+      name: 'أ.د. سعيد بن محمد المطارد',
+      category: 'edu',
+      categoryLabel: '🎓 التعليم والأكاديميا',
+      title: 'أستاذ التاريخ والوثائق المشارك',
+      workplace: 'جامعة الملك خالد - أبها',
+      specialty: 'تاريخ الجزيرة العربية وجنوب المملكة',
+      city: 'أبها',
+      phone: '0504445566'
+    },
+    {
+      id: 'car_5',
+      name: 'أ. عبدالرحمن بن صالح المطارد',
+      category: 'biz',
+      categoryLabel: '💼 التجارة والأعمال',
+      title: 'رائد أعمال ومدير عام',
+      workplace: 'شركة المطارد للتجارة والمقاولات',
+      specialty: 'التطوير العقاري وسلاسل الإمداد',
+      city: 'الرياض',
+      phone: '0505556677'
+    }
+  ];
+
+  // Retrieve user registered careers
+  const localCareers = JSON.parse(localStorage.getItem('almatarid_careers') || '[]');
+  const allCareers = [...localCareers, ...DEFAULT_CAREERS];
+
+  let activeCat = 'all';
+  let searchQuery = '';
+
+  function renderModal() {
+    const filtered = allCareers.filter(item => {
+      if (activeCat !== 'all' && item.category !== activeCat) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return item.name.toLowerCase().includes(q) ||
+          item.title.toLowerCase().includes(q) ||
+          item.specialty.toLowerCase().includes(q) ||
+          item.workplace.toLowerCase().includes(q) ||
+          item.city.toLowerCase().includes(q);
+      }
+      return true;
+    });
+
+    const html = `
+      <div class="career-wrap" style="max-width:800px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>💼</span> دليل مهن وأعمال أفراد العائلة
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          شبكة مهنية عائلية للتواصل وتبادل الخبرات بين أبناء وبنات أسرة آل مطارد: ابحث عن قريب بحسب تخصصه أو مهنته للاستشارة والتعاون التجاري وصلة الرحم.
+        </p>
+
+        <!-- Search Bar and Add Button -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+          <input type="text" id="career-search-inp" value="${esc(searchQuery)}" placeholder="ابحث باسم القريب، المهنة، التخصص، أو المدينة (مثال: طبيب، مهندس، الرياض)..." style="flex:1;min-width:200px;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
+
+          <button type="button" class="fstats-btn" id="btn-add-career" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 12px;font-size:.78rem">
+            ➕ إضافة مهنتي وتخصصي في الدليل
+          </button>
+        </div>
+
+        <!-- Category Pills -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${CAREER_CATS.map(c => `
+            <button type="button" class="fstats-btn ${activeCat === c.key ? 'active' : ''}" data-car-cat="${c.key}" style="padding:4px 10px;font-size:.76rem">
+              ${c.label}
+            </button>
+          `).join('')}
+        </div>
+
+        <!-- Directory Grid -->
+        <div class="career-grid" style="max-height:480px;overflow-y:auto;padding-left:4px">
+          ${filtered.length ? filtered.map(item => {
+            const matchedMember = S.members.find(m => m.full_name && m.full_name.includes(item.name.replace(/^(د\.|م\.|المستشار|أ\.د\.|أ\.)\s*/, '')));
+            return `
+              <div class="career-card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+                  <span class="career-badge">${esc(item.categoryLabel)}</span>
+                  <span style="font-size:.72rem;color:var(--mut)">📍 ${esc(item.city)}</span>
+                </div>
+
+                <div>
+                  <h3 style="margin:0 0 2px 0;font-size:.9rem;color:var(--gold)">${esc(item.name)}</h3>
+                  <div style="font-size:.8rem;font-weight:700;color:var(--txt)">${esc(item.title)}</div>
+                </div>
+
+                <div style="font-size:.76rem;color:var(--mut);line-height:1.4">
+                  <div>🏢 <b>الجهة:</b> ${esc(item.workplace)}</div>
+                  <div>🎯 <b>التخصص:</b> ${esc(item.specialty)}</div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:auto">
+                  ${matchedMember ? `
+                    <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${matchedMember.id}')">
+                      👤 الملف بالشجرة
+                    </button>
+                  ` : `<span></span>`}
+
+                  ${item.phone ? `
+                    <a href="https://api.whatsapp.com/send?phone=${item.phone.replace(/^0/, '966')}&text=${encodeURIComponent('السلام عليكم ورحمة الله، تواصل مهني عبر دليل أسرة آل مطارد.')}" target="_blank" class="fstats-btn" style="text-decoration:none;font-size:.72rem;padding:3px 8px;background:rgba(37,211,102,.15);color:#25d366;border-color:#25d366">
+                      📲 واتساب
+                    </a>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('') : `
+            <div style="grid-column:1/-1;text-align:center;padding:40px 10px;color:var(--mut)">
+              <div style="font-size:2rem;margin-bottom:8px">💼</div>
+              <div>لا توجد نتائج مطابقة لبحثك، جرب البحث بكلمة أخرى أو أضف تخصصك أعلاه!</div>
+            </div>
+          `}
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
+          <span style="font-size:.74rem;color:var(--mut)">إجمالي الكفاءات المسجلة: <b>${allCareers.length} فرد</b></span>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Bind category filters
+    document.querySelectorAll('[data-car-cat]').forEach(btn => {
+      btn.onclick = () => {
+        activeCat = btn.dataset.carCat;
+        renderModal();
+      };
+    });
+
+    // Bind search
+    const sInp = $('#career-search-inp');
+    if (sInp) {
+      sInp.oninput = (e) => {
+        searchQuery = e.target.value;
+        renderModal();
+      };
+    }
+
+    // Add career
+    const addBtn = $('#btn-add-career');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const name = prompt('اسمك الكريم مع اللقب (مثال: د. عبدالله بن صالح المطارد):');
+        if (!name) return;
+        const title = prompt('المسمى المهني والوظيفة (مثال: استشاري باطنة / مهندس برمجيات):') || 'أخصائي';
+        const workplace = prompt('جهة العمل أو اسم الشركة/العيادة/المكتب:') || 'القطاع الخاص';
+        const specialty = prompt('التخصص الدقيق أو مجال العمل:') || 'عام';
+        const city = prompt('المدينة (الرياض، النماص، جدة، أبها...):') || 'الرياض';
+        const phone = prompt('رقم الجوال للتواصل المهني (اختياري):') || '';
+        const catKey = prompt('رمز التصنيف: (med=طب، eng=هندسة، law=قانون، edu=تعليم، biz=تجارة، gov=حكومي، mil=عسكري):') || 'biz';
+
+        const catLabels = {
+          med: '🩺 الطب والصحة',
+          eng: '🏗️ الهندسة والتقنية',
+          law: '⚖️ القانون والعدل',
+          edu: '🎓 التعليم والأكاديميا',
+          biz: '💼 التجارة والأعمال',
+          gov: '🏛️ القطاع العام',
+          mil: '🎖️ السلك العسكري'
+        };
+
+        const newCar = {
+          id: 'car_user_' + Date.now(),
+          name,
+          category: catKey,
+          categoryLabel: catLabels[catKey] || '💼 أعمال متنوعة',
+          title,
+          workplace,
+          specialty,
+          city,
+          phone
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_careers') || '[]');
+        stored.unshift(newCar);
+        localStorage.setItem('almatarid_careers', JSON.stringify(stored));
+        allCareers.unshift(newCar);
+        toast('✅ تمت إضافة بياناتك المهنية إلى دليل العائلة بنجاح!');
+        renderModal();
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 

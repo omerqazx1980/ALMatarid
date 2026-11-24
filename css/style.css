@@ -1166,6 +1166,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .fvote-option-row:hover, .fvote-option-row.voted { border-color: var(--gold); }
 .fvote-progress-fill { position: absolute; top: 0; right: 0; bottom: 0; background: rgba(245,158,11,.15); pointer-events: none; transition: width .4s ease; border-left: 2px solid var(--gold); }
 
+/* ---------- 90) دليل مهن وأعمال أفراد العائلة ---------- */
+.career-wrap { display: flex; flex-direction: column; gap: 14px; }
+.career-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.career-card { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; transition: all .15s ease; }
+.career-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.career-badge { background: rgba(245,158,11,.15); color: var(--gold); border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700; display: inline-block; }
+
+
 
 
 
