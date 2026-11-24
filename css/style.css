@@ -698,3 +698,30 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .notif-promo{background:rgba(56,189,248,.1);border:1px dashed rgba(56,189,248,.4);border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .notif-promo p{font-size:.8rem;color:#cbd5e1}
 .notif-promo button{flex:none;font-size:.78rem;padding:5px 12px}
+
+/* ---------- 45) تصدير الشجرة PDF والطباعة (فرع تجربة) ---------- */
+.pdf-export-box{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.pdf-options-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.pdf-opt-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:5px}
+.pdf-opt-card label{font-size:.78rem;color:var(--mut);font-weight:600}
+.pdf-opt-card select,.pdf-opt-card input{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font-size:.82rem}
+
+.pdf-preview-box{background:#fff;color:#1e293b;border-radius:10px;padding:14px;border:1px solid #cbd5e1;display:flex;flex-direction:column;align-items:center;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.pdf-preview-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.pdf-preview-header h4{font-size:1.05rem;color:#0f172a}
+.pdf-preview-summary{font-size:.75rem;color:#64748b}
+
+.pdf-action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.pdf-action-row button{flex:1;min-width:140px;padding:9px 14px;font-size:.86rem;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+
+@media print {
+  body{background:#fff!important;color:#000!important;height:auto!important;overflow:visible!important}
+  header,#bbar,.bar,.stats,#genstep,.zoom,#event,#newsbar,dialog,.hbtns,.ctl{display:none!important}
+  main,#vp,#stage{position:static!important;width:100%!important;height:auto!important;overflow:visible!important}
+  #nodes{transform:none!important}
+  .card{border:1px solid #333!important;background:#fff!important;color:#000!important;box-shadow:none!important}
+  .card b{color:#000!important}
+  .card small{color:#444!important}
+  .card .tg{display:none!important}
+  #lines line,#lines path{stroke:#333!important}
+}

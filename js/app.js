@@ -1710,6 +1710,143 @@ $('#m-kin').onclick = menuClose(() => {
 });
 $('#profile-body').addEventListener('change', e => { if (e.target.id === 'kin-a' || e.target.id === 'kin-b') kinView(); });
 
+/* ---------- تصدير الشجرة PDF والطباعة ومحرر المشجر الجداري (فرع تجربة) ---------- */
+function openPdfExport() {
+  const roots = S.roots || [];
+  const maxGen = Math.max(1, ...S.members.map(gen));
+
+  const branchOpts = [
+    ['all', 'الشجرة كاملة (كافة الفروع والأجيال)'],
+    ...roots.map(r => [r.id, `فرع: ${r.full_name}`])
+  ];
+
+  const html = `
+    <div class="pdf-export-box">
+      <div class="fstats-head">
+        <h2>📄 تصدير الشجرة للطباعة (PDF / مشجر جداري)</h2>
+        <p class="sub">إعداد وتجهيز شجرة العائلة للطباعة الورقية بمقاسات مختلفة (A4، A3، أو مشجر جداري كبير)</p>
+      </div>
+
+      <div class="pdf-preview-box">
+        <div class="pdf-preview-header">
+          <img src="logo.jpg" alt="" width="34" height="34" style="border-radius:50%">
+          <div>
+            <h4>أسرة آل مطارد - بنو عمرو</h4>
+            <div class="pdf-preview-summary">توثيق الأنساب والتراث · ${S.members.length} فرد · ${maxGen} أجيال</div>
+          </div>
+        </div>
+        <div style="font-size:.78rem;color:#475569;margin-top:4px">
+          « ذُرِّيَّةً بَعْضُهَا مِن بَعْضٍ »
+        </div>
+        <div style="font-size:.72rem;color:#94a3b8;margin-top:6px">
+          تاريخ التوثيق: ${new Date().toLocaleDateString('ar-SA')} م
+        </div>
+      </div>
+
+      <div class="pdf-options-grid">
+        <div class="pdf-opt-card">
+          <label>نطاق المشجر</label>
+          <select id="pdf-scope">
+            ${branchOpts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="pdf-opt-card">
+          <label>أقصى جيل للطباعة</label>
+          <select id="pdf-gen">
+            ${Array.from({ length: maxGen }, (_, i) => `<option value="${i + 1}" ${i + 1 === maxGen ? 'selected' : ''}>حتى الجيل ${i + 1}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="pdf-opt-card">
+          <label>مقاس الصفحة المقترح</label>
+          <select id="pdf-size">
+            <option value="A4">A4 (عرضي - مناسب للكتيبات)</option>
+            <option value="A3" selected>A3 (عرضي - مناسب للجدار المتوسط)</option>
+            <option value="A0">مشجر جداري عملاق (Poster A0/A1)</option>
+          </select>
+        </div>
+
+        <div class="pdf-opt-card">
+          <label>نمط الطباعة</label>
+          <select id="pdf-theme">
+            <option value="clean" selected>ناصع البياض (واضح واقتصادي للحبر)</option>
+            <option value="royal">ملكي مذهب (إطارات فاخرة)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="pdf-action-row">
+        <button type="button" id="btn-do-print" style="background:var(--gold);color:#1c1204;font-weight:700">
+          🖨️ طباعة / حفظ كـ PDF
+        </button>
+        <button type="button" id="btn-export-svg" class="ghost">
+          🖼️ تنزيل مشجر فيكتور (SVG)
+        </button>
+      </div>
+      <p class="sub" style="font-size:.75rem;text-align:center">
+        💡 عند الضغط على "طباعة / حفظ كـ PDF"، اختر الوجهة <b>Save as PDF</b> في نافذة الطباعة لاقتناء نسخة PDF عالية الدقة.
+      </p>
+    </div>`;
+
+  showInfo(html);
+
+  const pb = $('#profile-body');
+  if (!pb) return;
+
+  const printBtn = $('#btn-do-print');
+  if (printBtn) {
+    printBtn.onclick = () => {
+      $('#profile').close();
+      toast('جاري فتح نافذة الطباعة...');
+      setTimeout(() => {
+        window.print();
+      }, 300);
+    };
+  }
+
+  const svgBtn = $('#btn-export-svg');
+  if (svgBtn) {
+    svgBtn.onclick = () => {
+      const stage = $('#stage');
+      const lines = $('#lines');
+      if (!stage || !lines) return;
+
+      const w = stage.offsetWidth || 2400;
+      const h = stage.offsetHeight || 1600;
+
+      const svgHeader = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h + 200}" viewBox="0 0 ${w} ${h + 200}" style="background:#0b1120;font-family:Cairo,Tahoma,sans-serif">
+  <style>
+    text { fill: #f1f5f9; font-family: Cairo, Tahoma, sans-serif; }
+    .title { font-size: 32px; font-weight: 800; fill: #f59e0b; text-anchor: middle; }
+    .subtitle { font-size: 16px; fill: #94a3b8; text-anchor: middle; }
+    .tree-line { stroke: #2b3a55; stroke-width: 2; fill: none; }
+  </style>
+  <g transform="translate(0, 40)">
+    <text x="${w / 2}" y="40" class="title">مشجر أسرة آل مطارد - بنو عمرو</text>
+    <text x="${w / 2}" y="70" class="subtitle">ذُرِّيَّةً بَعْضُهَا مِن بَعْضٍ · توثيق الأنساب والتراث</text>
+    <text x="${w / 2}" y="95" class="subtitle">تاريخ التوثيق: ${new Date().toLocaleDateString('ar-SA')} · ${S.members.length} فرد</text>
+  </g>
+  <g transform="translate(0, 160)">
+    ${lines.innerHTML}
+  </g>
+</svg>`;
+
+      const blob = new Blob([svgHeader], { type: 'image/svg+xml;charset=utf-8' });
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `al-matarid-wall-tree-${new Date().toISOString().slice(0, 10)}.svg`
+      });
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('تم تنزيل ملف المشجر الفيكتور بنجاح 🖼️');
+    };
+  }
+}
+
+$('#m-pdf').onclick = menuClose(() => openPdfExport());
+
 /* تصدير Excel (CSV بترميز يفتحه Excel بالعربية صحيحًا) */
 $('#m-csv').onclick = menuClose(() => {
   const cell = v => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
