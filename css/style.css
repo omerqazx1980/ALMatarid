@@ -1180,6 +1180,13 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .capsule-card.locked { opacity: .85; border-style: dashed; }
 .capsule-seal { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 12px; font-size: .74rem; font-weight: 700; }
 
+/* ---------- 92) تذكير بذكرى الزواج للأزواج ---------- */
+.anniv-wrap { display: flex; flex-direction: column; gap: 14px; }
+.anniv-card { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; transition: all .15s ease; }
+.anniv-card:hover { border-color: var(--gold); }
+.anniv-badge { background: rgba(244,114,182,.15); color: #f472b6; border: 1px solid #f472b6; border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700; }
+
+
 
 
 

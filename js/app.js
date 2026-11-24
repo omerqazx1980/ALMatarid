@@ -3275,6 +3275,7 @@ $('#m-family-news').onclick = menuClose(() => openFamilyNewsModal());
 $('#m-family-vote').onclick = menuClose(() => openFamilyVoteModal());
 $('#m-careers-dir').onclick = menuClose(() => openCareersDirectoryModal());
 $('#m-time-capsule').onclick = menuClose(() => openTimeCapsuleModal());
+$('#m-anniversaries').onclick = menuClose(() => openAnniversariesModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -12245,6 +12246,239 @@ function openTimeCapsuleModal(activeFilter = 'all') {
 
   renderModal();
 }
+
+/* ---------- 92) تذكير بذكرى الزواج للأزواج (فرع تجربة) ---------- */
+function openAnniversariesModal(filterMode = 'all') {
+  // Stored marriage dates (wifeId -> { date, year })
+  const customAnnivs = JSON.parse(localStorage.getItem('almatarid_anniversaries') || '{}');
+
+  // Build marriage list
+  const activeWives = (S.wives || []).filter(w => w.marriage_status !== 'divorced');
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const couples = [];
+
+  activeWives.forEach(w => {
+    const husband = S.byId.get(w.husband_id);
+    if (!husband) return;
+
+    // Check custom date or deduce from kids
+    let mDateStr = customAnnivs[w.id]?.date || null;
+    let mYear = customAnnivs[w.id]?.year || null;
+
+    if (!mYear) {
+      // Find oldest child
+      const kids = (S.kids.get(husband.id) || []).filter(k => k.wife_mother_id === w.id);
+      if (kids.length) {
+        const oldest = kids[0];
+        const by = oldest.birth_date ? new Date(oldest.birth_date).getFullYear() : (oldest.birth_year_text ? parseInt(oldest.birth_year_text) : null);
+        if (by) {
+          mYear = by - 1; // Approx 1 year before first child
+        }
+      }
+      if (!mYear && husband.birth_date) {
+        mYear = new Date(husband.birth_date).getFullYear() + 25;
+      }
+    }
+
+    if (!mYear) mYear = currentYear - 10;
+    if (!mDateStr) mDateStr = `${mYear}-05-15`;
+
+    const yearsMarried = Math.max(1, currentYear - mYear);
+
+    // Calculate days remaining in current year
+    const parts = mDateStr.split('-');
+    const mMonth = parseInt(parts[1] || '5') - 1;
+    const mDay = parseInt(parts[2] || '15');
+
+    const nextAnniv = new Date(currentYear, mMonth, mDay);
+    if (nextAnniv < now) {
+      nextAnniv.setFullYear(currentYear + 1);
+    }
+    const daysLeft = Math.ceil((nextAnniv - now) / (1000 * 60 * 60 * 24));
+
+    let milestoneTag = '';
+    if (yearsMarried >= 50) milestoneTag = '🏆 اليوبيل الذهبي (50 عاماً)';
+    else if (yearsMarried >= 40) milestoneTag = '💎 اليوبيل الياقوتي (40 عاماً)';
+    else if (yearsMarried >= 25) milestoneTag = '🥈 اليوبيل الفضي (25 عاماً)';
+    else if (yearsMarried >= 10) milestoneTag = '🌟 محطة الـ 10 أعوام';
+    else milestoneTag = `💍 ${yearsMarried} أعوام زواج`;
+
+    couples.push({
+      wifeId: w.id,
+      wifeName: w.full_name + (w.family_name ? ' (' + w.family_name + ')' : ''),
+      husbandId: husband.id,
+      husbandName: husband.full_name,
+      marriageYear: mYear,
+      marriageDateStr: mDateStr,
+      yearsMarried,
+      daysLeft,
+      milestoneTag,
+      city: husband.city || 'الأسرة'
+    });
+  });
+
+  // Sort by upcoming days
+  couples.sort((a, b) => a.daysLeft - b.daysLeft);
+
+  let currentTab = filterMode; // 'all', 'upcoming', 'jubilee'
+
+  function renderModal() {
+    const filtered = couples.filter(c => {
+      if (currentTab === 'upcoming') return c.daysLeft <= 60;
+      if (currentTab === 'jubilee') return c.yearsMarried >= 25;
+      return true;
+    });
+
+    const html = `
+      <div class="anniv-wrap" style="max-width:760px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>💍</span> تذكير بذكرى الزواج للأزواج
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <!-- Prophetic Marriage Supplication -->
+        <div style="background:rgba(244,114,182,.1);border:1.5px solid rgba(244,114,182,.4);border-radius:10px;padding:10px 16px;text-align:center;color:#fbcfe8;font-size:.84rem;line-height:1.7">
+          «بَارَكَ اللَّهُ لَهُمَا وَبَارَكَ عَلَيْهِمَا وَجَمَعَ بَيْنَهُمَا فِي خَيْرٍ» 🤲
+          <div style="font-size:.76rem;color:var(--mut);margin-top:2px">نسأل الله أن يديم الألفة والمودة والسكينة في بيوت الأسرة المباركة.</div>
+        </div>
+
+        <!-- Toolbar -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn ${currentTab === 'all' ? 'active' : ''}" id="ann-all" style="padding:4px 10px;font-size:.76rem">الكل (${couples.length})</button>
+            <button type="button" class="fstats-btn ${currentTab === 'upcoming' ? 'active' : ''}" id="ann-upcoming" style="padding:4px 10px;font-size:.76rem">🔔 الأقرب موعداً</button>
+            <button type="button" class="fstats-btn ${currentTab === 'jubilee' ? 'active' : ''}" id="ann-jubilee" style="padding:4px 10px;font-size:.76rem">🏆 اليوبيل ومحطات العمر (25+ عاماً)</button>
+          </div>
+
+          <span style="font-size:.74rem;color:var(--mut)">خاص بالمتزوجين فقط</span>
+        </div>
+
+        <!-- Couples List -->
+        <div style="display:flex;flex-direction:column;gap:10px;max-height:480px;overflow-y:auto;padding-left:4px">
+          ${filtered.length ? filtered.map(c => `
+            <div class="anniv-card">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+                <div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span style="font-size:1.1rem">💍</span>
+                    <h3 style="margin:0;font-size:.95rem;color:var(--gold)">
+                      ${esc(c.husbandName)} & ${esc(c.wifeName)}
+                    </h3>
+                  </div>
+                  <div style="font-size:.74rem;color:var(--mut);margin-top:3px">
+                    سنة الزواج: <b>${c.marriageYear}م</b> (مسيرة مباركة ممتدة <b>${c.yearsMarried}</b> عاماً) · 📍 ${esc(c.city)}
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                  <span class="anniv-badge">${esc(c.milestoneTag)}</span>
+                  <span style="font-size:.72rem;color:${c.daysLeft <= 30 ? '#22c55e' : 'var(--gold)'};font-weight:700">
+                    ${c.daysLeft === 0 ? '🎉 اليوم تحل الذكرى المباركة!' : `⏳ متبقي ${c.daysLeft} يوماً`}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;flex-wrap:wrap;gap:6px">
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${c.husbandId}')">
+                    👤 ملف الزوج
+                  </button>
+                  <button type="button" class="x" style="font-size:.74rem;color:var(--mut)" data-edit-mdate="${c.wifeId}">
+                    ✏️ تعديل تاريخ الزواج
+                  </button>
+                </div>
+
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="fstats-btn" data-share-anniv="${c.wifeId}" style="padding:3px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
+                    📲 إرسال تهنئة بالواتساب
+                  </button>
+                  <button type="button" class="fstats-btn" data-card-anniv="${c.husbandId}" style="padding:3px 10px;font-size:.74rem">
+                    💌 بطاقة تهنئة
+                  </button>
+                </div>
+              </div>
+            </div>
+          `).join('') : `
+            <div style="text-align:center;padding:40px 10px;color:var(--mut)">
+              لا توجد مناسبات مطابقة في هذا التصنيف.
+            </div>
+          `}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Filter bindings
+    $('#ann-all').onclick = () => { currentTab = 'all'; renderModal(); };
+    $('#ann-upcoming').onclick = () => { currentTab = 'upcoming'; renderModal(); };
+    $('#ann-jubilee').onclick = () => { currentTab = 'jubilee'; renderModal(); };
+
+    // WhatsApp congratulations
+    document.querySelectorAll('[data-share-anniv]').forEach(btn => {
+      btn.onclick = () => {
+        const wid = btn.dataset.shareAnniv;
+        const c = couples.find(x => x.wifeId === wid);
+        if (c) {
+          const msg = `💍 *تهنئة وتبريك بمناسبة ذكرى الزواج المباركة:*\nإلى ابن العم الكريم: *${c.husbandName}* وحرمه المصون،\n\n«بَارَكَ اللَّهُ لَكُمَا وَبَارَكَ عَلَيْكُمَا وَجَمَعَ بَيْنَكُمَا فِي خَيْرٍ» 🤲\n\nأجمل التهاني بمناسبة مرور ${c.yearsMarried} عاماً من المودة والرحمة والوفاء، ونسأل الله أن يديم عليكم السعادة ويبارك في ذريتكم.\n\n— محبوكم من أسرة آل مطارد`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+
+    // Marriage Card
+    document.querySelectorAll('[data-card-anniv]').forEach(btn => {
+      btn.onclick = () => {
+        const hid = btn.dataset.cardAnniv;
+        const h = S.byId.get(hid);
+        if (h) {
+          openCard({
+            full_name: h.full_name,
+            gender: h.gender,
+            father_id: h.father_id,
+            phone: h.phone,
+            body: 'أجمل التهاني بمناسبة ذكرى الزواج المباركة، بارك الله لكما وبارك عليكما وجمع بينكما في خير.'
+          }, 'wedding');
+        }
+      };
+    });
+
+    // Edit marriage date
+    document.querySelectorAll('[data-edit-mdate]').forEach(btn => {
+      btn.onclick = () => {
+        const wid = btn.dataset.editMdate;
+        const c = couples.find(x => x.wifeId === wid);
+        if (!c) return;
+        const newYrStr = prompt(`سنة زواج (${c.husbandName}):`, c.marriageYear);
+        if (!newYrStr) return;
+        const newYr = parseInt(newYrStr);
+        if (isNaN(newYr) || newYr < 1920 || newYr > currentYear) {
+          toast('يرجى إدخال سنة ميلادية صحيحة');
+          return;
+        }
+        const newDate = prompt('تاريخ الزواج (YYYY-MM-DD):', `${newYr}-05-15`) || `${newYr}-05-15`;
+        customAnnivs[wid] = { date: newDate, year: newYr };
+        localStorage.setItem('almatarid_anniversaries', JSON.stringify(customAnnivs));
+        toast('✅ تم تحديث تاريخ الزواج بنجاح!');
+        openAnniversariesModal(currentTab);
+      };
+    });
+  }
+
+  renderModal();
+}
+
 
 
 
