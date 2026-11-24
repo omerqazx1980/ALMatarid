@@ -67,7 +67,7 @@ const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.fat
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
   $('#btn-login').textContent = ['visitor', 'family', 'reader'].includes(S.role) ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
-  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = S.role !== 'owner'; $('#m-inbox').hidden = S.role !== 'owner'; /* ann59: صندوق الاقتراحات والشكاوى للمالك فقط */ $('#m-family').hidden = !canEdit();
+  $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = $('#m-backups').hidden = S.role !== 'owner'; $('#m-inbox').hidden = S.role !== 'owner'; /* ann59: صندوق الاقتراحات والشكاوى للمالك فقط */ $('#m-family').hidden = !canEdit();
   $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
   initFeatToggles();
   syncToggles();
@@ -548,8 +548,6 @@ function profile(id) {
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '', digits = waNum(m.phone);
   const phoneText = isVisitor && isLiving && digits ? '<span style="color:var(--mut)">محمي — للأقارب المسجلين فقط 🔒</span>' : (digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '');
   const livingNotice = isVisitor && isLiving ? `<div style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:.76rem;color:var(--gold);display:flex;justify-content:space-between;align-items:center"><span>🔒 بيانات الأحياء الشخصية محمية وتظهر للأقارب المسجلين فقط.</span><button type="button" class="x" onclick="$('#profile').close();$('#btn-login').click();" style="color:var(--gold);font-weight:700">دخول الأقارب ←</button></div>` : '';
-  const isMe = localStorage.getItem('almatarid_me_id') === id;
-  const meBtn = isMe ? '<button type="button" class="ghost" data-act="unset-me" style="color:#10b981;font-weight:700">⭐ مسجل كـ «أنا» (إلغاء)</button>' : '<button type="button" class="ghost" data-act="set-me">👤 هذا أنا</button>';
   $('#profile-body').innerHTML = `${livingNotice}${S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
     <p class="sub">${m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · ' + ripText(m) : ''}</p>
     ${m.achievement_badge ? (m.badge_is_job ? `<p class="sub">الوظيفة: ${esc(m.achievement_badge)}</p>` : `<p><span class="bd">${esc(m.achievement_badge)}</span></p>`) : ''}
@@ -560,7 +558,7 @@ function profile(id) {
       ${row('الهاتف', phoneText)}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -819,9 +817,7 @@ $('#profile-body').addEventListener('click', e => {
      photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); },
      lcard: () => { openLineageCard(m.id); },
      descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
-     ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); },
-     'set-me': () => { localStorage.setItem('almatarid_me_id', m.id); profile(m.id); toast(`📍 تم تحديدك كـ «${m.full_name}»!`); },
-     'unset-me': () => { localStorage.removeItem('almatarid_me_id'); profile(m.id); toast('تم إلغاء التعيين.'); } })[b.dataset.act]?.();
+     ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); } })[b.dataset.act]?.();
 });
 $('#m-export').onclick = () => {
   const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), members: S.members, wives: S.wives, events: S.events }, null, 1)], { type: 'application/json' });
@@ -5468,6 +5464,7 @@ function getAutoBackups() {
 
 function saveAutoBackup(isManual = false) {
   if (!S.members || !S.members.length) return null;
+  if (!canEdit()) return null; // لا نسخة محلية كاملة إلا للمحررين — بيانات الزوار لا تُنسخ إلى متصفحاتهم
   const list = getAutoBackups();
   const backup = {
     id: 'bk_' + Date.now(),
@@ -5501,16 +5498,31 @@ function saveAutoBackup(isManual = false) {
   return backup;
 }
 
-function checkDailyAutoBackup() {
+async function checkDailyAutoBackup() {
+  if (!S.role) { // الدور لم يُحدَّد بعد — أعد المحاولة بعد 10 ثوانٍ (حتى 3 مرات)
+    if ((checkDailyAutoBackup._r = (checkDailyAutoBackup._r || 0) + 1) <= 3) setTimeout(checkDailyAutoBackup, 10000);
+    return;
+  }
+  if (S.role !== 'owner') return; // النسخ التلقائي للمالك فقط — لا نسخة كاملة في متصفح أي زائر
   const last = parseInt(localStorage.getItem('almatarid_last_auto_backup') || '0', 10);
   const now = Date.now();
   const oneDay = 24 * 60 * 60 * 1000;
 
   if (now - last >= oneDay) {
-    const bk = saveAutoBackup(false);
-    if (bk && canEdit()) {
-      toast(`💾 تم إنشاء نسخة احتياطية يومية تلقائية (${bk.stats.members} فرد)`);
+    try {
+      const r = await rpc('secure_auto_snapshot', { p_passcode: S.code });
+      localStorage.setItem('almatarid_last_auto_backup', String(now));
+      if (r && r.success) {
+        toast(`💾 تم إنشاء نسخة احتياطية يومية في القاعدة (لقطة #${r.id})`);
+        return;
+      }
+      throw new Error((r && r.message) || 'تعذر إنشاء اللقطة في القاعدة');
+    } catch (err) {
+      // ملف SQL التجريبي لم يُشغَّل بعد في القاعدة — احتياط محلي حتى يُشغَّل
+      console.warn('auto snapshot RPC failed, local fallback:', err);
     }
+    const bk = saveAutoBackup(false);
+    if (bk) toast(`💾 تم إنشاء نسخة احتياطية يومية محلية (${bk.stats.members} فرد) — ستُحفظ في القاعدة بعد تشغيل ملف SQL التجريبي`);
   }
 }
 
@@ -5573,6 +5585,7 @@ function confirmRestoreBackup(bk) {
 }
 
 function openBackupsManager() {
+  if (S.role !== 'owner') { toast('سجل النسخ الاحتياطية للمالك فقط'); return; }
   const list = getAutoBackups();
 
   const html = `
@@ -7135,158 +7148,3 @@ function openAncestorsDescendantsModal(selectedId) {
 }
 
 $('#m-anc-desc').onclick = menuClose(() => openAncestorsDescendantsModal());
-
-/* ============================================================
-   69) زر «هذا أنا» وتوسيط الشجرة عليك
-   ============================================================ */
-function centerOnMember(memberId) {
-  const m = S.byId.get(memberId);
-  if (!m) return false;
-
-  // Open all ancestral nodes so this member is visible in the hierarchy
-  let cur = m;
-  while (cur) {
-    if (cur.father_id) S.open.add(cur.father_id);
-    cur = S.byId.get(cur.father_id);
-  }
-  S.curId = m.id;
-  render();
-
-  if (S.view === 'graph') {
-    const p = S._pos?.get(m.id);
-    if (p) {
-      const vp = $('#vp'), st = $('#stage');
-      st.classList.add('anim');
-      V.k = 1.05;
-      V.x = vp.clientWidth / 2 - (S._X(p.x) + W / 2) * V.k;
-      V.y = vp.clientHeight / 2 - (p.y + H / 2) * V.k;
-      setT();
-      setTimeout(() => st.classList.remove('anim'), 350);
-
-      // Pulse glow highlight on this card
-      const nodeEl = document.querySelector(`[data-p="${m.id}"]`);
-      if (nodeEl) {
-        nodeEl.classList.add('me-highlight');
-        setTimeout(() => nodeEl.classList.remove('me-highlight'), 3500);
-      }
-      return true;
-    }
-  } else {
-    const cardEl = document.querySelector(`[data-p="${m.id}"]`);
-    if (cardEl) {
-      cardEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      cardEl.classList.add('me-highlight');
-      setTimeout(() => cardEl.classList.remove('me-highlight'), 3500);
-      return true;
-    }
-  }
-  return false;
-}
-
-function triggerThisIsMe(forceModal = false) {
-  const meId = localStorage.getItem('almatarid_me_id');
-  if (meId && S.byId.has(meId) && !forceModal) {
-    const m = S.byId.get(meId);
-    centerOnMember(meId);
-    toast(`📍 مرحباً بك! تم التوسيط عليك: «${m.full_name}»`);
-  } else {
-    openSetMeModal();
-  }
-}
-
-function openSetMeModal() {
-  const currentMeId = localStorage.getItem('almatarid_me_id');
-  const currentMe = currentMeId ? S.byId.get(currentMeId) : null;
-
-  const html = `
-    <div style="max-width:500px">
-      <div class="fstats-head">
-        <h2>👤 تحديد موقعك: «هذا أنا»</h2>
-        <p class="sub">اختر اسمك من الشجرة لتمكين التمركز الفوري عليك بضغطة زر واحدة</p>
-      </div>
-
-      ${currentMe ? `
-        <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px;margin:12px 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div>
-            <div style="font-size:.78rem;color:var(--gold);font-weight:700">موقعك المسجل حالياً:</div>
-            <b style="font-size:1rem;color:#f8fafc">${esc(currentMe.full_name)}</b>
-            <div style="font-size:.75rem;color:var(--mut)">الجيل ${gen(currentMe)} · ${currentMe.city || 'العائلة'}</div>
-          </div>
-          <button type="button" id="me-btn-center-now" class="fstats-btn" style="padding:6px 12px;font-size:.8rem;font-weight:700">🎯 تمركز الآن</button>
-        </div>
-      ` : ''}
-
-      <div style="margin:14px 0">
-        <label style="font-weight:700;color:var(--gold);display:block;margin-bottom:6px">
-          ${currentMe ? 'أو اختر شخصاً آخر للتغيير:' : 'من أنت في شجرة العائلة؟'}
-        </label>
-        <input type="text" id="me-search-input" placeholder="اكتب اسمك للبحث السريع..." style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.88rem;box-sizing:border-box;margin-bottom:8px">
-        <select id="me-member-sel" size="6" style="width:100%;padding:6px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.85rem;box-sizing:border-box">
-          ${S.members.filter(m => !m.name_masked).slice(0, 100).map(m => `
-            <option value="${m.id}" ${currentMe && m.id === currentMe.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
-          `).join('')}
-        </select>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:16px;flex-wrap:wrap">
-        <button type="button" id="me-btn-save" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:8px 18px;font-size:.85rem">
-          💾 حفظ وتوسيط الشجرة عليّ
-        </button>
-        ${currentMe ? `
-          <button type="button" id="me-btn-clear" style="background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:8px;padding:6px 12px;font-size:.8rem;cursor:pointer">
-            إلغاء هويتي المسجلة
-          </button>
-        ` : ''}
-      </div>
-    </div>
-  `;
-
-  showInfo(html);
-
-  const searchInp = $('#me-search-input');
-  const sel = $('#me-member-sel');
-
-  if (searchInp && sel) {
-    searchInp.oninput = () => {
-      const q = normAr(searchInp.value.trim().toLowerCase());
-      const filtered = S.members.filter(m => !m.name_masked && (!q || normAr(m.full_name.toLowerCase()).includes(q))).slice(0, 80);
-      sel.innerHTML = filtered.map(m => `
-        <option value="${m.id}">${esc(m.full_name)} (الجيل ${gen(m)})</option>
-      `).join('');
-      if (filtered.length > 0) sel.selectedIndex = 0;
-    };
-  }
-
-  const centerNowBtn = $('#me-btn-center-now');
-  if (centerNowBtn && currentMe) {
-    centerNowBtn.onclick = () => {
-      $('#profile').close();
-      centerOnMember(currentMe.id);
-    };
-  }
-
-  const saveBtn = $('#me-btn-save');
-  if (saveBtn) {
-    saveBtn.onclick = () => {
-      const mid = sel?.value;
-      if (!mid) return alert('يرجى اختيار اسمك من القائمة');
-      localStorage.setItem('almatarid_me_id', mid);
-      $('#profile').close();
-      centerOnMember(mid);
-      toast(`✅ تم حفظ هويتك: «${S.byId.get(mid)?.full_name}» وتم توسيط الشجرة عليك!`);
-    };
-  }
-
-  const clearBtn = $('#me-btn-clear');
-  if (clearBtn) {
-    clearBtn.onclick = () => {
-      localStorage.removeItem('almatarid_me_id');
-      $('#profile').close();
-      toast('تم إلغاء التعيين.');
-    };
-  }
-}
-
-const zMe = $('#z-me');
-if (zMe) zMe.onclick = () => triggerThisIsMe();
-$('#m-this-is-me').onclick = menuClose(() => triggerThisIsMe(true));
