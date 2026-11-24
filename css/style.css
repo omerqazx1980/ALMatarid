@@ -985,3 +985,10 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .alt-charts-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
 .alt-charts-stage{background:#060a14;border:1.5px solid var(--gold);border-radius:12px;min-height:360px;display:flex;align-items:center;justify-content:center;overflow:auto;padding:16px;box-shadow:inset 0 0 30px rgba(0,0,0,.7)}
 .fan-svg{max-width:100%;height:auto;display:block}
+
+/* ---------- 67) شبكة العلاقات الشاملة (فرع تجربة) ---------- */
+.net-wrap{display:flex;flex-direction:column;gap:10px;height:75vh;max-height:650px}
+.net-stage-box{flex:1;position:relative;background:#050914;border:1.5px solid var(--gold);border-radius:12px;overflow:hidden}
+.net-canvas{width:100%;height:100%;display:block;cursor:grab}
+.net-canvas:active{cursor:grabbing}
+.net-legend{display:flex;gap:12px;align-items:center;background:rgba(15,23,42,.85);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:.75rem;flex-wrap:wrap}

@@ -6399,3 +6399,550 @@ function openAlternativeCharts(memberId = null, chartType = 'fan') {
 }
 
 $('#m-alt-charts').onclick = menuClose(() => openAlternativeCharts());
+
+/* ============================================================
+   67) شبكة العلاقات الشاملة (آباء، أزواج، إخوة في مخطط واحد)
+   ============================================================ */
+let _netAnimId = null;
+let _netRedraw = null;
+let _netReset = null;
+
+function initNetworkCanvas(focalId) {
+  if (_netAnimId) { cancelAnimationFrame(_netAnimId); _netAnimId = null; }
+  const canvas = $('#net-canvas');
+  const box = $('#net-box');
+  if (!canvas || !box) return;
+
+  const focal = S.byId.get(focalId) || S.roots[0] || S.members[0];
+  if (!focal) return;
+
+  const depthVal = $('#net-depth-sel')?.value || '3';
+  const maxDepth = depthVal === 'all' ? 99 : parseInt(depthVal, 10);
+
+  // Collect nodes and edges via BFS
+  const visited = new Set([focal.id]);
+  const queue = [{ id: focal.id, d: 0 }];
+  const nodeMap = new Map();
+  const edges = [];
+
+  while (queue.length > 0) {
+    const { id, d } = queue.shift();
+    const m = S.byId.get(id);
+    if (!m) continue;
+
+    if (!nodeMap.has(m.id)) {
+      nodeMap.set(m.id, {
+        id: m.id,
+        name: m.full_name,
+        shortName: (m.full_name || '').split(' ').slice(0, 2).join(' '),
+        isFemale: isFemale(m),
+        isFocal: m.id === focal.id,
+        deceased: !!m.death_year || !!m.death_date,
+        branch: m.branch_id || '',
+        gen: gen(m),
+        x: (Math.random() - 0.5) * 300,
+        y: (Math.random() - 0.5) * 300,
+        vx: 0,
+        vy: 0,
+        radius: m.id === focal.id ? 24 : 18
+      });
+    }
+
+    if (d >= maxDepth && depthVal !== 'all') continue;
+
+    // 1. Father (Parent)
+    if (m.father_id) {
+      if (!nodeMap.has(m.father_id)) {
+        if (!visited.has(m.father_id)) {
+          visited.add(m.father_id);
+          queue.push({ id: m.father_id, d: d + 1 });
+        }
+      }
+      edges.push({ source: m.father_id, target: m.id, type: 'parent' });
+    }
+
+    // 2. Children (Parent)
+    const kids = S.kids.get(m.id) || [];
+    kids.forEach(kid => {
+      if (!visited.has(kid.id) && (d < maxDepth || depthVal === 'all')) {
+        visited.add(kid.id);
+        queue.push({ id: kid.id, d: d + 1 });
+      }
+      edges.push({ source: m.id, target: kid.id, type: 'parent' });
+    });
+
+    // 3. Spouses (Wives)
+    const wives = (S.wives || []).filter(w => w.husband_id === m.id);
+    wives.forEach(w => {
+      const wifeNodeId = 'w_' + w.id;
+      if (!nodeMap.has(wifeNodeId)) {
+        nodeMap.set(wifeNodeId, {
+          id: wifeNodeId,
+          rawId: w.id,
+          name: w.full_name,
+          shortName: (w.full_name || '').split(' ').slice(0, 2).join(' '),
+          isFemale: true,
+          isWife: true,
+          deceased: false,
+          branch: m.branch_id || '',
+          gen: gen(m),
+          x: (Math.random() - 0.5) * 300,
+          y: (Math.random() - 0.5) * 300,
+          vx: 0,
+          vy: 0,
+          radius: 16
+        });
+      }
+      edges.push({ source: m.id, target: wifeNodeId, type: 'spouse' });
+    });
+
+    // 4. Siblings
+    if (m.father_id) {
+      const sibs = S.kids.get(m.father_id) || [];
+      sibs.forEach(sib => {
+        if (sib.id !== m.id) {
+          if (!visited.has(sib.id) && (d < maxDepth || depthVal === 'all')) {
+            visited.add(sib.id);
+            queue.push({ id: sib.id, d: d + 1 });
+          }
+          if (m.id < sib.id) {
+            edges.push({ source: m.id, target: sib.id, type: 'sibling' });
+          }
+        }
+      });
+    }
+  }
+
+  // Deduplicate edges
+  const uniqueEdges = [];
+  const edgeKeySet = new Set();
+  edges.forEach(e => {
+    const k = `${e.source}_${e.target}_${e.type}`;
+    if (!edgeKeySet.has(k)) {
+      edgeKeySet.add(k);
+      uniqueEdges.push(e);
+    }
+  });
+
+  const nodes = Array.from(nodeMap.values());
+  const focalNode = nodeMap.get(focal.id);
+  if (focalNode) {
+    focalNode.x = 0;
+    focalNode.y = 0;
+  }
+
+  // Canvas setup
+  let width = box.clientWidth || 700;
+  let height = box.clientHeight || 500;
+  canvas.width = width * window.devicePixelRatio;
+  canvas.height = height * window.devicePixelRatio;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  let panX = width / 2;
+  let panY = height / 2;
+  let zoom = 1;
+  let hoveredNode = null;
+  let draggedNode = null;
+  let isPanning = false;
+  let startX = 0, startY = 0;
+
+  _netReset = () => {
+    panX = width / 2;
+    panY = height / 2;
+    zoom = 1;
+    draw();
+  };
+
+  // Run simulation iterations
+  function stepPhysics() {
+    const kRepel = 2200;
+    const restLenParent = 75;
+    const restLenSpouse = 55;
+    const restLenSibling = 65;
+
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        if (dist < 350) {
+          const force = kRepel / (dist * dist);
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          a.vx -= fx;
+          a.vy -= fy;
+          b.vx += fx;
+          b.vy += fy;
+        }
+      }
+    }
+
+    // Springs
+    uniqueEdges.forEach(e => {
+      const a = nodeMap.get(e.source);
+      const b = nodeMap.get(e.target);
+      if (!a || !b) return;
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const rest = e.type === 'spouse' ? restLenSpouse : (e.type === 'sibling' ? restLenSibling : restLenParent);
+      const delta = dist - rest;
+      const force = delta * 0.045;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+
+      a.vx += fx;
+      a.vy += fy;
+      b.vx -= fx;
+      b.vy -= fy;
+    });
+
+    // Damp & move
+    nodes.forEach(n => {
+      if (n === focalNode) {
+        n.vx *= 0.2;
+        n.vy *= 0.2;
+      }
+      n.x += n.vx * 0.35;
+      n.y += n.vy * 0.35;
+      n.vx *= 0.72;
+      n.vy *= 0.72;
+    });
+  }
+
+  // Pre-warm physics
+  for (let s = 0; s < 70; s++) {
+    stepPhysics();
+  }
+
+  function draw() {
+    ctx.save();
+    ctx.clearRect(0, 0, width, height);
+
+    // Subtle dark grid background
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    const gridSize = 40 * zoom;
+    const offX = panX % gridSize;
+    const offY = panY % gridSize;
+    ctx.beginPath();
+    for (let x = offX; x < width; x += gridSize) {
+      ctx.moveTo(x, 0); ctx.lineTo(x, height);
+    }
+    for (let y = offY; y < height; y += gridSize) {
+      ctx.moveTo(0, y); ctx.lineTo(width, y);
+    }
+    ctx.stroke();
+
+    ctx.translate(panX, panY);
+    ctx.scale(zoom, zoom);
+
+    const showParent = $('#net-chk-parent')?.checked !== false;
+    const showSpouse = $('#net-chk-spouse')?.checked !== false;
+    const showSibling = $('#net-chk-sibling')?.checked !== false;
+
+    // Draw Edges
+    uniqueEdges.forEach(e => {
+      if (e.type === 'parent' && !showParent) return;
+      if (e.type === 'spouse' && !showSpouse) return;
+      if (e.type === 'sibling' && !showSibling) return;
+
+      const a = nodeMap.get(e.source);
+      const b = nodeMap.get(e.target);
+      if (!a || !b) return;
+
+      const isConnected = hoveredNode && (hoveredNode.id === a.id || hoveredNode.id === b.id);
+
+      ctx.beginPath();
+      if (e.type === 'parent') {
+        ctx.strokeStyle = isConnected ? '#f59e0b' : 'rgba(245, 158, 11, 0.45)';
+        ctx.lineWidth = isConnected ? 3 : 1.8;
+        ctx.setLineDash([]);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        // Directional arrow to child
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
+        const arrowDist = b.radius + 3;
+        const ax = b.x - Math.cos(angle) * arrowDist;
+        const ay = b.y - Math.sin(angle) * arrowDist;
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - 8 * Math.cos(angle - Math.PI / 6), ay - 8 * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(ax - 8 * Math.cos(angle + Math.PI / 6), ay - 8 * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+      } else if (e.type === 'spouse') {
+        ctx.strokeStyle = isConnected ? '#ec4899' : 'rgba(236, 72, 153, 0.55)';
+        ctx.lineWidth = isConnected ? 3 : 2;
+        ctx.setLineDash([4, 4]);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Small heart/ring circle in midpoint
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        ctx.fillStyle = '#ec4899';
+        ctx.beginPath();
+        ctx.arc(mx, my, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (e.type === 'sibling') {
+        ctx.strokeStyle = isConnected ? '#38bdf8' : 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = isConnected ? 2.5 : 1.2;
+        ctx.setLineDash([2, 3]);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+
+    // Draw Nodes
+    nodes.forEach(n => {
+      const isHovered = hoveredNode && hoveredNode.id === n.id;
+      const isFocal = n.isFocal;
+
+      // Glow / border
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.radius + (isHovered ? 4 : 2), 0, Math.PI * 2);
+      ctx.fillStyle = isFocal ? 'rgba(245, 158, 11, 0.4)' : (n.isWife ? 'rgba(236, 72, 153, 0.3)' : 'rgba(56, 189, 248, 0.2)');
+      ctx.fill();
+
+      // Node body
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+      if (isFocal) {
+        ctx.fillStyle = '#b45309';
+      } else if (n.isWife) {
+        ctx.fillStyle = '#9d174d';
+      } else if (n.isFemale) {
+        ctx.fillStyle = '#831843';
+      } else if (n.deceased) {
+        ctx.fillStyle = '#1e293b';
+      } else {
+        ctx.fillStyle = '#0f172a';
+      }
+      ctx.fill();
+      ctx.strokeStyle = isFocal ? '#f59e0b' : (n.isWife ? '#f472b6' : (n.deceased ? '#64748b' : '#38bdf8'));
+      ctx.lineWidth = isFocal ? 2.5 : 1.5;
+      ctx.stroke();
+
+      // Node text label
+      ctx.font = `${isFocal ? 'bold 11px' : '10px'} Cairo, sans-serif`;
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.shortName, n.x, n.y);
+
+      // Label beneath
+      if (isFocal || isHovered) {
+        ctx.font = 'bold 11px Cairo, sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText(n.name, n.x, n.y + n.radius + 14);
+      }
+    });
+
+    ctx.restore();
+  }
+
+  _netRedraw = draw;
+
+  // Animation loop for smooth gentle settle
+  let simTicks = 0;
+  function animate() {
+    if (simTicks < 50) {
+      stepPhysics();
+      simTicks++;
+      draw();
+      _netAnimId = requestAnimationFrame(animate);
+    } else {
+      draw();
+      _netAnimId = null;
+    }
+  }
+  animate();
+
+  // Mouse handlers
+  function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+    const mouseX = clientX - rect.left;
+    const mouseY = clientY - rect.top;
+    const worldX = (mouseX - panX) / zoom;
+    const worldY = (mouseY - panY) / zoom;
+    return { mouseX, mouseY, worldX, worldY };
+  }
+
+  function findNode(worldX, worldY) {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      const dx = worldX - n.x;
+      const dy = worldY - n.y;
+      if (dx * dx + dy * dy <= (n.radius + 6) * (n.radius + 6)) {
+        return n;
+      }
+    }
+    return null;
+  }
+
+  canvas.onmousemove = (e) => {
+    const { mouseX, mouseY, worldX, worldY } = getMousePos(e);
+    if (isPanning) {
+      panX += mouseX - startX;
+      panY += mouseY - startY;
+      startX = mouseX;
+      startY = mouseY;
+      draw();
+      return;
+    }
+    if (draggedNode) {
+      draggedNode.x = worldX;
+      draggedNode.y = worldY;
+      draw();
+      return;
+    }
+    const found = findNode(worldX, worldY);
+    if (found !== hoveredNode) {
+      hoveredNode = found;
+      canvas.style.cursor = found ? 'pointer' : 'grab';
+      draw();
+    }
+  };
+
+  canvas.onmousedown = (e) => {
+    const { mouseX, mouseY, worldX, worldY } = getMousePos(e);
+    const found = findNode(worldX, worldY);
+    if (found) {
+      draggedNode = found;
+    } else {
+      isPanning = true;
+      startX = mouseX;
+      startY = mouseY;
+    }
+  };
+
+  window.onmouseup = () => {
+    isPanning = false;
+    draggedNode = null;
+  };
+
+  canvas.onclick = (e) => {
+    const { worldX, worldY } = getMousePos(e);
+    const found = findNode(worldX, worldY);
+    if (found) {
+      if (!found.isWife) {
+        profile(found.id);
+      } else {
+        toast(`💍 ${found.name} (زوجة في العائلة)`);
+      }
+    }
+  };
+
+  canvas.onwheel = (e) => {
+    e.preventDefault();
+    const { mouseX, mouseY } = getMousePos(e);
+    const factor = e.deltaY < 0 ? 1.15 : 0.87;
+    const newZoom = Math.min(Math.max(zoom * factor, 0.3), 3.5);
+    panX = mouseX - (mouseX - panX) * (newZoom / zoom);
+    panY = mouseY - (mouseY - panY) * (newZoom / zoom);
+    zoom = newZoom;
+    draw();
+  };
+}
+
+function openNetworkGraph(focalId) {
+  if (_netAnimId) { cancelAnimationFrame(_netAnimId); _netAnimId = null; }
+  const focal = focalId ? (S.byId.get(focalId) || S.roots[0] || S.members[0]) : (S.roots[0] || S.members[0]);
+  if (!focal) return;
+
+  const html = `
+    <div class="net-wrap">
+      <div class="fstats-head" style="margin-bottom:0">
+        <h2>🕸️ شبكة العلاقات الشاملة</h2>
+        <p class="sub">عرض جميع الروابط العائلية (النسب، المصاهرة، الأخوة) في فضاء تفاعلي موحّد</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:.8rem;color:var(--gold);font-weight:700">المركز:</label>
+          <select id="net-focal-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+            ${S.members.filter(m => !m.name_masked).slice(0, 100).map(m => `
+              <option value="${m.id}" ${m.id === focal.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+            `).join('')}
+          </select>
+          <select id="net-depth-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
+            <option value="2">درجتا قرابة (مباشرة)</option>
+            <option value="3" selected>3 درجات قرابة (فرع موسع)</option>
+            <option value="all">الفرع بالكامل</option>
+          </select>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;font-size:.78rem">
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+            <input type="checkbox" id="net-chk-parent" checked> <span style="color:#f59e0b">🟡 بنوة ونسب</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+            <input type="checkbox" id="net-chk-spouse" checked> <span style="color:#ec4899">🔴 زواج ومصاهرة</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+            <input type="checkbox" id="net-chk-sibling" checked> <span style="color:#38bdf8">🔵 أخوة وأشقاء</span>
+          </label>
+          <button id="net-export-btn" class="fstats-btn" style="padding:4px 8px;font-size:.75rem">📸 حفظ صورة</button>
+        </div>
+      </div>
+
+      <div class="net-stage-box" id="net-box">
+        <canvas id="net-canvas" class="net-canvas"></canvas>
+      </div>
+
+      <div class="net-legend">
+        <span>💡 <b>التحكم:</b> اسحب للتحريك · عجلة الماوس للتكبير والتصغير · انقر على أي عقدة لفتح ملفه أو جعله المركز</span>
+        <span style="margin-right:auto;color:var(--gold);cursor:pointer" id="net-reset-view">↺ إعادة ضبط المشهد</span>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+  setTimeout(() => initNetworkCanvas(focal.id), 50);
+
+  const focalSel = $('#net-focal-sel');
+  if (focalSel) {
+    focalSel.onchange = (e) => initNetworkCanvas(e.target.value);
+  }
+  const depthSel = $('#net-depth-sel');
+  if (depthSel) {
+    depthSel.onchange = () => initNetworkCanvas($('#net-focal-sel').value);
+  }
+  ['net-chk-parent', 'net-chk-spouse', 'net-chk-sibling'].forEach(id => {
+    const el = $(`#${id}`);
+    if (el) el.onchange = () => _netRedraw?.();
+  });
+  const resetBtn = $('#net-reset-view');
+  if (resetBtn) resetBtn.onclick = () => _netReset?.();
+  const exportBtn = $('#net-export-btn');
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      const cv = $('#net-canvas');
+      if (!cv) return;
+      const a = document.createElement('a');
+      a.download = `almatarid-network-${focal.id}.png`;
+      a.href = cv.toDataURL('image/png');
+      a.click();
+    };
+  }
+}
+
+$('#m-network-graph').onclick = menuClose(() => openNetworkGraph());
