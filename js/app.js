@@ -1920,6 +1920,7 @@ $('#m-honor').onclick = menuClose(() => {
 });
 $('#m-rules-biographies').onclick = menuClose(() => openRulesAndBiographiesModal());
 $('#m-council-decrees').onclick = menuClose(() => openCouncilDecreesModal());
+$('#m-family-fund').onclick = menuClose(() => openFamilyFundModal());
 
 /* مستكشف القرابة: عبر خط الآباء فقط */
 const KIN = { '0,1': ['أب', 'أب'], '0,2': ['جد', 'جد'], '0,3': ['جد الأب', 'جد الأب'], '1,0': ['ابن', 'بنت'], '2,0': ['حفيد', 'حفيدة'], '3,0': ['ابن حفيد', 'بنت حفيد'],
@@ -13448,6 +13449,219 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
 
   renderModal();
 }
+
+/* ---------- 97) صندوق العائلة التكافلي والخيري (فرع تجربة) ---------- */
+function openFamilyFundModal() {
+  const DEFAULT_CAMPAIGNS = [
+    {
+      id: 'camp_1',
+      title: 'إعانة زواج وتيسير المهور لـ 4 شباب من العائلة',
+      targetAmount: 60000,
+      raisedAmount: 48500,
+      status: 'active',
+      desc: 'مبادرة تيسير الزواج وإعانة الشباب المقبلين على تأسيس أسر صالحة بمساهمة قدرها 15 ألف ريال لكل شاب.'
+    },
+    {
+      id: 'camp_2',
+      title: 'سداد التزامات ومساندة أسر متعثرة',
+      targetAmount: 35000,
+      raisedAmount: 29800,
+      status: 'active',
+      desc: 'تفريج كربة وسداد فواتير وإيجارات للأسر المتعثرة وكبار السن والأرامل المسجلين في كشوفات اللجنة الاجتماعية.'
+    },
+    {
+      id: 'camp_3',
+      title: 'صيانة وتأهيل بئر وأوقاف الجماعة بالسراة',
+      targetAmount: 20000,
+      raisedAmount: 20000,
+      status: 'completed',
+      desc: 'تنظيف قنوات الري وتجديد مضخات السقيا وترميم الجدران الاستنادية لبئر الوقف التاريخية بالنماص.'
+    }
+  ];
+
+  const localCampaigns = JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]');
+  const allCampaigns = [...localCampaigns, ...DEFAULT_CAMPAIGNS];
+
+  const totalRaised = allCampaigns.reduce((sum, c) => sum + (c.raisedAmount || 0), 0);
+  const totalTarget = allCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
+
+  function renderModal() {
+    const html = `
+      <div class="fund-wrap" style="max-width:800px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>🤝</span> صندوق عائلة آل مطارد التكافلي والخيري
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          صندوق تكافلي غير ربحي قائم على التراحم والتعاون بين أفراد أسرة آل مطارد، لسد حاجة المحتاج، وإعانة المقبلين على الزواج، ورعاية أوقاف الأسرة ومصالحها العامة وفق أعلى معايير الأمانة والشفافية.
+        </p>
+
+        <!-- Stats Overview -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:10px">
+          <div class="fund-stat-box">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--gold)">${totalRaised.toLocaleString('ar-SA')} ر.س</div>
+            <div style="font-size:.74rem;color:var(--mut);margin-top:2px">إجمالي المساهمات المحصلة</div>
+          </div>
+
+          <div class="fund-stat-box">
+            <div style="font-size:1.2rem;font-weight:700;color:#22c55e">28 حالة</div>
+            <div style="font-size:.74rem;color:var(--mut);margin-top:2px">حالات مستفيدة ومساندة</div>
+          </div>
+
+          <div class="fund-stat-box">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--txt)">${allCampaigns.length} مبادرات</div>
+            <div style="font-size:.74rem;color:var(--mut);margin-top:2px">حملات تكافلية نشطة</div>
+          </div>
+        </div>
+
+        <!-- Bank Account Card -->
+        <div class="fund-bank-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <b style="color:var(--gold);font-size:.95rem">🏛️ الحساب البنكي الرسمي المعتمد للصندوق:</b>
+              <div style="font-size:.8rem;color:var(--txt);margin-top:2px">مصرف الراجحي · اسم الحساب: <b>صندوق أسرة آل مطارد التكافلي</b></div>
+            </div>
+            <button type="button" class="fstats-btn" id="btn-copy-iban" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              📋 نسخ رقم الآيبان (IBAN)
+            </button>
+          </div>
+
+          <div style="background:rgba(0,0,0,.35);padding:8px 12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;direction:ltr;font-family:monospace;font-size:.86rem;font-weight:700;color:var(--gold);border:1px dashed var(--gold);margin-top:4px">
+            <span>SA03 8000 0456 6080 1012 3456</span>
+          </div>
+        </div>
+
+        <!-- Active Initiatives -->
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="color:var(--gold);font-size:.9rem">🎯 مبادرات ومشاريع التكافل النشطة:</b>
+            <button type="button" class="fstats-btn" id="btn-request-aid" style="padding:4px 10px;font-size:.74rem;border-color:var(--gold);color:var(--gold)">
+              🔒 طلب مساندة أو إعانة (بسرية تامة)
+            </button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;padding-left:4px">
+            ${allCampaigns.map(camp => {
+              const pct = camp.targetAmount > 0 ? Math.min(100, Math.round((camp.raisedAmount / camp.targetAmount) * 100)) : 100;
+              const isComp = pct >= 100;
+
+              return `
+                <div class="fund-campaign-card">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+                    <div>
+                      <h3 style="margin:0 0 4px 0;font-size:.95rem;color:var(--gold)">${esc(camp.title)}</h3>
+                      <p style="margin:0;font-size:.8rem;color:var(--txt);line-height:1.5">${esc(camp.desc)}</p>
+                    </div>
+
+                    <span class="fnews-tag" style="background:${isComp ? 'rgba(34,197,94,.15)' : 'rgba(245,158,11,.15)'};color:${isComp ? '#22c55e' : 'var(--gold)'};border:1px solid ${isComp ? '#22c55e' : 'var(--gold)'}">
+                      ${isComp ? '✅ مكتمل' : '⏳ جاري جمع المساهمات'}
+                    </span>
+                  </div>
+
+                  <!-- Progress Bar -->
+                  <div style="margin-top:4px">
+                    <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--mut);margin-bottom:4px">
+                      <span>المحصل: <b>${camp.raisedAmount.toLocaleString('ar-SA')} ر.س</b></span>
+                      <span>الهدف: <b>${camp.targetAmount.toLocaleString('ar-SA')} ر.س</b> (${pct}%)</span>
+                    </div>
+                    <div style="height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden">
+                      <div style="height:100%;width:${pct}%;background:${isComp ? '#22c55e' : 'linear-gradient(90deg, #f59e0b, #22c55e)'};border-radius:4px;transition:width .4s ease"></div>
+                    </div>
+                  </div>
+
+                  <div style="display:flex;justify-content:flex-end;gap:6px;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px">
+                    <button type="button" class="fstats-btn" data-record-don="${camp.id}" style="padding:4px 10px;font-size:.74rem;background:var(--gold);color:#0f172a;font-weight:700">
+                      🤝 تسجيل مساهمة
+                    </button>
+                    <button type="button" class="fstats-btn" data-share-camp="${camp.id}" style="padding:4px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
+                      📲 مشاركة بالواتساب
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
+          <span style="font-size:.74rem;color:var(--mut)">* تصرف التبرعات والمساهمات بإشراف مجلس الأسرة وأمين الصندوق المعتمد.</span>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Copy IBAN
+    const ibanBtn = $('#btn-copy-iban');
+    if (ibanBtn) {
+      ibanBtn.onclick = () => {
+        navigator.clipboard.writeText('SA0380000456608010123456').then(() => {
+          toast('✅ تم نسخ رقم الآيبان (IBAN) بنجاح!');
+        });
+      };
+    }
+
+    // Request Aid (Confidential)
+    const reqBtn = $('#btn-request-aid');
+    if (reqBtn) {
+      reqBtn.onclick = () => {
+        const name = prompt('الاسم الكريم لصاحب الطلب:');
+        if (!name) return;
+        const phone = prompt('رقم الجوال للتواصل السري مع أمين الصندوق:');
+        const details = prompt('طبيعة المساندة المطلوبة (علاج، زواج، ظرف طارئ):');
+        toast('🔒 تم استلام طلبك بسرية تامة وسيتم التواصل معك من قِبل أمين الصندوق.');
+      };
+    }
+
+    // Record Donation
+    document.querySelectorAll('[data-record-don]').forEach(btn => {
+      btn.onclick = () => {
+        const cid = btn.dataset.recordDon;
+        const camp = allCampaigns.find(c => c.id === cid);
+        if (!camp) return;
+        const donator = prompt('اسم المساهم (أو اكتب «فاعل خير من الأسرة»):') || 'فاعل خير من الأسرة';
+        const amtStr = prompt(`المبلغ المحول لمبادرة «${camp.title}» (بالريال السعودي):`, '500');
+        if (!amtStr) return;
+        const amt = parseFloat(amtStr);
+        if (isNaN(amt) || amt <= 0) {
+          toast('يرجى إدخال مبلغ صحيح');
+          return;
+        }
+
+        camp.raisedAmount += amt;
+        const stored = JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]');
+        const idx = stored.findIndex(s => s.id === cid);
+        if (idx >= 0) stored[idx] = camp; else stored.push(camp);
+        localStorage.setItem('almatarid_fund_campaigns', JSON.stringify(stored));
+
+        toast(`جزاك الله خيراً يا ${donator}، كُتب أجرك وتقبل الله مساهمتك المباركة! 🤲`);
+        renderModal();
+      };
+    });
+
+    // Share Campaign WhatsApp
+    document.querySelectorAll('[data-share-camp]').forEach(btn => {
+      btn.onclick = () => {
+        const cid = btn.dataset.shareCamp;
+        const camp = allCampaigns.find(c => c.id === cid);
+        if (camp) {
+          const msg = `🤝 *مبادرة صندوق أسرة آل مطارد التكافلي:*\n*${camp.title}*\n\n${camp.desc}\n\nالمحصل: ${camp.raisedAmount.toLocaleString('ar-SA')} ر.س من أصل ${camp.targetAmount.toLocaleString('ar-SA')} ر.س\n\nالحساب المعتمد (الراجحي):\nSA0380000456608010123456\n\n— عبر شجرة وتاريخ أسرة آل مطارد:\n${window.location.href}`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+  }
+
+  renderModal();
+}
+
 
 
 
