@@ -632,7 +632,10 @@ function waNum(p) {  // 05xxxxxxxx أو 5xxxxxxxx أو 00966... إلى صيغة 
 /* ann76: عدّاد ظهور الأعضاء في صور المناسبات (يُحمّل مرة واحدة من الوسوم) */
 async function ensureTagCounts() {
   if (S.tagCounts) return S.tagCounts;
-  if (CFG.DEMO) return new Map();
+  /* إصلاح حرج (تحقق عملي 1–36): فرع DEMO وفرع الفشل كانا يعيدان Map جديدة دون تعيين S.tagCounts،
+     فيعيد profile() استدعاء نفسه بلا نهاية عبر .then (حلقة microtask تجمّد الصفحة عند فتح أي ملف عضو).
+     الآن يُعيَّن الحارس دائماً قبل الإرجاع. */
+  if (CFG.DEMO) { S.tagCounts = new Map(); S.tagEvents = new Map(); return S.tagCounts; }
   if (S._tagCountsP) return S._tagCountsP;
   S._tagCountsP = (async () => {
     try {
@@ -642,7 +645,7 @@ async function ensureTagCounts() {
       /* ann78: الحضور اليدوي يشارك أيضًا في المشاركات */
       try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: null }); (ar.items || []).forEach(x => { if (!evs.has(x.member_id)) evs.set(x.member_id, new Set()); evs.get(x.member_id).add(x.event_id); }); } catch (_) {}
       S.tagCounts = counts; S.tagEvents = evs; return counts;
-    } catch (_) { S._tagCountsP = null; return new Map(); }
+    } catch (_) { S._tagCountsP = null; S.tagCounts = new Map(); S.tagEvents = new Map(); return S.tagCounts; }
   })();
   return S._tagCountsP;
 }
@@ -7457,7 +7460,7 @@ function renderDirectoryList() {
     b.classList.toggle('active', b.dataset.dirMode === mode);
   });
 
-  const list = S.members.filter(m => !m.name_masked && (!S.hit || S.hit.has(m.id)));
+  const list = S.members.filter(m => !m.name_masked && (!S.hit || S.hit.has(m.id)) && (!S.filterMemberIds || S.filterMemberIds.has(m.id)));
 
   const counterSpan = $('#dir-counter span');
   if (counterSpan) counterSpan.textContent = list.length;
