@@ -958,3 +958,12 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .backup-item{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .backup-item:hover{border-color:var(--gold)}
 .backup-meta{font-size:.78rem;color:var(--mut)}
+
+/* ---------- 63) لوحة جودة البيانات للمشرف (فرع تجربة) ---------- */
+.dq-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.dq-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.dq-stat-card{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+.dq-stat-num{font-size:1.6rem;font-weight:900;color:var(--gold)}
+.dq-stat-lbl{font-size:.76rem;color:var(--mut);margin-top:2px}
+.dq-issue-item{background:rgba(15,23,42,.6);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.dq-fix-btn{background:#10b981;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer}

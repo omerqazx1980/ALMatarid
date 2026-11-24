@@ -5632,3 +5632,165 @@ function openBackupsManager() {
 
 $('#m-backups').onclick = menuClose(() => openBackupsManager());
 setTimeout(checkDailyAutoBackup, 2500);
+
+/* ---------- 63) لوحة جودة البيانات للمشرف وتصحيحها (فرع تجربة) ---------- */
+function auditFamilyDataQuality() {
+  const issues = [];
+  const nameMap = new Map();
+
+  S.members.forEach(m => {
+    const key = (m.full_name || '').trim().toLowerCase() + '_' + (m.father_id || 'root');
+    if (!nameMap.has(key)) nameMap.set(key, []);
+    nameMap.get(key).push(m);
+  });
+
+  for (const [key, group] of nameMap.entries()) {
+    if (group.length > 1) {
+      issues.push({
+        type: 'duplicate',
+        typeName: 'اسم مكرر',
+        icon: '⚠️',
+        desc: `تكرار الاسم «${group[0].full_name}» (${group.length} مرات بنفس الأب)`,
+        fixLabel: 'دمج السجلات المكررة',
+        members: group,
+        action: () => {
+          const keep = group[0];
+          const toRemove = group.slice(1);
+          const removeIds = new Set(toRemove.map(x => x.id));
+          S.members.forEach(child => {
+            if (removeIds.has(child.father_id)) child.father_id = keep.id;
+          });
+          S.members = S.members.filter(x => !removeIds.has(x.id));
+          index(); render();
+          toast(`تم دمج تكرار «${keep.full_name}» بنجاح!`);
+          openDataQualityDashboard();
+        }
+      });
+    }
+  }
+
+  S.members.forEach(m => {
+    if (m.father_id && !S.byId.has(m.father_id)) {
+      issues.push({
+        type: 'broken_father',
+        typeName: 'رابط أب مفقود',
+        icon: '🔗',
+        desc: `العضو «${m.full_name}» مربوط بمعرف أب غير موجود (#${m.father_id})`,
+        fixLabel: 'ربط بالفرع الرئيسي',
+        action: () => {
+          m.father_id = S.roots[0] ? S.roots[0].id : null;
+          index(); render();
+          toast(`تم ربط «${m.full_name}» بالفرع الرئيسي!`);
+          openDataQualityDashboard();
+        }
+      });
+    }
+  });
+
+  (S.wives || []).forEach(w => {
+    if (w.husband_id && !S.byId.has(w.husband_id)) {
+      issues.push({
+        type: 'broken_husband',
+        typeName: 'زواج متعارض',
+        icon: '💍',
+        desc: `الزوجة «${w.full_name}» مربوطة بمعرف زوج غير موجود (#${w.husband_id})`,
+        fixLabel: 'تصحيح وحذف الربط المكسور',
+        action: () => {
+          S.wives = S.wives.filter(x => x.id !== w.id);
+          index(); render();
+          toast(`تم تصحيح سجل الزوجة «${w.full_name}»!`);
+          openDataQualityDashboard();
+        }
+      });
+    }
+  });
+
+  return issues;
+}
+
+function openDataQualityDashboard() {
+  const issues = auditFamilyDataQuality();
+  const dupCount = issues.filter(i => i.type === 'duplicate').length;
+  const brokenCount = issues.filter(i => i.type.includes('broken')).length;
+
+  const html = `
+    <div class="dq-wrap">
+      <div class="fstats-head">
+        <h2>🛡️ لوحة جودة البيانات وتصحيحها التلقائي</h2>
+        <p class="sub">فحص ذكي وفوري لكشف وتصحيح الأسماء المكررة، الروابط المقطوعة، والزيجات المتعارضة بزر واحد</p>
+      </div>
+
+      <div class="dq-stat-grid">
+        <div class="dq-stat-card">
+          <div class="dq-stat-num" style="color:${issues.length ? '#f59e0b' : '#10b981'}">${issues.length}</div>
+          <div class="dq-stat-lbl">إجمالي التنبيهات والملاحظات</div>
+        </div>
+        <div class="dq-stat-card">
+          <div class="dq-stat-num">${dupCount}</div>
+          <div class="dq-stat-lbl">أسماء مكررة</div>
+        </div>
+        <div class="dq-stat-card">
+          <div class="dq-stat-num">${brokenCount}</div>
+          <div class="dq-stat-lbl">روابط تحتاج تصحيح</div>
+        </div>
+        <div class="dq-stat-card">
+          <div class="dq-stat-num" style="color:#10b981">${Math.round(((S.members.length - issues.length) / Math.max(1, S.members.length)) * 100)}%</div>
+          <div class="dq-stat-lbl">مؤشر دقة واكتمال الشجرة</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0">
+        <b style="font-size:.85rem;color:var(--gold)">قائمة الملاحظات والحلول الفورية:</b>
+        ${issues.length ? `
+          <button type="button" class="btn" id="btn-fix-all-dq" style="background:#10b981;color:#fff;font-size:.76rem;padding:6px 14px;border-radius:6px;font-weight:700">
+            ⚡ إصلاح الكل بنقرة واحدة
+          </button>
+        ` : ''}
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto" id="dq-issues-box">
+        ${issues.length ? issues.map((iss, i) => `
+          <div class="dq-issue-item">
+            <div>
+              <span class="bd" style="background:rgba(245,158,11,.15);border:1px solid var(--gold);color:var(--gold);padding:2px 8px;border-radius:99px;font-size:.7rem">
+                ${iss.icon} ${iss.typeName}
+              </span>
+              <div style="font-size:.84rem;color:#e2e8f0;margin-top:4px">${esc(iss.desc)}</div>
+            </div>
+            <button type="button" class="dq-fix-btn" data-fix-idx="${i}">
+              ⚡ ${esc(iss.fixLabel)}
+            </button>
+          </div>
+        `).join('') : `
+          <div style="background:rgba(16,185,129,.1);border:1.5px solid #10b981;border-radius:10px;padding:24px;text-align:center;color:#6ee7b7">
+            <div style="font-size:2.2rem;margin-bottom:6px">✓</div>
+            <b style="font-size:1.1rem">ممتاز! جودة بيانات الشجرة 100%</b>
+            <div style="font-size:.82rem;margin-top:4px;color:#a7f3d0">لا توجد أسماء مكررة أو روابط متعارضة في شجرة العائلة حالياً.</div>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  document.querySelectorAll('[data-fix-idx]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = parseInt(btn.dataset.fixIdx, 10);
+      if (issues[idx] && issues[idx].action) {
+        issues[idx].action();
+      }
+    };
+  });
+
+  const fixAllBtn = $('#btn-fix-all-dq');
+  if (fixAllBtn) {
+    fixAllBtn.onclick = () => {
+      issues.forEach(iss => { if (iss.action) iss.action(); });
+      toast('✓ تم تطبيق جميع الإصلاحات التلقائية بنجاح!');
+      openDataQualityDashboard();
+    };
+  }
+}
+
+$('#m-data-quality').onclick = menuClose(() => openDataQualityDashboard());
