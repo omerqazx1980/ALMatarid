@@ -42,6 +42,7 @@ async function load(code) {
   checkAnnouncements();
   inboxBadge();
   setTimeout(fetchPhotos, 400);
+  setTimeout(checkPersonalInvitation, 600);
   if (!window._almAuto) window._almAuto = setInterval(silentRefresh, 90000);
   return true;
 }
@@ -3882,6 +3883,7 @@ function openInvites(selectedEventId = null) {
 }
 
 $('#m-invites').onclick = menuClose(() => openInvites());
+$('#m-personal-invites').onclick = menuClose(() => openPersonalInvitesModal());
 
 /* ---------- 53) أرشيف وثائق وصور العائلة القديمة (فرع تجربة) ---------- */
 const DEFAULT_ARCHIVE_ITEMS = [
@@ -11059,6 +11061,235 @@ function openQrShareModal(targetMemberId = null) {
 
   renderModal();
 }
+
+/* ---------- 87) روابط دعوة شخصية تحمل اسم المدعو (فرع تجربة) ---------- */
+function checkPersonalInvitation() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const guest = params.get('inv_to') || params.get('inv_guest');
+    if (!guest) return;
+    const title = params.get('inv_title') || 'ابن العم الكريم';
+    const ev = params.get('inv_ev') || 'شجرة وتاريخ العائلة';
+    const host = params.get('inv_from') || 'أسرة آل مطارد';
+
+    // Show welcoming banner or dialog
+    const welcomeHtml = `
+      <div class="pinv-welcome-banner" style="max-width:550px;text-align:center">
+        <div style="font-size:2rem;margin-bottom:6px">🌿 💌 🌿</div>
+        <h3 style="margin:0 0 6px 0;color:var(--gold);font-size:1.25rem">
+          أهلاً وسهلاً بك يا ${esc(title)} / ${esc(guest)}
+        </h3>
+        <p style="margin:0 0 10px 0;font-size:.86rem;color:var(--txt);line-height:1.6">
+          يتشرف ${esc(host)} بدعوتكم الكريمة للاطلاع على <b>${esc(ev)}</b> في موقع شجرة عائلة آل مطارد المباركة.
+        </p>
+        <div style="display:flex;justify-content:center;gap:8px;margin-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 16px;font-size:.85rem">
+            تصفح الشجرة الآن 🌳
+          </button>
+        </div>
+      </div>
+    `;
+    showInfo(welcomeHtml);
+  } catch (e) {
+    console.warn('Invitation check error:', e);
+  }
+}
+
+function openPersonalInvitesModal() {
+  const TITLES = [
+    'ابن العم الكريم',
+    'الأخ الفاضل',
+    'العم العزيز',
+    'الخال الفاضل',
+    'بنت العم الكريمة',
+    'الأخت الفاضلة',
+    'العمة الفاضلة',
+    'الخالة العزيزة',
+    'الأستاذ الفاضل',
+    'الضيف الكريم'
+  ];
+
+  const EVENTS = [
+    'تصفح شجرة وتاريخ عائلة آل مطارد',
+    'اجتماع العائلة السنوي (عيد الفطر المبارك)',
+    'اجتماع العائلة السنوي (عيد الأضحى المبارك)',
+    'ملتقى أبناء الأسرة الصيفي بالسراة',
+    'حفل زواج ومناسبة كريمة',
+    'لقاء صلة الرحم والتواصل'
+  ];
+
+  let guestName = 'محمد بن صالح المطارد';
+  let guestTitle = 'ابن العم الكريم';
+  let eventType = EVENTS[0];
+  let hostName = 'مجلس أسرة آل مطارد';
+  let customNote = 'يسرنا ويسعدنا حضوركم وتشريفكم لصلة الرحم والتعرف على تاريخ وآباء وأجداد الأسرة.';
+
+  function generateLink() {
+    const base = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    params.set('inv_to', guestName.trim());
+    params.set('inv_title', guestTitle);
+    params.set('inv_ev', eventType);
+    params.set('inv_from', hostName.trim());
+    params.set('code', '27748111');
+    return `${base}?${params.toString()}`;
+  }
+
+  function renderModal() {
+    const inviteLink = generateLink();
+    const savedInvites = JSON.parse(localStorage.getItem('almatarid_personal_invites') || '[]');
+
+    const html = `
+      <div class="pinv-wrap" style="max-width:760px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>💌</span> روابط دعوة شخصية تحمل اسم المدعو
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          أنشئ دعوة شخصية فريدة لكل قريب تحمل اسمه ولقبه التقديري ورسالة ترحيب خاصة تظهر له فور فتح الرابط، لتصل به إلى الشجرة بكل حفاوة وتقدير.
+        </p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <!-- Inputs Form -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">اسم المدعو (الضيف / القريب):</label>
+              <input type="text" id="pinv-name-inp" value="${esc(guestName)}" placeholder="مثال: فهد بن علي المطارد" style="width:100%;box-sizing:border-box;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.84rem">
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">اللقب / صفة القرابة:</label>
+                <select id="pinv-title-sel" class="fstats-btn" style="width:100%;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:.78rem">
+                  ${TITLES.map(t => `<option value="${esc(t)}" ${t === guestTitle ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">المُرسل (الداعي):</label>
+                <input type="text" id="pinv-host-inp" value="${esc(hostName)}" placeholder="مجلس الأسرة / ابنكم..." style="width:100%;box-sizing:border-box;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:.78rem">
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">المناسبة أو الغرض:</label>
+              <select id="pinv-ev-sel" class="fstats-btn" style="width:100%;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:.78rem">
+                ${EVENTS.map(ev => `<option value="${esc(ev)}" ${ev === eventType ? 'selected' : ''}>${esc(ev)}</option>`).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">رسالة الدعوة والترحيب المخصصة:</label>
+              <textarea id="pinv-note-inp" rows="3" style="width:100%;box-sizing:border-box;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.8rem;line-height:1.5;resize:none">${esc(customNote)}</textarea>
+            </div>
+          </div>
+
+          <!-- Preview Card -->
+          <div style="display:flex;flex-direction:column;justify-content:center">
+            <div class="pinv-card">
+              <div style="font-size:.74rem;color:var(--gold);font-weight:700">بِسْمِ اللَّـهِ الرَّحْمَـٰنِ الرَّحِيمِ</div>
+              <div class="pinv-badge" style="align-self:center">دعوة كريمة وخاصة</div>
+              <div class="pinv-guest-title">
+                إلى: ${esc(guestTitle)} / ${esc(guestName || 'المدعو')}
+              </div>
+              <div style="font-size:.8rem;color:var(--txt);line-height:1.6">
+                ${esc(customNote)}
+              </div>
+              <div style="font-size:.78rem;color:var(--gold);margin-top:4px">
+                المناسبة: <b>${esc(eventType)}</b>
+              </div>
+              <div style="font-size:.74rem;color:var(--mut);border-top:1px dashed var(--line);padding-top:6px;margin-top:6px">
+                الداعي: <b>${esc(hostName)}</b>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Share & Actions -->
+        <div style="background:rgba(15,23,42,.7);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-top:8px">
+          <div style="font-size:.76rem;color:var(--gold);margin-bottom:4px;font-weight:700">🔗 رابط الدعوة الشخصي المولد:</div>
+          <div style="color:var(--txt);word-break:break-all;direction:ltr;text-align:left;font-family:monospace;font-size:.74rem;background:#06101e;padding:6px 10px;border-radius:6px">
+            ${esc(inviteLink)}
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn" id="btn-pinv-wa" style="background:#25d366;color:#0f172a;font-weight:700;padding:6px 14px;font-size:.8rem">
+              📲 إرسال الدعوة عبر واتساب
+            </button>
+            <button type="button" class="fstats-btn" id="btn-pinv-copy" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.8rem">
+              📋 نسخ رابط الدعوة
+            </button>
+            <button type="button" class="fstats-btn" id="btn-pinv-save" style="padding:6px 14px;font-size:.8rem">
+              💾 حفظ في سجل الدعوات
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Live inputs
+    const nInp = $('#pinv-name-inp');
+    if (nInp) nInp.oninput = (e) => { guestName = e.target.value; renderModal(); };
+    const tSel = $('#pinv-title-sel');
+    if (tSel) tSel.onchange = (e) => { guestTitle = e.target.value; renderModal(); };
+    const evSel = $('#pinv-ev-sel');
+    if (evSel) evSel.onchange = (e) => { eventType = e.target.value; renderModal(); };
+    const hInp = $('#pinv-host-inp');
+    if (hInp) hInp.oninput = (e) => { hostName = e.target.value; renderModal(); };
+    const noteInp = $('#pinv-note-inp');
+    if (noteInp) noteInp.oninput = (e) => { customNote = e.target.value; renderModal(); };
+
+    // WhatsApp action
+    const waBtn = $('#btn-pinv-wa');
+    if (waBtn) {
+      waBtn.onclick = () => {
+        const link = generateLink();
+        const msg = `🌿 السلام عليكم ورحمة الله وبركاته،\nإلى: ${guestTitle} / ${guestName} حفظكم الله،\n\n${customNote}\n\n📍 المناسبة: ${eventType}\n🔗 رابط دعوتكم الشخصي المباشر:\n${link}\n\nمع فائق التقدير والمحبة،\n${hostName}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+      };
+    }
+
+    // Copy action
+    const copyBtn = $('#btn-pinv-copy');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(generateLink()).then(() => {
+          toast(`✅ تم نسخ رابط الدعوة الشخصي لـ «${guestName}»!`);
+        });
+      };
+    }
+
+    // Save action
+    const saveBtn = $('#btn-pinv-save');
+    if (saveBtn) {
+      saveBtn.onclick = () => {
+        const list = JSON.parse(localStorage.getItem('almatarid_personal_invites') || '[]');
+        list.unshift({
+          id: 'inv_' + Date.now(),
+          guestName,
+          guestTitle,
+          eventType,
+          date: new Date().toLocaleDateString('ar-SA')
+        });
+        localStorage.setItem('almatarid_personal_invites', JSON.stringify(list));
+        toast('✅ تم حفظ الدعوة في السجل بنجاح!');
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 

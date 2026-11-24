@@ -1140,6 +1140,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .qr-canvas-box { background: #fff; padding: 12px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
 .qr-passcode-badge { background: rgba(245,158,11,.15); border: 1.5px dashed var(--gold); color: var(--gold); font-size: 1rem; font-weight: 700; letter-spacing: 2px; padding: 4px 14px; border-radius: 8px; }
 
+/* ---------- 87) روابط دعوة شخصية تحمل اسم المدعو ---------- */
+.pinv-wrap { display: flex; flex-direction: column; gap: 12px; }
+.pinv-card { background: linear-gradient(135deg, rgba(245,158,11,.12) 0%, rgba(15,23,42,.95) 100%); border: 2px solid var(--gold); border-radius: 12px; padding: 20px; text-align: center; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.pinv-guest-title { font-size: 1.25rem; font-weight: 700; color: var(--gold); }
+.pinv-badge { background: rgba(245,158,11,.15); border: 1px solid var(--gold); color: var(--gold); padding: 3px 10px; border-radius: 12px; font-size: .76rem; font-weight: 700; }
+.pinv-welcome-banner { background: linear-gradient(135deg, rgba(245,158,11,.2) 0%, rgba(15,23,42,.98) 100%); border: 2px solid var(--gold); border-radius: 12px; padding: 14px 20px; text-align: center; margin-bottom: 12px; }
+
+
 
 
 
