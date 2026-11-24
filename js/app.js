@@ -321,8 +321,8 @@ function collapseAll() { S.open = new Set(); for (const r of S.roots) { S.open.a
 /* ann24: على الجوال يبدأ العرض بالمؤسس فقط مطويًا (طلب المالك) */
 function collapseInitial() { if (window.matchMedia('(max-width: 640px)').matches) S.open = new Set(S.roots.map(r => r.id)); else collapseAll(); } /* ann48: المؤسس مفتوح بالجوال فتظهر الشجرة */
 /* أبناء العرض: نتجاوز العضوات المخفيات (لا بطاقة لهن عند الزوار بطلب المالك) ونُظهر أبناءهن إن وُجدوا في مكانهن */
-const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
-const dispRoots = () => { const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
+const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (S.filterMemberIds && !S.filterMemberIds.has(c.id)) continue; if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
+const dispRoots = () => { if (S.filterMode === 'descendants' && S.filterFocalId) { const focal = S.byId.get(S.filterFocalId); return focal ? [focal] : []; } if (S.filterMode === 'ancestors' && S.filterMemberIds) { const top = S.roots.find(r => S.filterMemberIds.has(r.id)); if (top) return [top]; } const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
 /* نص عدد الأبناء والبنات محسوبًا من كامل الأبناء (يشمل المخفيات) ليظهر في بطاقة الأب */
 const kidsTxt = m => { const ks = S.kids.get(m.id) || []; if (!ks.length) return ''; const s = ks.filter(c => c.gender === 'male').length, d = ks.length - s; return [s ? `👦 ${s}` : '', d ? `👧 ${d}` : ''].filter(Boolean).join(' · '); };
 const kidsOf = m => S.open.has(m.id) ? dispKids(m) : [];
@@ -558,7 +558,7 @@ function profile(id) {
       ${row('الهاتف', phoneText)}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -813,7 +813,9 @@ $('#profile-body').addEventListener('click', e => {
   ({ edit: () => { $('#profile').close(); memberForm(m); }, child: () => { $('#profile').close(); memberForm(null, m.id); },
      wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m),
      photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); },
-     lcard: () => { openLineageCard(m.id); } })[b.dataset.act]?.();
+     lcard: () => { openLineageCard(m.id); },
+     descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
+     ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); } })[b.dataset.act]?.();
 });
 $('#m-export').onclick = () => {
   const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), members: S.members, wives: S.wives, events: S.events }, null, 1)], { type: 'application/json' });
@@ -6946,3 +6948,184 @@ function openNetworkGraph(focalId) {
 }
 
 $('#m-network-graph').onclick = menuClose(() => openNetworkGraph());
+
+/* ============================================================
+   68) عرض الأسلاف فقط أو النسل فقط لشخص معين
+   ============================================================ */
+function setDescendantsFilter(id) {
+  const m = S.byId.get(id);
+  if (!m) return;
+  const set = new Set([m.id]);
+  const queue = [m.id];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    const kids = S.kids.get(cur) || [];
+    kids.forEach(k => {
+      set.add(k.id);
+      queue.push(k.id);
+    });
+  }
+  S.filterMode = 'descendants';
+  S.filterFocalId = m.id;
+  S.filterMemberIds = set;
+  for (const kidId of set) S.open.add(kidId);
+  updateFilterBanner();
+  render(true);
+  toast(`🌿 تم تصفية الشجرة لعرض نسل «${m.full_name}» (${set.size} فرد)`);
+}
+
+function setAncestorsFilter(id) {
+  const m = S.byId.get(id);
+  if (!m) return;
+  const set = new Set();
+  let cur = m;
+  while (cur) {
+    set.add(cur.id);
+    cur = S.byId.get(cur.father_id);
+  }
+  S.filterMode = 'ancestors';
+  S.filterFocalId = m.id;
+  S.filterMemberIds = set;
+  for (const ancId of set) S.open.add(ancId);
+  updateFilterBanner();
+  render(true);
+  toast(`📜 تم تصفية الشجرة لعرض خط أسلاف «${m.full_name}» (${set.size} آباء وأجداد)`);
+}
+
+function clearTreeFilter() {
+  S.filterMode = null;
+  S.filterFocalId = null;
+  S.filterMemberIds = null;
+  collapseAll();
+  updateFilterBanner();
+  render(true);
+  toast('تم إلغاء التصفية وعرض الشجرة كاملة');
+}
+
+function updateFilterBanner() {
+  let banner = $('#tree-filter-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'tree-filter-banner';
+    banner.className = 'tree-filter-banner';
+    const vp = $('#vp');
+    if (vp) vp.appendChild(banner);
+  }
+  if (!S.filterMode || !S.filterFocalId) {
+    banner.style.display = 'none';
+    return;
+  }
+  const m = S.byId.get(S.filterFocalId);
+  const name = m ? m.full_name : '';
+  const count = S.filterMemberIds ? S.filterMemberIds.size : 0;
+  const isDesc = S.filterMode === 'descendants';
+  const label = isDesc ? `🌿 تصفية النسل فقط لـ: <b>${esc(name)}</b> (${count} فرد)` : `📜 تصفية خط الأسلاف لـ: <b>${esc(name)}</b> (${count} آباء وأجداد)`;
+  banner.innerHTML = `
+    <span>${label}</span>
+    <button type="button" id="tree-filter-clear-btn" style="background:#ef4444;color:#fff;border:none;border-radius:14px;padding:3px 12px;font-size:.78rem;cursor:pointer;font-weight:700">✕ إلغاء التصفية</button>
+  `;
+  banner.style.display = 'flex';
+  const clearBtn = $('#tree-filter-clear-btn');
+  if (clearBtn) clearBtn.onclick = clearTreeFilter;
+}
+
+function openAncestorsDescendantsModal(selectedId) {
+  const current = selectedId ? S.byId.get(selectedId) : (S.curId ? S.byId.get(S.curId) : (S.roots[0] || S.members[0]));
+  if (!current) return;
+
+  const descCount = (() => {
+    let cnt = 0;
+    const q = [current.id];
+    while (q.length) {
+      const c = q.shift();
+      const ks = S.kids.get(c) || [];
+      cnt += ks.length;
+      ks.forEach(k => q.push(k.id));
+    }
+    return cnt;
+  })();
+
+  const ancCount = (() => {
+    let cnt = 0, p = current;
+    while (p) { cnt++; p = S.byId.get(p.father_id); }
+    return cnt;
+  })();
+
+  const html = `
+    <div style="max-width:550px">
+      <div class="fstats-head">
+        <h2>🎯 تصفية الشجرة: الأسلاف فقط أو النسل فقط</h2>
+        <p class="sub">عزل فرع محدد من الشجرة لتسهيل التتبع والتركيز دون تشتيت</p>
+      </div>
+
+      <div style="margin:16px 0;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label style="font-weight:700;color:var(--gold);display:block;margin-bottom:6px">اختر الفرد المطلوب:</label>
+          <select id="anc-desc-sel" style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.9rem">
+            ${S.members.filter(m => !m.name_masked).slice(0, 150).map(m => `
+              <option value="${m.id}" ${m.id === current.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+          <div style="background:rgba(16,185,129,.1);border:1.5px solid #10b981;border-radius:10px;padding:12px;text-align:center;display:flex;flex-direction:column;justify-content:space-between;gap:8px">
+            <div>
+              <div style="font-size:1.6rem">🌿</div>
+              <b style="color:#10b981;display:block">عرض النسل فقط</b>
+              <p style="font-size:.76rem;color:var(--mut);margin:4px 0">يُظهر هذا الفرد وجميع ذريته (${descCount} فرد من الأبناء والأحفاد)</p>
+            </div>
+            <button type="button" id="anc-desc-btn-desc" class="fstats-btn" style="background:#10b981;border-color:#10b981;color:#fff;font-weight:700;padding:6px 10px;font-size:.82rem">تطبيق عرض النسل ←</button>
+          </div>
+
+          <div style="background:rgba(59,130,246,.1);border:1.5px solid #3b82f6;border-radius:10px;padding:12px;text-align:center;display:flex;flex-direction:column;justify-content:space-between;gap:8px">
+            <div>
+              <div style="font-size:1.6rem">📜</div>
+              <b style="color:#3b82f6;display:block">عرض الأسلاف فقط</b>
+              <p style="font-size:.76rem;color:var(--mut);margin:4px 0">يُظهر خط الآباء والأجداد المباشرين صعوداً حتى المؤسس (${ancCount} أجيال)</p>
+            </div>
+            <button type="button" id="anc-desc-btn-anc" class="fstats-btn" style="background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:700;padding:6px 10px;font-size:.82rem">تطبيق عرض الأسلاف ←</button>
+          </div>
+        </div>
+
+        ${S.filterMode ? `
+          <div style="margin-top:10px;text-align:center">
+            <button type="button" id="anc-desc-btn-reset" style="background:#ef4444;border:none;border-radius:8px;color:#fff;padding:8px 16px;font-weight:700;font-size:.85rem;cursor:pointer">
+              ✕ إلغاء التصفية الحالية وعرض الشجرة بالكامل
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const sel = $('#anc-desc-sel');
+  if (sel) {
+    sel.onchange = () => openAncestorsDescendantsModal(sel.value);
+  }
+  const btnDesc = $('#anc-desc-btn-desc');
+  if (btnDesc) {
+    btnDesc.onclick = () => {
+      $('#profile').close();
+      setDescendantsFilter(sel.value);
+    };
+  }
+  const btnAnc = $('#anc-desc-btn-anc');
+  if (btnAnc) {
+    btnAnc.onclick = () => {
+      $('#profile').close();
+      setAncestorsFilter(sel.value);
+    };
+  }
+  const btnReset = $('#anc-desc-btn-reset');
+  if (btnReset) {
+    btnReset.onclick = () => {
+      $('#profile').close();
+      clearTreeFilter();
+    };
+  }
+}
+
+$('#m-anc-desc').onclick = menuClose(() => openAncestorsDescendantsModal());
