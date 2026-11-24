@@ -1069,3 +1069,11 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .alert-item{background:rgba(15,23,42,.85);border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:12px;margin-bottom:8px;transition:all .15s ease}
 .alert-item.unread{border-color:var(--gold);background:rgba(245,158,11,.08)}
 .alert-icon{font-size:1.3rem;line-height:1}
+
+/* ---------- 78) صفحة أصل لقب آل مطارد ---------- */
+.origin-page{display:flex;flex-direction:column;gap:14px;line-height:1.7}
+.origin-hero{background:linear-gradient(135deg, rgba(245,158,11,.15) 0%, rgba(15,23,42,.95) 100%);border:1.5px solid var(--gold);border-radius:12px;padding:16px;text-align:center}
+.origin-title{font-size:1.4rem;color:var(--gold);font-weight:700;margin:0 0 6px 0}
+.origin-sec{background:rgba(15,23,42,.7);border:1px solid var(--line);border-radius:10px;padding:14px}
+.origin-sec h3{color:var(--gold);font-size:1rem;margin:0 0 8px 0;display:flex;align-items:center;gap:6px}
+.origin-chain{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:.82rem;background:rgba(245,158,11,.08);padding:8px 12px;border-radius:8px;border:1px dashed var(--gold);margin:8px 0}

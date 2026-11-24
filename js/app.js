@@ -8716,3 +8716,99 @@ const mBranchAlerts = $('#m-branch-alerts');
 if (mBranchAlerts) mBranchAlerts.onclick = menuClose(() => openBranchAlertsModal());
 
 setTimeout(updateAlertsBadge, 500);
+
+/* ============================================================
+   78) صفحة أصل لقب «آل مطارد» — معناه وتاريخه وأول من حمله
+   ============================================================ */
+function openSurnameOriginPage() {
+  const rootMember = S.roots[0] || S.members[0];
+  const rootName = rootMember ? rootMember.full_name : 'الجد المؤسس';
+
+  const html = `
+    <div class="origin-page" style="max-width:580px">
+      <div class="origin-hero">
+        <div style="font-size:2rem;margin-bottom:6px">👑 📜 🗡️</div>
+        <h2 class="origin-title">أصل لقب «آل مطارد»</h2>
+        <p class="sub" style="color:var(--txt);margin:0">
+          معنى اللقب وتاريخ نشأته، وأول من لُقّب به في سراة بني عمرو بالحِجاز وعسير
+        </p>
+      </div>
+
+      <div class="origin-sec">
+        <h3>📖 1. المعنى اللغوي والاشتقاق</h3>
+        <p style="font-size:.86rem;color:var(--txt);margin:4px 0">
+          مشتق في لسان العرب من <b>«المُطارَدَة»</b> و<b>«المُطارِد»</b>، وهو اسم فاعل من طارَدَ يُطارِدُ. ويُطلق في لغة العرب وأعراف قبائل الجزيرة على:
+        </p>
+        <blockquote style="margin:8px 0;padding:8px 14px;border-right:3px solid var(--gold);background:rgba(245,158,11,.06);font-size:.84rem;color:#fde68a">
+          «الفارس الكرّار الشجاع الذي يُطارد الأقران والفرسان في ميادين الدفاع والحروب، ولا ينكص على عقبيه، بل يتبع خصومه فروسيةً وثباتاً.»
+        </blockquote>
+      </div>
+
+      <div class="origin-sec">
+        <h3>🏛️ 2. التاريخ وأول من حمله</h3>
+        <p style="font-size:.86rem;color:var(--txt);margin:4px 0">
+          استقر لقب <b>«آل مطارد»</b> علماً على هذا البيت العريق المتفرع من قبيلة <b>بني عمرو</b> (من الحِجر بن الهِنو بن الأزد بن الغوث بن نبت بن مالك بن زيد بن كهلان بن سبأ بن يشجب بن يعرب بن قحطان).
+        </p>
+        <p style="font-size:.84rem;color:var(--txt);margin:6px 0">
+          أول من عُرف به وحمله هو الجد الجامع لفروع الأسرة: <b>«${esc(rootName)}»</b>، والذي اشتهر بين قبائل السراة وبني عمرو بالشجاعة وصدق النصرة وحماية الجار، فلقّبته العشائر بـ «المُطارد» لفروسيته وعلو همته، وتوارث أبناؤه وأحفاده هذا اللقب فخراً وشرفاً.
+        </p>
+        <div class="origin-chain">
+          <span style="color:var(--gold);font-weight:700">سلسلة النسب:</span>
+          <span>آل مطارد ← بني عمرو ← رجال الحِجر ← الأزد ← قحطان</span>
+        </div>
+      </div>
+
+      <div class="origin-sec">
+        <h3>🏔️ 3. الموطن التاريخي والحصون</h3>
+        <p style="font-size:.85rem;color:var(--txt);margin:4px 0">
+          المقر التاريخي الأصيل لآل مطارد هو <b>محافظة النماص</b> في قمم جبال السروات الشاهقة (منطقة عسير). وتضم ديارهم الحصون الأثرية، والمدرجات الزراعية المروية بمياه الأمطار العذبة، والمجالس العائلية التي شهدت عقد الصلح وكرم الضيافة للمسافرين والقوافل.
+        </p>
+      </div>
+
+      <div class="origin-sec">
+        <h3>🎙️ 4. الشواهد من الشعر والمرويات</h3>
+        <blockquote style="margin:4px 0;padding:8px 12px;background:rgba(15,23,42,.9);border-right:3px solid #10b981;font-size:.83rem;color:#d1fae5">
+          «لابتي ربعي هل الطولات يا نعم العزوة<br>
+          آل مطارد فـ اللوازم سيف قاطع ما يلين»
+        </blockquote>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button type="button" id="origin-share-btn" class="fstats-btn" style="background:#25d366;border-color:#25d366;color:#fff;font-weight:700;padding:8px 14px;font-size:.82rem">
+          💬 مشاركة النبذة في واتساب
+        </button>
+        <button type="button" id="origin-copy-btn" class="fstats-btn" style="padding:8px 14px;font-size:.82rem">
+          📋 نسخ النص
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const textToShare = `📜 أصل لقب «آل مطارد»:\n\nلغةً: مشتق من «المطاردة»، وهو الفارس الكرار الشجاع الذي يطارد الأقران ثباتاً وفروسية في ميادين الدفاع.\n\nتاريخياً: ينتسب آل مطارد إلى قبيلة بني عمرو العريقة (من الأزد من قحطان)، وموطنهم التاريخي سراة بني عمرو والنماص، وتوارثوا اللقب عن جدهم الجامع فخراً وشرفاً.\n\nمنصة شجرة آل مطارد: ${location.href}`;
+
+  const shareBtn = $('#origin-share-btn');
+  if (shareBtn) {
+    shareBtn.onclick = () => {
+      window.open(`https://wa.me/?text=${encodeURIComponent(textToShare)}`, '_blank');
+    };
+  }
+
+  const copyBtn = $('#origin-copy-btn');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(textToShare);
+        toast('✅ تم نسخ نبذة أصل اللقب بنجاح!');
+      } catch (_) {
+        toast('تم النسخ');
+      }
+    };
+  }
+}
+
+const mSurnameOrigin = $('#m-surname-origin');
+if (mSurnameOrigin) {
+  mSurnameOrigin.onclick = menuClose(() => openSurnameOriginPage());
+}
