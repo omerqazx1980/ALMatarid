@@ -10864,7 +10864,7 @@ function openQrShareModal(targetMemberId = null) {
   let activeMid = targetMemberId || '';
   let activeBranch = '';
   let includeCode = true;
-  let customCode = '27748111';
+  let customCode = '';
   let activeTheme = 'gold';
 
   function getShareUrl() {
@@ -10932,7 +10932,7 @@ function openQrShareModal(targetMemberId = null) {
               </label>
               <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
                 <span style="font-size:.74rem;color:var(--mut)">الكود:</span>
-                <input type="text" id="qr-code-val" value="${esc(customCode)}" style="background:#0f172a;color:var(--gold);border:1px solid var(--gold);padding:4px 8px;border-radius:6px;font-size:.85rem;font-weight:700;width:120px;text-align:center">
+                <input type="text" id="qr-code-val" value="${esc(customCode)}" placeholder="اكتب كود الدخول (اختياري)" style="background:#0f172a;color:var(--gold);border:1px solid var(--gold);padding:4px 8px;border-radius:6px;font-size:.85rem;font-weight:700;width:120px;text-align:center">
               </div>
             </div>
 
@@ -11157,7 +11157,6 @@ function openPersonalInvitesModal() {
     params.set('inv_title', guestTitle);
     params.set('inv_ev', eventType);
     params.set('inv_from', hostName.trim());
-    params.set('code', '27748111');
     return `${base}?${params.toString()}`;
   }
 
@@ -12138,7 +12137,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
                 </div>
 
                 <div style="font-size:.85rem;color:var(--txt);line-height:1.7;white-space:pre-line;font-style:${isUnlocked ? 'italic' : 'normal'};background:${isUnlocked ? 'rgba(245,158,11,.04)' : 'rgba(0,0,0,.3)'};padding:10px 14px;border-radius:8px">
-                  ${esc(item.body)}
+                  ${isUnlocked ? esc(item.body) : '🔒 هذه الرسالة مغلقة في كبسولة الزمن حتى موعد فتحها.'}
                 </div>
 
                 <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px">
@@ -12195,7 +12194,8 @@ function openTimeCapsuleModal(activeFilter = 'all') {
         const cap = allCapsules.find(c => c.id === id);
         if (cap) {
           const pass = prompt('أدخل رمز الفتح الخاص بالكبسولة (أو رمز المالك/الفرع):');
-          if (pass === '27748111' || pass === '1450' || pass === (cap.secretCode || '')) {
+          const master = (S.code || '').trim();
+          if (pass && (pass === (cap.secretCode || '') || (master && pass === master))) {
             cap.status = 'unlocked';
             const realMsg = prompt('أدخل أو عدّل النص الكامل للوصية ليظهر للجميع:', cap.body);
             if (realMsg) cap.body = realMsg;
@@ -12223,6 +12223,8 @@ function openTimeCapsuleModal(activeFilter = 'all') {
         const body = prompt('نص الرسالة أو الوصية:') || '';
         const isLockedChoice = confirm('هل تريد إبقاء الرسالة مغلقة ومحفوظة حتى حلول الموعد؟\n(اضغط موافق للإغلاق والتوقيت، أو إلغاء لتكون مفتوحة فوراً)');
 
+        const secret = isLockedChoice ? (prompt('اختر رمزاً سرياً لفتح الكبسولة (شاركه مع من تريد أن يفتحها):') || '').trim() : '';
+
         const newCap = {
           id: 'cap_user_' + Date.now(),
           author,
@@ -12231,7 +12233,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
           writtenDateText: new Date().toLocaleDateString('ar-SA'),
           unlockConditionText: unlockCond,
           body,
-          secretCode: '27748111'
+          secretCode: secret
         };
 
         const stored = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
