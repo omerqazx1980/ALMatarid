@@ -8423,3 +8423,138 @@ const mEventsMap = $('#m-events-map');
 if (mEventsMap) {
   mEventsMap.onclick = menuClose(() => openEventsTimelineMap());
 }
+
+/* ============================================================
+   76) طبقة الخريطة التاريخية القديمة فوق الخريطة الحديثة
+   ============================================================ */
+function openAntiqueMapLayerModal(initialOpacity = 75) {
+  let opacity = initialOpacity;
+
+  function renderAntiqueSvg(op) {
+    const alpha = (op / 100).toFixed(2);
+    return `
+      <div class="city-map-container antique-map-box">
+        <svg class="city-map-svg" viewBox="0 0 540 500" style="width:100%;height:auto;display:block">
+          <defs>
+            <radialGradient id="ant-parch" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#3d2813"/>
+              <stop offset="100%" stop-color="#140d06"/>
+            </radialGradient>
+            <filter id="ant-glow">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Modern Base Map -->
+          <rect width="100%" height="100%" fill="url(#ant-parch)"></rect>
+          <path fill="#23170c" stroke="#4a3219" stroke-width="1.8" d="
+            M 45,75 L 75,50 L 85,30 L 140,32 L 195,42 L 260,65 L 325,80 L 375,95 L 395,110
+            Q 425,145 425,160 Q 448,175 445,185 Q 430,225 435,240 Q 470,295 475,305
+            L 460,420 L 360,435 L 276,448 L 232,470
+            Q 215,440 195,400 Q 180,380 170,365 Q 155,340 140,322 Q 130,305 136,285
+            Q 120,265 111,247 Q 100,230 90,220 Q 80,200 70,185 Q 55,165 50,150 Z
+          "></path>
+
+          <!-- Antique Map Overlay Layer with dynamic Opacity -->
+          <g id="antique-layer-group" style="opacity:${alpha};transition:opacity .15s ease">
+            <rect x="8" y="8" width="524" height="484" fill="none" stroke="#d97706" stroke-width="2.5" stroke-dasharray="10,5"></rect>
+            <rect x="14" y="14" width="512" height="472" fill="none" stroke="#92400e" stroke-width="1"></rect>
+
+            <path d="M 235,465 Q 205,420 185,385 T 142,320 T 115,248 T 88,145" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-dasharray="6,4"></path>
+            <path d="M 185,385 Q 260,340 345,250 T 430,200" fill="none" stroke="#d97706" stroke-width="1.8" stroke-dasharray="4,4"></path>
+
+            <text x="175" y="392" fill="#fbbf24" font-size="13" font-weight="bold" filter="url(#ant-glow)">👑 ديرة آل مطارد (سراة بني عمرو)</text>
+            <text x="110" y="335" fill="#fde68a" font-size="10" transform="rotate(-40, 110, 335)">درب القوافل والتجارة القديم</text>
+            <text x="280" y="270" fill="#f59e0b" font-size="12" font-weight="bold">عالية نجد واليمامة</text>
+            <text x="125" y="275" fill="#f59e0b" font-size="12" font-weight="bold">الحجاز وتهامة</text>
+            <text x="400" y="180" fill="#f59e0b" font-size="12" font-weight="bold">الأحساء والخليج العربي</text>
+            <text x="135" y="90" fill="#f59e0b" font-size="12" font-weight="bold">بادية الشام والشمال</text>
+            <text x="50" y="380" fill="#78350f" font-size="13" font-style="italic">بحر القلزم (البحر الأحمر)</text>
+
+            <g transform="translate(470, 75) scale(0.65)">
+              <circle cx="0" cy="0" r="38" fill="none" stroke="#d97706" stroke-width="1.5"></circle>
+              <circle cx="0" cy="0" r="28" fill="none" stroke="#f59e0b" stroke-dasharray="2,2"></circle>
+              <polygon points="0,-38 6,-10 0,0 -6,-10" fill="#f59e0b"></polygon>
+              <polygon points="0,38 6,10 0,0 -6,10" fill="#92400e"></polygon>
+              <polygon points="38,0 10,6 0,0 10,-6" fill="#d97706"></polygon>
+              <polygon points="-38,0 -10,6 0,0 -10,-6" fill="#78350f"></polygon>
+              <text x="0" y="-42" fill="#fbbf24" font-size="12" font-weight="bold" text-anchor="middle">شمال</text>
+            </g>
+          </g>
+
+          <!-- Contemporary Family Dots for Contrast -->
+          <circle cx="185" cy="385" r="9" fill="#10b981" stroke="#fff" stroke-width="2"></circle>
+          <text x="185" y="389" fill="#fff" font-size="9" font-weight="bold" text-anchor="middle">النماص</text>
+          <circle cx="346" cy="248" r="7" fill="#3b82f6" stroke="#fff" stroke-width="1.5"></circle>
+          <text x="346" y="240" fill="#93c5fd" font-size="9" text-anchor="middle">الرياض</text>
+          <circle cx="136" cy="285" r="7" fill="#3b82f6" stroke="#fff" stroke-width="1.5"></circle>
+          <text x="136" y="280" fill="#93c5fd" font-size="9" text-anchor="middle">جدة</text>
+          <circle cx="435" cy="200" r="6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"></circle>
+          <text x="435" y="195" fill="#93c5fd" font-size="9" text-anchor="middle">الدمام</text>
+        </svg>
+      </div>
+    `;
+  }
+
+  const html = `
+    <div style="max-width:580px">
+      <div class="fstats-head">
+        <h2>📜 الخريطة التاريخية التراثية لبلاد العائلة</h2>
+        <p class="sub">طبقة خرائط قديمة وتراثية مدمجة فوق الخريطة المعاصرة مع دروب القوافل التاريخية</p>
+      </div>
+
+      <div class="antique-ctrls">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-weight:700;color:var(--gold)">شفافية الطبقة القديمة:</label>
+          <input type="range" id="antique-opacity-range" class="antique-slider" min="0" max="100" value="${opacity}" style="width:130px">
+          <b id="antique-opacity-val" style="color:#fbbf24;min-width:38px">${opacity}%</b>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="ant-btn-max" class="fstats-btn" style="padding:4px 8px;font-size:.75rem">📜 قديم كامل</button>
+          <button type="button" id="ant-btn-split" class="fstats-btn" style="padding:4px 8px;font-size:.75rem">⚖️ دمج 50%</button>
+          <button type="button" id="ant-btn-min" class="fstats-btn" style="padding:4px 8px;font-size:.75rem">🗺️ حديث فقط</button>
+        </div>
+      </div>
+
+      <div id="antique-svg-container">
+        ${renderAntiqueSvg(opacity)}
+      </div>
+
+      <div style="background:rgba(245,158,11,.08);border:1px solid var(--gold);border-radius:8px;padding:10px 14px;margin-top:12px;font-size:.8rem;color:var(--txt)">
+        <b style="color:var(--gold);display:block;margin-bottom:4px">💡 معالم الخريطة التاريخية:</b>
+        <p style="margin:2px 0">📍 <b>سراة بني عمرو والنماص:</b> الموطن التاريخي وقرى الأسرة الحصينة على قمم جبال السروات.</p>
+        <p style="margin:2px 0">🐪 <b>دروب القوافل القديمة:</b> مسارات التجارة والحج القديمة الرابطة بين جنوب الجزيرة ومكة والمدينة وبلاد الشام.</p>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const range = $('#antique-opacity-range');
+  const valLabel = $('#antique-opacity-val');
+
+  function setLayerOpacity(val) {
+    opacity = val;
+    if (range) range.value = val;
+    if (valLabel) valLabel.textContent = `${val}%`;
+    const grp = $('#antique-layer-group');
+    if (grp) grp.style.opacity = (val / 100).toFixed(2);
+  }
+
+  if (range) {
+    range.oninput = () => setLayerOpacity(parseInt(range.value, 10));
+  }
+
+  const btnMax = $('#ant-btn-max');
+  if (btnMax) btnMax.onclick = () => setLayerOpacity(100);
+  const btnSplit = $('#ant-btn-split');
+  if (btnSplit) btnSplit.onclick = () => setLayerOpacity(50);
+  const btnMin = $('#ant-btn-min');
+  if (btnMin) btnMin.onclick = () => setLayerOpacity(0);
+}
+
+const mAntiqueMap = $('#m-antique-map');
+if (mAntiqueMap) {
+  mAntiqueMap.onclick = menuClose(() => openAntiqueMapLayerModal());
+}

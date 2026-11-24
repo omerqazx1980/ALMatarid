@@ -1057,3 +1057,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .evmap-play-btn{background:var(--gold);color:#0f172a;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:.82rem}
 .evmap-cards-list{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;margin-top:10px}
 .evmap-card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+
+/* ---------- 76) طبقة الخريطة التاريخية القديمة ---------- */
+.antique-map-box{position:relative;background:#1a140d !important;border:2px solid var(--gold) !important;box-shadow:inset 0 0 40px rgba(0,0,0,.85), 0 0 20px rgba(245,158,11,.2)}
+.antique-ctrls{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(26,20,13,.95);border:1.5px solid var(--gold);border-radius:8px;padding:8px 14px;margin:8px 0;font-size:.82rem;flex-wrap:wrap}
+.antique-slider{accent-color:var(--gold);cursor:pointer}
