@@ -833,11 +833,157 @@ const hijriShort = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islam
 const localDT = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 function showInfo(html) { $('#profile-body').dataset.id = ''; $('#profile-body').innerHTML = html; const p = $('#profile'); if (!p.open) p.showModal(); }
 const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' });
+function makeGoogleCalUrl(e) {
+  const d = new Date(e.event_date);
+  const end = new Date(d.getTime() + 3 * 3600 * 1000);
+  const fmt = dt => dt.toISOString().replace(/-|:|\.\d\d\d/g, '');
+  const title = encodeURIComponent(e.title || 'مناسبة عائلية - آل مطارد');
+  const details = encodeURIComponent((e.description || '') + '\n\nتطبيق أسرة آل مطارد');
+  const loc = encodeURIComponent(e.location_name || '');
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(d)}/${fmt(end)}&details=${details}&location=${loc}`;
+}
+
+function shareEventWhatsapp(e) {
+  const d = new Date(e.event_date);
+  const txt = `🎉 دعوة لمناسبة عائلية - أسرة آل مطارد\n\n📌 *${e.title}*\n📅 الموعد: ${evWhen(e)} (${hijriShort(d)})\n📍 المكان: ${e.location_name || 'يُحدد لاحقاً'}${e.location_url ? '\n🗺️ الرابط: ' + e.location_url : ''}\n\n${e.description ? e.description + '\n\n' : ''}نسعد بلقائكم وتواجدكم صلةً للرحم واجتماعاً للأسرة.`;
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
+}
+
 function eventsList() {
-  const now = Date.now(), past = e => new Date(e.event_date).getTime() < now;
-  const L = [...(S.events || [])].sort((a, b) => (past(a) ? 1 : 0) - (past(b) ? 1 : 0) || new Date(a.event_date) - new Date(b.event_date));
-  showInfo(`<h2>مناسبات الأسرة</h2><p class="sub">اضغط على أي مناسبة لفتح تفاصيلها وتوثيقها بالصور والفيديو</p>${L.map(e => `<div class="evrow${past(e) ? ' past' : ''}" data-evopen="${esc(e.id)}" style="cursor:pointer"><div><b>${esc(e.title)}</b>${past(e) ? ' <span class="evend">منتهي</span>' : ''}${e.media_count ? ` <span class="evmed">📸 ${e.media_count}</span>` : ''}<small>${esc(evWhen(e))} · ${esc(hijriShort(new Date(e.event_date)))}${e.location_name ? ' · ' + esc(e.location_name) : ''}</small></div>${canEdit() ? `<span><button class="x" data-ee="${esc(e.id)}" aria-label="تعديل">✏️</button><button class="x" data-ed="${esc(e.id)}" aria-label="حذف">✕</button></span>` : ''}</div>`).join('') || '<p class="sub">لا توجد مناسبات.</p>'}${canEdit() ? '<div class="row adm"><button data-ea="1">➕ مناسبة</button></div>' : ''}`);
-  document.querySelectorAll('#profile-body [data-evopen]').forEach(r => r.onclick = ev2 => { if (ev2.target.closest('button')) return; const x = S.events.find(z => String(z.id) === String(r.dataset.evopen)); if (x) evDetails(x); });
+  const now = Date.now();
+  const past = e => new Date(e.event_date).getTime() < now;
+  const allEvents = [...(S.events || [])].sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+  const upcoming = allEvents.filter(e => !past(e));
+  const pastEvents = allEvents.filter(e => past(e)).reverse();
+
+  let countdownHtml = '';
+  if (upcoming.length) {
+    const nextEv = upcoming[0];
+    const diff = new Date(nextEv.event_date).getTime() - now;
+    const days = Math.max(0, Math.floor(diff / (86400 * 1000)));
+    const hours = Math.max(0, Math.floor((diff % (86400 * 1000)) / (3600 * 1000)));
+    const mins = Math.max(0, Math.floor((diff % (3600 * 1000)) / (60 * 1000)));
+    
+    countdownHtml = `
+      <div class="countdown-banner">
+        <span class="cd-tag">المناسبة القادمة الأقرب</span>
+        <div class="cd-title">${esc(nextEv.title)}</div>
+        <div class="cd-grid">
+          <div class="cd-box"><span class="cd-num">${days}</span><span class="cd-lbl">يوم</span></div>
+          <div class="cd-box"><span class="cd-num">${hours}</span><span class="cd-lbl">ساعة</span></div>
+          <div class="cd-box"><span class="cd-num">${mins}</span><span class="cd-lbl">دقيقة</span></div>
+        </div>
+        <div class="cd-sub">📅 ${esc(evWhen(nextEv))} · ${esc(hijriShort(new Date(nextEv.event_date)))}${nextEv.location_name ? ' · 📍 ' + esc(nextEv.location_name) : ''}</div>
+        <div class="ev-actions" style="justify-content:center">
+          <a href="${makeGoogleCalUrl(nextEv)}" target="_blank" rel="noopener" class="ev-btn cal">📅 إضافة للتقويم</a>
+          <button type="button" class="ev-btn wa" data-ev-wa="${esc(nextEv.id)}">💬 مشاركة واتساب</button>
+          <button type="button" class="ev-btn" data-evopen="${esc(nextEv.id)}" style="background:var(--gold);color:#1c1204">👥 تفاصيل الحضور</button>
+        </div>
+      </div>`;
+  }
+
+  const renderEvCard = (e, isPast) => {
+    const d = new Date(e.event_date);
+    const diffDays = Math.ceil((d.getTime() - now) / (86400 * 1000));
+    let badgeText = isPast ? 'منتهي' : (diffDays <= 0 ? 'اليوم!' : `بعد ${diffDays} يوم`);
+    let badgeClass = isPast ? 'ended' : (diffDays <= 1 ? 'today' : 'soon');
+
+    return `
+      <div class="ev-card ${isPast ? 'past' : ''}">
+        <div class="ev-card-top ${isPast ? 'past' : ''}">
+          <div>
+            <h3>${esc(e.title)}</h3>
+            <div class="ev-meta-row">
+              <span>📅 ${esc(evWhen(e))} · ${esc(hijriShort(d))}</span>
+              ${e.location_name ? `<span>📍 ${esc(e.location_name)}${e.location_url ? ` · <a href="${esc(e.location_url)}" target="_blank" rel="noopener" style="color:var(--blue)">الخريطة</a>` : ''}</span>` : ''}
+            </div>
+          </div>
+          <span class="ev-time-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        ${e.description ? `<div class="ev-desc">${esc(e.description).replace(/\n/g, '<br>')}</div>` : ''}
+        <div class="ev-actions">
+          <button type="button" class="ev-btn" data-evopen="${esc(e.id)}" style="background:rgba(255,255,255,.08);color:var(--txt)">
+            👥 الحضور والتوثيق ${e.media_count ? `(📸 ${e.media_count})` : ''}
+          </button>
+          ${!isPast ? `
+            <a href="${makeGoogleCalUrl(e)}" target="_blank" rel="noopener" class="ev-btn cal">📅 حفظ بالتقويم</a>
+            <button type="button" class="ev-btn wa" data-ev-wa="${esc(e.id)}">💬 واتساب</button>
+          ` : ''}
+          ${canEdit() ? `
+            <button type="button" class="ev-btn" data-ee="${esc(e.id)}" style="background:transparent;border:1px solid var(--line);color:var(--txt)">✏️ تعديل</button>
+            <button type="button" class="ev-btn" data-ed="${esc(e.id)}" style="background:transparent;border:1px solid var(--line);color:#fca5a5">✕ حذف</button>
+          ` : ''}
+        </div>
+      </div>`;
+  };
+
+  const html = `
+    <div class="evrem-wrap">
+      <div class="evrem-head">
+        <h2>🔔 تذكير ومناسبات الأسرة القادمة</h2>
+        <p class="sub">متابعة مواعيد اجتماعات ومناسبات العائلة مع العد التنازلي وإمكانية الحفظ بالتقويم</p>
+      </div>
+
+      ${countdownHtml}
+
+      <div class="notif-promo">
+        <p>🔔 هل ترغب في تلقي تنبيهات عند اقتراب موعد مناسبات الأسرة؟</p>
+        <button type="button" id="btn-enable-notif" class="ghost">تفعيل التنبيهات</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <h3 style="font-size:1rem;color:var(--gold)">🎉 المناسبات القادمة (${upcoming.length})</h3>
+        ${canEdit() ? '<button type="button" data-ea="1" style="font-size:.78rem;padding:4px 10px">➕ مناسبة جديدة</button>' : ''}
+      </div>
+
+      ${upcoming.length ? upcoming.map(e => renderEvCard(e, false)).join('') : '<p class="sub" style="padding:10px 0;text-align:center">لا توجد مناسبات قادمة مجدولة حالياً.</p>'}
+
+      ${pastEvents.length ? `
+        <details style="margin-top:10px">
+          <summary style="font-size:.9rem;color:var(--mut);cursor:pointer">📜 أرشيف المناسبات السابقة (${pastEvents.length})</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            ${pastEvents.map(e => renderEvCard(e, true)).join('')}
+          </div>
+        </details>
+      ` : ''}
+    </div>`;
+
+  showInfo(html);
+
+  const pb = $('#profile-body');
+  if (!pb) return;
+
+  pb.querySelectorAll('[data-evopen]').forEach(b => {
+    b.onclick = () => {
+      const x = S.events.find(z => String(z.id) === String(b.dataset.evopen));
+      if (x) evDetails(x);
+    };
+  });
+
+  pb.querySelectorAll('[data-ev-wa]').forEach(b => {
+    b.onclick = () => {
+      const x = S.events.find(z => String(z.id) === String(b.dataset.evWa));
+      if (x) shareEventWhatsapp(x);
+    };
+  });
+
+  const notifBtn = $('#btn-enable-notif');
+  if (notifBtn) {
+    notifBtn.onclick = async () => {
+      if (!('Notification' in window)) {
+        toast('المتصفح لا يدعم التنبيهات');
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        toast('تم تفعيل تنبيهات المناسبات بنجاح 🔔');
+        notifBtn.textContent = '✓ مفعلة';
+        notifBtn.disabled = true;
+      } else {
+        toast('لم يتم تفعيل التنبيهات');
+      }
+    };
+  }
 }
 function eventForm(e) {
   const cur = e ? new Date(e.event_date) : new Date(), hj = gregToHijri(cur);
