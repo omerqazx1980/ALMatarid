@@ -154,8 +154,11 @@ function evDetails(e) {
   $('#profile-body').innerHTML = `<h2>${esc(e.title)}</h2><p class="sub">${esc((e.description || '').split('\n')[0].split(' — ')[0])}</p>
     <dl>${row('الميلادي', esc(f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })))}${row('الهجري', esc(f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })))}
     ${row('المكان', esc(e.location_name || '') + (url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">الخريطة</a>` : ''))}</dl>
-    ${e.description ? `<div class="story">${esc(e.description)}</div>` : ''}<div id="evdoc"></div>`;
+    ${e.description ? `<div class="story">${esc(e.description)}</div>` : ''}
+    <div id="ev-rsvp-box"></div>
+    <div id="evdoc"></div>`;
   if (!$('#profile').open) $('#profile').showModal();
+  renderEventRSVP(e, $('#ev-rsvp-box'));
   loadEvDoc(e);
 }
 /* توثيق المناسبة: صور داخل الموقع + روابط فيديو + حكاية — للمالك/المحرر أو صاحب المناسبة برمز توثيقها */
@@ -3430,3 +3433,217 @@ function openLineageCard(targetId = null) {
 }
 
 $('#m-lcard').onclick = menuClose(() => openLineageCard());
+
+/* ---------- 52) دعوات الاجتماعات وتأكيد الحضور (فرع تجربة) ---------- */
+function getEventRsvps(evId) {
+  try {
+    const raw = localStorage.getItem(`almatarid_rsvp_${evId}`);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return [];
+}
+
+function saveEventRsvp(evId, entry) {
+  const list = getEventRsvps(evId);
+  const idx = list.findIndex(x => x.name.trim() === entry.name.trim());
+  if (idx >= 0) list[idx] = entry;
+  else list.push(entry);
+  try {
+    localStorage.setItem(`almatarid_rsvp_${evId}`, JSON.stringify(list));
+  } catch (_) {}
+  return list;
+}
+
+function shareEventInviteWhatsapp(e) {
+  const d = new Date(e.t || e.event_date);
+  const f = (loc, o) => d.toLocaleString(loc, o);
+  const rsvps = getEventRsvps(e.id);
+  const confirmed = rsvps.filter(r => r.status === 'yes');
+  const totalGuests = confirmed.reduce((acc, c) => acc + 1 + (Number(c.guests) || 0), 0);
+
+  const txt = `💌 *دعوة لاجتماع أسرة آل مطارد (بنو عمرو)* 💌\n\n` +
+    `يسرنا دعوتكم لحضور: *${e.title}*\n\n` +
+    `📅 *الموعد:* ${f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })}\n` +
+    `🗓️ *الموافق:* ${f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })}\n` +
+    (e.location_name ? `📍 *المكان:* ${e.location_name}\n` : '') +
+    (e.location_url ? `🗺️ *رابط الموقع:* ${e.location_url}\n` : '') +
+    (e.description ? `📝 *التفاصيل:* ${e.description.split('\n')[0]}\n\n` : '\n') +
+    `👥 *عدد المؤكدين حضورهم حتى الآن:* ${totalGuests} فرد\n\n` +
+    `يرجى تأكيد حضوركم عبر موقع الشجرة:\n` +
+    `🔗 https://omerqazx1980.github.io/ALMatarid/`;
+
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`, '_blank');
+}
+
+function renderEventRSVP(e, container) {
+  if (!container || !e) return;
+  const evId = String(e.id);
+  const rsvps = getEventRsvps(evId);
+
+  const yesList = rsvps.filter(r => r.status === 'yes');
+  const maybeList = rsvps.filter(r => r.status === 'maybe');
+  const noList = rsvps.filter(r => r.status === 'no');
+  const totalExpected = yesList.reduce((acc, c) => acc + 1 + (Number(c.guests) || 0), 0);
+
+  const memOptions = [...S.members].filter(m => !m.name_masked).sort((a,b) => a.full_name.localeCompare(b.full_name, 'ar'));
+
+  container.innerHTML = `
+    <div class="rsvp-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <b style="color:var(--gold);font-size:.92rem">📋 تأكيد الحضور (RSVP)</b>
+        <button type="button" class="btn ghost" id="btn-rsvp-wa-share" style="padding:4px 8px;font-size:.75rem">
+          💬 إرسال بطاقة الدعوة للواتساب
+        </button>
+      </div>
+
+      <div class="rsvp-stats">
+        <span class="rsvp-pill yes">✅ مؤكد (${yesList.length})</span>
+        <span class="rsvp-pill maybe">⏳ ربما (${maybeList.length})</span>
+        <span class="rsvp-pill no">❌ معتذر (${noList.length})</span>
+        <span class="rsvp-pill" style="background:rgba(245,158,11,.15);border:1px solid var(--gold);color:var(--gold)">
+          👥 إجمالي الحضور المتوقع: ${totalExpected}
+        </span>
+      </div>
+
+      <form id="rsvp-form" style="background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px">
+        <div style="font-size:.78rem;color:var(--mut);margin-bottom:6px">سجّل تأكيد حضورك للاجتماع:</div>
+        <div class="rsvp-form-row">
+          <div>
+            <label style="font-size:.75rem;color:var(--mut)">الاسم:</label>
+            <input list="rsvp-mem-list" id="rsvp-name" placeholder="ابحث أو اكتب اسمك" required style="width:100%;font-size:.82rem;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt)">
+            <datalist id="rsvp-mem-list">
+              ${memOptions.map(m => `<option value="${esc(m.full_name)}">`).join('')}
+            </datalist>
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:var(--mut)">حالة الحضور:</label>
+            <select id="rsvp-status" style="width:100%;font-size:.82rem;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt)">
+              <option value="yes">سأحضر بإذن الله ✅</option>
+              <option value="maybe">حضور محتمل ⏳</option>
+              <option value="no">أعتذر لظرف ❌</option>
+            </select>
+          </div>
+        </div>
+        <div class="rsvp-form-row" style="margin-top:6px">
+          <div>
+            <label style="font-size:.75rem;color:var(--mut)">عدد المرافقين (من الأسرة/الأبناء):</label>
+            <input type="number" id="rsvp-guests" min="0" max="20" value="0" style="width:100%;font-size:.82rem;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt)">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:var(--mut)">ملاحظة أو تبريكات:</label>
+            <input type="text" id="rsvp-note" placeholder="مثلاً: سنحضر بعد صلاة المغرب" style="width:100%;font-size:.82rem;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt)">
+          </div>
+        </div>
+        <div style="margin-top:8px;text-align:end">
+          <button type="submit" style="background:var(--gold);color:#1c1204;font-size:.8rem;padding:6px 16px;border-radius:6px;font-weight:700">
+            ✓ حفظ تأكيد الحضور
+          </button>
+        </div>
+      </form>
+
+      <div style="font-size:.8rem;color:var(--gold);font-weight:700;margin-bottom:6px">
+        قائمة المسجلين (${rsvps.length}):
+      </div>
+      <div class="rsvp-list">
+        ${rsvps.length ? rsvps.map(r => `
+          <div class="rsvp-item">
+            <div>
+              <b>${esc(r.name)}</b>
+              ${Number(r.guests) > 0 ? `<span style="font-size:.72rem;color:var(--mut)"> (+${r.guests} مرافقين)</span>` : ''}
+              ${r.note ? `<div style="font-size:.72rem;color:var(--mut)">«${esc(r.note)}»</div>` : ''}
+            </div>
+            <span class="rsvp-pill ${r.status}">
+              ${r.status === 'yes' ? 'حاضر ✅' : (r.status === 'maybe' ? 'محتمل ⏳' : 'معتذر ❌')}
+            </span>
+          </div>
+        `).join('') : '<p class="sub" style="text-align:center;padding:6px 0">كن أول من يؤكد حضوره!</p>'}
+      </div>
+    </div>
+  `;
+
+  const form = container.querySelector('#rsvp-form');
+  if (form) {
+    form.onsubmit = ev => {
+      ev.preventDefault();
+      const name = container.querySelector('#rsvp-name').value.trim();
+      const status = container.querySelector('#rsvp-status').value;
+      const guests = parseInt(container.querySelector('#rsvp-guests').value, 10) || 0;
+      const note = container.querySelector('#rsvp-note').value.trim();
+      if (!name) return;
+
+      saveEventRsvp(evId, { name, status, guests, note, time: Date.now() });
+      toast('تم حفظ تأكيد الحضور بنجاح!');
+      renderEventRSVP(e, container);
+    };
+  }
+
+  const shareBtn = container.querySelector('#btn-rsvp-wa-share');
+  if (shareBtn) {
+    shareBtn.onclick = () => shareEventInviteWhatsapp(e);
+  }
+}
+
+function openInvites(selectedEventId = null) {
+  const events = [...(S.events || [])].sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+  const upcoming = events.filter(e => new Date(e.event_date).getTime() >= Date.now() - 86400000);
+  const activeEvents = upcoming.length ? upcoming : events;
+  if (!activeEvents.length) {
+    showInfo(`
+      <div class="fstats-head">
+        <h2>💌 دعوات الاجتماعات وتأكيد الحضور</h2>
+        <p class="sub">لا توجد اجتماعات أو مناسبات معلنة حالياً في شجرة العائلة.</p>
+      </div>`);
+    return;
+  }
+
+  const curEv = selectedEventId ? (activeEvents.find(e => String(e.id) === String(selectedEventId)) || activeEvents[0]) : activeEvents[0];
+  const d = new Date(curEv.t || curEv.event_date);
+  const f = (loc, o) => d.toLocaleString(loc, o);
+
+  const html = `
+    <div class="lcard-wrap">
+      <div class="fstats-head">
+        <h2>💌 بطاقات الدعوة وتأكيد حضور الاجتماعات</h2>
+        <p class="sub">دعوات اجتماعات ولقاءات الأسرة مع متابعة الحضور والاعتذار ومشاركة الدعوة عبر واتساب</p>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin:6px 0">
+        <label for="invite-sel" style="font-size:.84rem;font-weight:700">اختر الاجتماع:</label>
+        <select id="invite-sel" style="flex:1;padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--txt)">
+          ${activeEvents.map(e => `<option value="${e.id}" ${e.id === curEv.id ? 'selected' : ''}>${esc(e.title)} (${new Date(e.event_date).toLocaleDateString('ar-SA')})</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="invite-card">
+        <div class="invite-head">
+          <div>
+            <div style="font-size:.78rem;color:var(--gold);font-weight:700">دعوة عامة لأبناء وأسر آل مطارد - بنو عمرو</div>
+            <h3 style="font-size:1.15rem;color:#fff;margin:4px 0">${esc(curEv.title)}</h3>
+          </div>
+          <span style="font-size:1.8rem">💌</span>
+        </div>
+
+        <div style="background:rgba(0,0,0,.3);border-radius:8px;padding:10px;font-size:.84rem;line-height:1.7;color:#cbd5e1;margin-bottom:8px">
+          <div>📅 <b>الموعد:</b> ${f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })}</div>
+          <div>🗓️ <b>الموافق:</b> ${f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })}</div>
+          ${curEv.location_name ? `<div>📍 <b>المقر:</b> ${esc(curEv.location_name)}</div>` : ''}
+          ${curEv.location_url ? `<div>🗺️ <b>الخريطة:</b> <a href="${esc(curEv.location_url)}" target="_blank" rel="noopener" style="color:var(--gold)">فتح موقع اللقاء على Google Maps</a></div>` : ''}
+          ${curEv.description ? `<div style="margin-top:6px;border-top:1px dashed rgba(255,255,255,.1);padding-top:6px">${esc(curEv.description).replace(/\n/g, '<br>')}</div>` : ''}
+        </div>
+
+        <div id="invite-rsvp-target"></div>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const sel = $('#invite-sel');
+  if (sel) {
+    sel.onchange = () => openInvites(sel.value);
+  }
+
+  renderEventRSVP(curEv, $('#invite-rsvp-target'));
+}
+
+$('#m-invites').onclick = menuClose(() => openInvites());

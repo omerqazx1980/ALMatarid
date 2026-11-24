@@ -822,3 +822,17 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .lcard-chain b{color:var(--txt)}
 .lcard-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .lcard-btn-wa{flex:1;background:#25d366;color:#fff;border-radius:8px;padding:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+
+/* ---------- 52) دعوات الاجتماعات وتأكيد الحضور RSVP (فرع تجربة) ---------- */
+.invite-card{background:linear-gradient(135deg,#0d1527,#16233b);border:1.5px solid var(--gold);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.invite-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.rsvp-box{background:rgba(15,23,42,.7);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px}
+.rsvp-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.rsvp-pill{padding:3px 10px;border-radius:99px;font-size:.75rem;font-weight:700}
+.rsvp-pill.yes{background:rgba(52,211,153,.15);color:#34d399;border:1px solid #34d399}
+.rsvp-pill.no{background:rgba(248,113,113,.15);color:#f87171;border:1px solid #f87171}
+.rsvp-pill.maybe{background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid #fbbf24}
+.rsvp-list{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;font-size:.8rem;padding:4px 0}
+.rsvp-item{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.03);padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.05)}
+.rsvp-form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+@media(max-width:480px){.rsvp-form-row{grid-template-columns:1fr}}
