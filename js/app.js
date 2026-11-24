@@ -11806,70 +11806,43 @@ function openCareersDirectoryModal() {
     { key: 'edu', label: '🎓 التعليم والأكاديميا' },
     { key: 'biz', label: '💼 التجارة والأعمال' },
     { key: 'gov', label: '🏛️ القطاع العام' },
-    { key: 'mil', label: '🎖️ السلك العسكري' }
+    { key: 'mil', label: '🎖️ السلك العسكري' },
+    { key: 'other', label: '📌 مهن أخرى' }
   ];
 
-  const DEFAULT_CAREERS = [
-    {
-      id: 'car_1',
-      name: 'د. فهد بن محمد المطارد',
-      category: 'med',
-      categoryLabel: '🩺 الطب والصحة',
-      title: 'استشاري جراحة وأستاذ مساعد',
-      workplace: 'مدينة الملك فهد الطبية - الرياض',
-      specialty: 'الجراحة العامة والمناظير',
-      city: 'الرياض',
-      phone: '0501112233'
-    },
-    {
-      id: 'car_2',
-      name: 'م. صالح بن علي المطارد',
-      category: 'eng',
-      categoryLabel: '🏗️ الهندسة والتقنية',
-      title: 'مهندس معماري ومستشار مشاريع',
-      workplace: 'مكتب السراة للاستشارات الهندسية',
-      specialty: 'التصميم التراثي والعمراني المستدام',
-      city: 'النماص',
-      phone: '0502223344'
-    },
-    {
-      id: 'car_3',
-      name: 'المستشار سلطان بن فهد المطارد',
-      category: 'law',
-      categoryLabel: '⚖️ القانون والعدل',
-      title: 'محامٍ ومحكم معتمد',
-      workplace: 'مجموعة المطارد للمحاماة والاستشارات',
-      specialty: 'القضايا التجارية والتركات والأوقاف',
-      city: 'جدة',
-      phone: '0503334455'
-    },
-    {
-      id: 'car_4',
-      name: 'أ.د. سعيد بن محمد المطارد',
-      category: 'edu',
-      categoryLabel: '🎓 التعليم والأكاديميا',
-      title: 'أستاذ التاريخ والوثائق المشارك',
-      workplace: 'جامعة الملك خالد - أبها',
-      specialty: 'تاريخ الجزيرة العربية وجنوب المملكة',
-      city: 'أبها',
-      phone: '0504445566'
-    },
-    {
-      id: 'car_5',
-      name: 'أ. عبدالرحمن بن صالح المطارد',
-      category: 'biz',
-      categoryLabel: '💼 التجارة والأعمال',
-      title: 'رائد أعمال ومدير عام',
-      workplace: 'شركة المطارد للتجارة والمقاولات',
-      specialty: 'التطوير العقاري وسلاسل الإمداد',
-      city: 'الرياض',
-      phone: '0505556677'
-    }
+  // مهن حقيقية من بيانات الشجرة فقط: الأعضاء الموسومة وظيفة (badge_is_job) — بلا أسماء أو أرقام مختلقة
+  const JOB_CATS = [
+    { keys: ['مهندس'], key: 'eng', label: '🏗️ الهندسة والتقنية' },
+    { keys: ['طبيب', 'دكتور', 'استشاري', 'صيدل'], key: 'med', label: '🩺 الطب والصحة' },
+    { keys: ['محام', 'قاض'], key: 'law', label: '⚖️ القانون والعدل' },
+    { keys: ['معلم', 'مشرف تربوي', 'استاذ', 'أستاذ', 'مدرس'], key: 'edu', label: '🎓 التعليم والأكاديميا' },
+    { keys: ['رجل أعمال', 'تاجر'], key: 'biz', label: '💼 التجارة والأعمال' },
+    { keys: ['عقيد', 'عميد', 'لواء', 'عسكري', 'ضابط'], key: 'mil', label: '🎖️ السلك العسكري' }
   ];
+  function jobCatFor(title) {
+    const t = title || '';
+    return JOB_CATS.find(c => c.keys.some(k => t.includes(k))) || { key: 'other', label: '📌 مهن أخرى' };
+  }
+  const memberCareers = S.members
+    .filter(m => m.achievement_badge && m.badge_is_job)
+    .map(m => {
+      const cat = jobCatFor(m.achievement_badge);
+      return {
+        id: 'car_member_' + m.id,
+        name: m.full_name,
+        category: cat.key,
+        categoryLabel: cat.label,
+        title: m.achievement_badge,
+        workplace: '',
+        specialty: m.achievement_badge,
+        city: (typeof livingHidden === 'function' && livingHidden(m)) ? '' : (m.city || ''),
+        phone: (typeof canEdit === 'function' && canEdit() && m.phone) ? m.phone : ''
+      };
+    });
 
   // Retrieve user registered careers
   const localCareers = JSON.parse(localStorage.getItem('almatarid_careers') || '[]');
-  const allCareers = [...localCareers, ...DEFAULT_CAREERS];
+  const allCareers = [...localCareers, ...memberCareers];
 
   let activeCat = 'all';
   let searchQuery = '';
@@ -12002,7 +11975,7 @@ function openCareersDirectoryModal() {
         const specialty = prompt('التخصص الدقيق أو مجال العمل:') || 'عام';
         const city = prompt('المدينة (الرياض، النماص، جدة، أبها...):') || 'الرياض';
         const phone = prompt('رقم الجوال للتواصل المهني (اختياري):') || '';
-        const catKey = prompt('رمز التصنيف: (med=طب، eng=هندسة، law=قانون، edu=تعليم، biz=تجارة، gov=حكومي، mil=عسكري):') || 'biz';
+        const catKey = prompt('رمز التصنيف: (med=طب، eng=هندسة، law=قانون، edu=تعليم، biz=تجارة، gov=حكومي، mil=عسكري، other=أخرى):') || 'biz';
 
         const catLabels = {
           med: '🩺 الطب والصحة',
@@ -12011,7 +11984,8 @@ function openCareersDirectoryModal() {
           edu: '🎓 التعليم والأكاديميا',
           biz: '💼 التجارة والأعمال',
           gov: '🏛️ القطاع العام',
-          mil: '🎖️ السلك العسكري'
+          mil: '🎖️ السلك العسكري',
+          other: '📌 مهن أخرى'
         };
 
         const newCar = {
