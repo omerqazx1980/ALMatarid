@@ -1023,3 +1023,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .branch-chip.active{background:rgba(245,158,11,.15);border-color:var(--gold);color:var(--gold);font-weight:700}
 .branch-chip.hidden-branch{opacity:.45;background:transparent;text-decoration:line-through;color:var(--mut)}
 .branch-vis-btn{background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:12px;padding:2px 8px;font-size:.72rem;cursor:pointer}
+
+/* ---------- 72) إعادة الترتيب بالسحب والإفلات (فرع تجربة) ---------- */
+.dnd-list{display:flex;flex-direction:column;gap:8px;margin:14px 0;max-height:420px;overflow-y:auto}
+.dnd-item{display:flex;align-items:center;gap:10px;background:rgba(15,23,42,.9);border:1.5px solid var(--line);border-radius:8px;padding:8px 12px;cursor:grab;transition:all .15s ease;user-select:none}
+.dnd-item.dragging{opacity:.4;border-style:dashed;border-color:var(--gold)}
+.dnd-item:hover{border-color:var(--gold);background:rgba(30,41,59,.9)}
+.dnd-handle{cursor:grab;color:var(--gold);font-size:1.2rem;line-height:1}
+.dnd-rank{background:rgba(245,158,11,.2);color:var(--gold);border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700}
+.dnd-ctrls{display:flex;gap:4px;margin-right:auto}
+.dnd-btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.78rem}
+.dnd-btn:hover{border-color:var(--gold);color:var(--gold)}

@@ -555,6 +555,7 @@ function profile(id) {
   const livingNotice = isVisitor && isLiving ? `<div style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:.76rem;color:var(--gold);display:flex;justify-content:space-between;align-items:center"><span>🔒 بيانات الأحياء الشخصية محمية وتظهر للأقارب المسجلين فقط.</span><button type="button" class="x" onclick="$('#profile').close();$('#btn-login').click();" style="color:var(--gold);font-weight:700">دخول الأقارب ←</button></div>` : '';
   const isMe = localStorage.getItem('almatarid_me_id') === id;
   const meBtn = isMe ? '<button type="button" class="ghost" data-act="unset-me" style="color:#10b981;font-weight:700">⭐ مسجل كـ «أنا» (إلغاء)</button>' : '<button type="button" class="ghost" data-act="set-me">👤 هذا أنا</button>';
+  const reorderBtn = canMember(m) && (S.kids.get(m.id) || []).length > 1 ? '<button type="button" class="ghost" data-act="reorder" title="ترتيب أبناء هذا الفرد بالسحب">↕️ ترتيب الأبناء</button>' : '';
   $('#profile-body').innerHTML = `${livingNotice}${!lh && S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
     <p class="sub">${!lh && m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · ' + ripText(m) : ''}</p>
     ${m.achievement_badge ? (m.badge_is_job ? `<p class="sub">الوظيفة: ${esc(m.achievement_badge)}</p>` : `<p><span class="bd">${esc(m.achievement_badge)}</span></p>`) : ''}
@@ -565,7 +566,7 @@ function profile(id) {
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -825,6 +826,7 @@ $('#profile-body').addEventListener('click', e => {
      lcard: () => { openLineageCard(m.id); },
      descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
      ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); },
+     reorder: () => { $('#profile').close(); openSiblingReorderModal(m.id); },
      'set-me': () => { localStorage.setItem('almatarid_me_id', m.id); profile(m.id); toast(`📍 تم تحديدك كـ «${m.full_name}»!`); },
      'unset-me': () => { localStorage.removeItem('almatarid_me_id'); profile(m.id); toast('تم إلغاء التعيين.'); } })[b.dataset.act]?.();
 });
@@ -7666,5 +7668,212 @@ if (branchVisAll) branchVisAll.onclick = showAllBranches;
 
 const mBranchTrees = $('#m-branch-trees');
 if (mBranchTrees) mBranchTrees.onclick = menuClose(() => openBranchTreesModal());
+
+/* ============================================================
+   72) إعادة ترتيب عرض الشجرة بالسحب والإفلات (للمصرح لهم فقط)
+   ============================================================ */
+function openSiblingReorderModal(selectedParentId) {
+  if (!canEdit() && S.role !== 'branch') {
+    return alert('هذه الميزة متاحة للمالك والمحرر ومسؤول الفرع فقط.');
+  }
+
+  // Find eligible parents who have 2+ children
+  const eligibleParents = S.members.filter(m => {
+    const ks = S.kids.get(m.id) || [];
+    if (ks.length < 2) return false;
+    if (S.role === 'branch') return inBranch(m);
+    return true;
+  }).sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
+
+  if (!eligibleParents.length) {
+    return toast('لا توجد عوائل تضم أكثر من ابن واحد لإعادة ترتيبها.');
+  }
+
+  const parentId = selectedParentId && eligibleParents.some(p => p.id === selectedParentId)
+    ? selectedParentId
+    : eligibleParents[0].id;
+
+  const parent = S.byId.get(parentId);
+  const siblings = [...(S.kids.get(parentId) || [])].sort((a, b) => (a.birth_order || 99) - (b.birth_order || 99));
+
+  const html = `
+    <div style="max-width:540px">
+      <div class="fstats-head">
+        <h2>↕️ إعادة ترتيب الأبناء بالسحب والإفلات</h2>
+        <p class="sub">رتّب أبناء الأسرة بالسحب أو الأسهم لحفظ ترتيب الظهور الأفقي على الشجرة</p>
+      </div>
+
+      <div style="margin:12px 0">
+        <label style="font-size:.82rem;font-weight:700;color:var(--gold);display:block;margin-bottom:6px">اختر الأسرة (الوالد):</label>
+        <select id="reorder-parent-sel" style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.88rem">
+          ${eligibleParents.map(p => `
+            <option value="${p.id}" ${p.id === parentId ? 'selected' : ''}>
+              ${esc(p.full_name)} (${(S.kids.get(p.id) || []).length} أبناء)
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div style="font-size:.78rem;color:var(--mut);margin-bottom:6px">
+        💡 اسحب العنصر للأعلى/الأسفل لتغيير موقعه، أو استخدم أسهم الترتيب السريع (⬆️ ⬇️):
+      </div>
+
+      <div id="dnd-list-box" class="dnd-list">
+        ${siblings.map((child, idx) => `
+          <div class="dnd-item" draggable="true" data-mid="${child.id}" data-idx="${idx}">
+            <span class="dnd-handle" title="اسحب للترتيب">⠿</span>
+            <span class="dnd-rank">#${idx + 1}</span>
+            <div style="flex:1;min-width:0">
+              <b style="display:block;font-size:.9rem;color:#f8fafc">${esc(cardName(child))}</b>
+              <div style="font-size:.73rem;color:var(--mut)">
+                ${child.gender === 'female' ? '👧 أنثى' : '👦 ذكر'}
+                ${child.birth_year_text ? ` · مواليد ${esc(child.birth_year_text)}` : ''}
+              </div>
+            </div>
+            <div class="dnd-ctrls">
+              <button type="button" class="dnd-btn" data-mv-up="${idx}" title="تقديم" ${idx === 0 ? 'disabled style="opacity:.3"' : ''}>⬆️</button>
+              <button type="button" class="dnd-btn" data-mv-dn="${idx}" title="تأخير" ${idx === siblings.length - 1 ? 'disabled style="opacity:.3"' : ''}>⬇️</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px">
+        <button type="button" id="dnd-save-order" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:8px 18px;font-size:.88rem">
+          💾 حفظ الترتيب الجديد للشجرة
+        </button>
+        <button type="button" onclick="$('#profile').close();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          إلغاء
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const sel = $('#reorder-parent-sel');
+  if (sel) {
+    sel.onchange = () => openSiblingReorderModal(sel.value);
+  }
+
+  let currentSiblings = [...siblings];
+
+  function refreshDndView() {
+    const box = $('#dnd-list-box');
+    if (!box) return;
+    box.innerHTML = currentSiblings.map((child, idx) => `
+      <div class="dnd-item" draggable="true" data-mid="${child.id}" data-idx="${idx}">
+        <span class="dnd-handle" title="اسحب للترتيب">⠿</span>
+        <span class="dnd-rank">#${idx + 1}</span>
+        <div style="flex:1;min-width:0">
+          <b style="display:block;font-size:.9rem;color:#f8fafc">${esc(cardName(child))}</b>
+          <div style="font-size:.73rem;color:var(--mut)">
+            ${child.gender === 'female' ? '👧 أنثى' : '👦 ذكر'}
+            ${child.birth_year_text ? ` · مواليد ${esc(child.birth_year_text)}` : ''}
+          </div>
+        </div>
+        <div class="dnd-ctrls">
+          <button type="button" class="dnd-btn" data-mv-up="${idx}" title="تقديم" ${idx === 0 ? 'disabled style="opacity:.3"' : ''}>⬆️</button>
+          <button type="button" class="dnd-btn" data-mv-dn="${idx}" title="تأخير" ${idx === currentSiblings.length - 1 ? 'disabled style="opacity:.3"' : ''}>⬇️</button>
+        </div>
+      </div>
+    `).join('');
+    setupDragEvents();
+  }
+
+  function setupDragEvents() {
+    const items = document.querySelectorAll('.dnd-item');
+    let dragSrcIndex = null;
+
+    items.forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        dragSrcIndex = parseInt(item.dataset.idx, 10);
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const dropIndex = parseInt(item.dataset.idx, 10);
+        if (dragSrcIndex !== null && dropIndex !== null && dragSrcIndex !== dropIndex) {
+          const moved = currentSiblings.splice(dragSrcIndex, 1)[0];
+          currentSiblings.splice(dropIndex, 0, moved);
+          refreshDndView();
+        }
+      });
+
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+      });
+    });
+
+    document.querySelectorAll('[data-mv-up]').forEach(btn => {
+      btn.onclick = () => {
+        const i = parseInt(btn.dataset.mvUp, 10);
+        if (i > 0) {
+          const temp = currentSiblings[i];
+          currentSiblings[i] = currentSiblings[i - 1];
+          currentSiblings[i - 1] = temp;
+          refreshDndView();
+        }
+      };
+    });
+
+    document.querySelectorAll('[data-mv-dn]').forEach(btn => {
+      btn.onclick = () => {
+        const i = parseInt(btn.dataset.mvDn, 10);
+        if (i < currentSiblings.length - 1) {
+          const temp = currentSiblings[i];
+          currentSiblings[i] = currentSiblings[i + 1];
+          currentSiblings[i + 1] = temp;
+          refreshDndView();
+        }
+      };
+    });
+  }
+
+  setupDragEvents();
+
+  const saveBtn = $('#dnd-save-order');
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      currentSiblings.forEach((child, idx) => {
+        child.birth_order = idx + 1;
+        const mem = S.byId.get(child.id);
+        if (mem) mem.birth_order = idx + 1;
+      });
+
+      index();
+      render(true);
+
+      $('#profile').close();
+      toast(`✅ تم حفظ ترتيب أبناء «${parent.full_name}» وتحديث الشجرة بنجاح!`);
+
+      if (!CFG.DEMO && canEdit()) {
+        try {
+          for (const child of currentSiblings) {
+            await rpc('secure_save_member', {
+              p_passcode: S.code,
+              p_id: child.id,
+              p_birth_order: child.birth_order
+            });
+          }
+        } catch (e) {
+          console.warn('Server sync error:', e);
+        }
+      }
+    };
+  }
+}
+
+const mReorderTree = $('#m-reorder-tree');
+if (mReorderTree) {
+  mReorderTree.onclick = menuClose(() => openSiblingReorderModal());
+}
 
 setTimeout(updateBranchVisibilityBar, 300);
