@@ -428,11 +428,11 @@ $('#v-graph').onclick = () => { S.view = 'graph'; render(true); };
 $('#v-list').onclick = () => { S.view = 'list'; render(); };
 const norm = s => String(s ?? '').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
 $('#q').addEventListener('input', e => {
-  const q = norm(e.target.value);
+  const q = stripKin(norm(e.target.value));
   S.curId = null;
   if (!q) { if (S.saved) S.open = S.saved; S.saved = S.hit = null; return render(true); }
   if (!S.saved) S.saved = new Set(S.open);
-  S.hit = new Set(S.members.filter(m => !m.name_masked && (norm(m.full_name).includes(q) || norm(m.nickname).includes(q))).map(m => m.id));
+  S.hit = new Set(S.members.filter(m => !m.name_masked && (stripKin(norm(m.full_name)).includes(q) || stripKin(norm(m.nickname)).includes(q))).map(m => m.id));
   S.open = new Set();  // تُفتح آباء النتائج فقط، وتبقى أزرار الطي والفتح تعمل
   for (const id of S.hit) for (let a = S.byId.get(S.byId.get(id)?.father_id), i = 0; a && i < 30; a = S.byId.get(a.father_id), i++) S.open.add(a.id);
   render('hit');
@@ -587,13 +587,15 @@ async function refresh() {
 }
 /* بحث داخل قوائم الأسماء (ann97): تطبيع عربي (أ/إ/آ، ة/ه، ى/ي، التشكيل) + عدم فقدان الاختيار الحالي عند التصفية + منع إرسال النموذج بالإنتر */
 const normAr = s => String(s ?? '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[\u064B-\u0652\u0670ـ]/g, '');
+// تجريد كلمات النسب (بنت/ابن/بن/ابنة) من النص المطبَّع قبل مقارنة الأسماء — البحث لا يشترطها (قاعدة عمر 2026-11-24)؛ بحدود كلمات عربية صحيحة، لأن \b الإنجليزي لا يعمل مع العربية إطلاقاً.
+const stripKin = s => String(s ?? '').replace(/(^|\s)(بنت|ابنه|ابن|بن)(?=\s|$)/g, '$1').replace(/\s+/g, ' ').trim();
 function bindSelectSearch(sel, inp) {
   const all = [...sel.options].map(o => [o.value, o.textContent]);
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
   inp.addEventListener('input', () => {
-    const q = normAr(inp.value).trim();
+    const q = stripKin(normAr(inp.value));
     const cur = sel.value;
-    const vis = all.filter(([v, t], i) => (i === 0 && v === '') || normAr(t).includes(q));
+    const vis = all.filter(([v, t], i) => (i === 0 && v === '') || stripKin(normAr(t)).includes(q));
     if (cur && !vis.some(([v]) => v === cur)) { const co = all.find(([v]) => v === cur); if (co) vis.splice(1, 0, co); }
     sel.innerHTML = vis.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
     sel.value = cur;
@@ -1260,7 +1262,7 @@ const byName = (a, b) => a.full_name.localeCompare(b.full_name, 'ar');
 const menuClose = fn => () => { $('.more').open = false; fn(); };
 
 function namesList(q = '') {
-  const n = norm(q), L = S.members.filter(m => !n || norm(m.full_name).includes(n) || norm(m.nickname).includes(n)).sort(byName);
+  const n = stripKin(norm(q)), L = S.members.filter(m => !n || stripKin(norm(m.full_name)).includes(n) || stripKin(norm(m.nickname)).includes(n)).sort(byName);
   if (!$('#nsrch')) showInfo(`<h2>جميع الأسماء</h2><input id="nsrch" type="search" placeholder="ابحث في الأسماء" autocomplete="off"><p class="sub" id="ncount"></p><div id="nlist"></div>`);
   $('#ncount').textContent = `${L.length} من ${S.members.length}`;
   $('#nlist').innerHTML = L.slice(0, 300).map(nameBtn).join('') + (L.length > 300 ? '<p class="sub">اكتب في البحث لتضييق النتائج…</p>' : '');
@@ -1513,8 +1515,8 @@ function openCityMap(selectedCity = null, viewMode = 'map') {
   const searchInput = $('#city-filter-q');
   if (searchInput) {
     searchInput.addEventListener('input', () => {
-      const q = norm(searchInput.value.trim());
-      const filtered = activeList.filter(m => !q || norm(m.full_name).includes(q) || norm(m.nickname || '').includes(q));
+      const q = stripKin(norm(searchInput.value.trim()));
+      const filtered = activeList.filter(m => !q || stripKin(norm(m.full_name)).includes(q) || stripKin(norm(m.nickname || '')).includes(q));
       const box = $('#city-members-container');
       if (box) {
         box.innerHTML = filtered.length ? filtered.sort(byName).map(nameBtn).join('') : '<p class="sub" style="padding:10px 0;text-align:center">لا توجد أسماء مطابقة للبحث في هذه المدينة.</p>';
@@ -1856,13 +1858,13 @@ function openAiKinAssistant() {
   function answerQuestion(query) {
     const qRaw = query.trim();
     if (!qRaw) return;
-    const qNorm = norm(qRaw);
+    const qNorm = stripKin(norm(qRaw));
 
     const matched = [];
     for (const m of S.members) {
       if (m.name_masked) continue;
-      const fnNorm = norm(m.full_name);
-      const nickNorm = m.nickname ? norm(m.nickname) : '';
+      const fnNorm = stripKin(norm(m.full_name));
+      const nickNorm = m.nickname ? stripKin(norm(m.nickname)) : '';
       if (qNorm.includes(fnNorm)) {
         matched.push(m);
       } else if (nickNorm && qNorm.includes(nickNorm)) {
@@ -1908,7 +1910,7 @@ function openAiKinAssistant() {
 
     // 4. السؤال عن مدينة معينة (مثل النماص، بيشة، الرياض...)
     for (const c of CITIES) {
-      if (qNorm.includes(norm(c))) {
+      if (qNorm.includes(stripKin(norm(c)))) {
         const inCity = S.members.filter(m => (m.city || '').trim() === c);
         const reply = `📍 <b>أفراد الأسرة المتواجدون في ${esc(c)} (${inCity.length} فرد):</b>`;
         return appendMsg(reply, false, inCity.slice(0, 30).map(nameBtn).join('') + (inCity.length > 30 ? '<br><small class="sub">...تم عرض أول 30 اسماً</small>' : ''));
@@ -4086,8 +4088,8 @@ function initVoiceSearch() {
           qInp.value = cleaned;
           qInp.dispatchEvent(new Event('input', { bubbles: true }));
           toast(`تم التعرف الصوتي: "${cleaned}" 🔍`);
-          const norm = normAr(cleaned);
-          const found = S.members.find(m => normAr(m.full_name).includes(norm) || normAr(m.first).includes(norm));
+          const norm = stripKin(normAr(cleaned));
+          const found = S.members.find(m => stripKin(normAr(m.full_name)).includes(norm) || stripKin(normAr(m.first)).includes(norm));
           if (found) {
             focusMember(found.id);
           }
@@ -5411,18 +5413,18 @@ function openWomenPortal() {
       return;
     }
 
-    // Match verification answer (supports with or without 'بنت' / 'بن'):
-    const cleanAns = normAr(ans).replace(/\b(بنت|ابنة|بن)\b/g, '').replace(/\s+/g, ' ').trim();
+    // Match verification answer (supports with or without 'بنت' / 'ابن' / 'بن'):
+    const cleanAns = stripKin(normAr(ans));
     let matched = false;
     if (qtype === 'branch') {
       matched = roots.some(r => {
-        const cleanR = normAr(r.full_name).replace(/\b(بن|آل)\b/g, '').replace(/\s+/g, ' ');
-        return cleanR.includes(cleanAns) || cleanAns.includes(normAr(r.first || ''));
+        const cleanR = stripKin(normAr(r.full_name));
+        return cleanR.includes(cleanAns) || cleanAns.includes(stripKin(normAr(r.first || '')));
       });
       if (!matched && (cleanAns.includes('مطارد') || cleanAns.includes('عمرو'))) matched = true;
     } else {
       matched = S.wives.some(w => {
-        const cleanW = normAr(w.full_name).replace(/\b(بنت|ابنة|بن)\b/g, '').replace(/\s+/g, ' ');
+        const cleanW = stripKin(normAr(w.full_name));
         return cleanW.includes(cleanAns) || (cleanW.length >= 3 && cleanAns.includes(cleanW.slice(0, 4)));
       });
     }
