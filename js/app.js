@@ -5362,3 +5362,132 @@ function openWomenPortal() {
 }
 
 $('#m-women-portal').onclick = menuClose(() => openWomenPortal());
+
+/* ---------- 62) نسخ احتياطي تلقائي يومي مع إشعار (فرع تجربة) ---------- */
+const MAX_AUTO_BACKUPS = 20;
+
+function getAutoBackups() {
+  try {
+    const raw = localStorage.getItem('almatarid_backups_list');
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return [];
+}
+
+function saveAutoBackup(isManual = false) {
+  if (!S.members || !S.members.length) return null;
+  const list = getAutoBackups();
+  const backup = {
+    id: 'bk_' + Date.now(),
+    date: new Date().toISOString(),
+    is_manual: isManual,
+    stats: {
+      members: S.members.length,
+      wives: (S.wives || []).length,
+      events: (S.events || []).length,
+      roots: (S.roots || []).length
+    },
+    data: {
+      members: S.members,
+      wives: S.wives || [],
+      events: S.events || [],
+      branches: S.branches || []
+    }
+  };
+
+  list.unshift(backup);
+  if (list.length > MAX_AUTO_BACKUPS) {
+    list.length = MAX_AUTO_BACKUPS;
+  }
+
+  try {
+    localStorage.setItem('almatarid_backups_list', JSON.stringify(list));
+    localStorage.setItem('almatarid_last_auto_backup', String(Date.now()));
+  } catch (err) {
+    console.warn('Backup save error:', err);
+  }
+  return backup;
+}
+
+function checkDailyAutoBackup() {
+  const last = parseInt(localStorage.getItem('almatarid_last_auto_backup') || '0', 10);
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  if (now - last >= oneDay) {
+    const bk = saveAutoBackup(false);
+    if (bk && canEdit()) {
+      toast(`💾 تم إنشاء نسخة احتياطية يومية تلقائية (${bk.stats.members} فرد)`);
+    }
+  }
+}
+
+function openBackupsManager() {
+  const list = getAutoBackups();
+
+  const html = `
+    <div class="backup-wrap">
+      <div class="fstats-head">
+        <h2>💾 سجل النسخ الاحتياطية التلقائية</h2>
+        <p class="sub">نسخ احتياطي تلقائي دوري كل 24 ساعة مع الاحتفاظ بآخر 20 نسخة احتياطية للبيانات</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0">
+        <span style="font-size:.82rem;color:var(--gold);font-weight:700">النسخ المحفوظة (${list.length} / ${MAX_AUTO_BACKUPS}):</span>
+        <button type="button" class="btn" id="btn-create-manual-bk" style="font-size:.78rem;padding:6px 12px;background:var(--gold);color:#1c1204;font-weight:700">
+          ➕ إنشاء نسخة فورية الآن
+        </button>
+      </div>
+
+      <div class="backup-list" id="backup-list-box">
+        ${list.length ? list.map((bk, i) => `
+          <div class="backup-item">
+            <div>
+              <div style="font-weight:700;color:#fff;font-size:.9rem">
+                #${i + 1} · نسخة ${bk.is_manual ? 'يدوية' : 'تلقائية يومية'}
+              </div>
+              <div class="backup-meta">
+                📅 ${new Date(bk.date).toLocaleString('ar-SA')} · 👥 ${bk.stats.members} فرد · 💍 ${bk.stats.wives} زوجات · 🎉 ${bk.stats.events} مناسبات
+              </div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button type="button" class="btn ghost" data-dl-bk="${bk.id}" style="padding:4px 8px;font-size:.75rem">
+                📥 تحميل JSON
+              </button>
+            </div>
+          </div>
+        `).join('') : '<p class="sub" style="text-align:center;padding:20px">لا توجد نسخ احتياطية مسجلة بعد — اضغط الزر أعلاه لإنشاء أول نسخة.</p>'}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const createBtn = $('#btn-create-manual-bk');
+  if (createBtn) {
+    createBtn.onclick = () => {
+      const bk = saveAutoBackup(true);
+      if (bk) {
+        toast('تم حفظ نسخة احتياطية فورية بنجاح!');
+        openBackupsManager();
+      }
+    };
+  }
+
+  document.querySelectorAll('[data-dl-bk]').forEach(btn => {
+    btn.onclick = () => {
+      const bk = list.find(x => x.id === btn.dataset.dlBk);
+      if (!bk) return;
+      const blob = new Blob([JSON.stringify(bk.data, null, 2)], { type: 'application/json' });
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `almatarid-backup-${bk.date.slice(0, 10)}.json`
+      });
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+  });
+}
+
+$('#m-backups').onclick = menuClose(() => openBackupsManager());
+setTimeout(checkDailyAutoBackup, 2500);

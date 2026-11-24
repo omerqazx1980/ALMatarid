@@ -951,3 +951,10 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .women-card:hover{border-color:#f472b6}
 .women-card-name{font-size:1.05rem;font-weight:800;color:#fbcfe8}
 .women-pill{background:rgba(236,72,153,.15);border:1px solid #ec4899;color:#f472b6;border-radius:99px;padding:2px 8px;font-size:.72rem;font-weight:700}
+
+/* ---------- 62) النسخ الاحتياطي التلقائي واستعادة البيانات (فرع تجربة) ---------- */
+.backup-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.backup-list{display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto}
+.backup-item{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.backup-item:hover{border-color:var(--gold)}
+.backup-meta{font-size:.78rem;color:var(--mut)}
