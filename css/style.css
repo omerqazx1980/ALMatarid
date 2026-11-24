@@ -1200,6 +1200,13 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .mstory-card:hover { border-color: var(--gold); }
 .mstory-badge { background: rgba(245,158,11,.15); color: var(--gold); border: 1px solid var(--gold); border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700; }
 
+/* ---------- 95) قواعد العائلة وتراجم أعلامها ---------- */
+.frules-wrap { display: flex; flex-direction: column; gap: 14px; }
+.frules-rule-box { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.frules-rule-box:hover { border-color: var(--gold); }
+.frules-bio-card { background: linear-gradient(135deg, rgba(245,158,11,.08) 0%, rgba(15,23,42,.9) 100%); border: 1.5px solid var(--gold); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+
 
 
 

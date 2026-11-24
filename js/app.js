@@ -1918,6 +1918,7 @@ $('#m-honor').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) if (m.achievement_badge && !m.badge_is_job) (g.get(m.achievement_badge) || g.set(m.achievement_badge, []).get(m.achievement_badge)).push(m);
   showInfo(`<h2>🏅 لوحة الشرف</h2>${[...g].map(([b, L]) => `<h3>${esc(b)} (${L.length})</h3>${L.sort(byName).map(nameBtn).join('')}`).join('') || '<p class="sub">لا توجد شارات بعد. تُضاف الشارة من نموذج تعديل الفرد.</p>'}`);
 });
+$('#m-rules-biographies').onclick = menuClose(() => openRulesAndBiographiesModal());
 
 /* مستكشف القرابة: عبر خط الآباء فقط */
 const KIN = { '0,1': ['أب', 'أب'], '0,2': ['جد', 'جد'], '0,3': ['جد الأب', 'جد الأب'], '1,0': ['ابن', 'بنت'], '2,0': ['حفيد', 'حفيدة'], '3,0': ['ابن حفيد', 'بنت حفيد'],
@@ -12955,6 +12956,251 @@ function openMemberStoriesModal(filterMemberId = null) {
 
   renderModal();
 }
+
+/* ---------- 95) قواعد العائلة وتراجم أعلامها (فرع تجربة) ---------- */
+function openRulesAndBiographiesModal(initialTab = 'rules') {
+  const FAMILY_RULES = [
+    {
+      num: 1,
+      title: 'صلة الرحم والتراحم والمسؤولية المشتركة',
+      text: 'المحافظة التامة على صلة الرحم والتواصل المستمر بين عموم أفراد الأسرة في كافة المناطق، وتوقير كبير العائلة والعطف على صغيرها، والحرص على عيادة المرضى ومواساة المصابين ومشاركة الجميع في المسرات.'
+    },
+    {
+      num: 2,
+      title: 'تنظيم الاجتماعات السنوية والدورية',
+      text: 'يُعقد اجتماع الأسرة السنوي دورياً في عيدي الفطر والأضحى وخلال موسم الصيف في موطن الأسرة بالسراة (النماص) أو العاصمة الرياض، ويهدف لتجديد أواصر القربى والتعارف وتكريم الأجيال الشابة المتميزة.'
+    },
+    {
+      num: 3,
+      title: 'صندوق التكافل العائلي والأوقاف',
+      text: 'يُدار صندوق العائلة بإشراف لجنة مالية أمينة بهدف سد عوز المحتاجين من الأقارب، ودعم الشباب المقبلين على الزواج، وصيانة وإحياء أوقاف الأسرة ومصالحها الخيرية وفق الضوابط الشرعية.'
+    },
+    {
+      num: 4,
+      title: 'فض النزاعات وإصلاح ذات البين',
+      text: 'في حال نشوء أي خلاف مالي أو شخصي، يُرجع فيه إلى مجلس حكماء وأعيان العائلة للفصل فيه بالحكمة والعدل والتراضي، درءاً للقطيعة وحفظاً لهيبة الأسرة وتلاحمها.'
+    },
+    {
+      num: 5,
+      title: 'حفظ وتوثيق النسب والمشجرات التاريخية',
+      text: 'تعتبر شجرة العائلة وسجلاتها وثيقة جامعة معتمدة، ويُمنع أي تعديل أو إضافة دون الرجوع لمسؤول الفرع أو المالك وتوثيق البيانات بالأدلة الشرعية والشهادات المعتمدة.'
+    }
+  ];
+
+  const DEFAULT_BIOGRAPHIES = [
+    {
+      id: 'bio_1',
+      name: 'الجد المؤسس: مطارد بن عمرو بن حجر',
+      title: 'الجد الجامع والرمز التاريخي للأسرة',
+      era: 'القرن الحادي عشر الهجري',
+      location: 'النماص ووادي السراة - بلاد بني عمرو',
+      achievements: 'من أعيان ورجالات السراة المعدودين، عُرف بالحكمة ورجاحة الرأي وحماية الحِمى، وإليه يرجع نسب الأسرة وتفرع بطونها المباركة.',
+      descendants: 'ذريته تمتد اليوم في فروع العائلة بالسراة والرياض ومكة وجدة وعسير.',
+      legacy: 'غرس قيم الشهامة وعمارة الأرض وأوقاف المياه التي بقيت معالمها شاهدة على أصالة البدايات.'
+    },
+    {
+      id: 'bio_2',
+      name: 'الشيخ القاضي: مسفر بن صالح المطارد',
+      title: 'عالم الشرع وقاضي الناحية بالسراة',
+      era: 'أواخر القرن الثالث عشر الهجري (نحو 1290-1348هـ)',
+      location: 'السراة والحجاز',
+      achievements: 'تلقى العلم في حلقات المسجد الحرام والمشايخ بالسراة، عُرف بالقضاء والعدل وإصلاح ذات البين وتوثيق الصكوك والأوقاف، وكان مرجعاً للقبائل في النوازل.',
+      descendants: 'خلّف ذرية حملت العلم والوجاهة ومسؤولية إدارة شؤون الأسرة.',
+      legacy: 'مخطوطاته وأحكامه الشرعية محفوظة في أرشيف وثائق العائلة.'
+    },
+    {
+      id: 'bio_3',
+      name: 'الوجيه: علي بن مسفر المطارد',
+      title: 'رائد اللقاءات وكبير أعيان الفرع',
+      era: 'منتصف القرن الرابع عشر الهجري (1320-1395هـ)',
+      location: 'النماص والرياض',
+      achievements: 'قاد أولى رحلات انتقال وتأسيس مجالس العائلة في العاصمة، وأسهم في دعم أبناء العمومة القادمين للدراسة والعمل، وكان بيته مأوى ومضافة للجميع.',
+      descendants: 'أبناؤه وأحفاده من كبار رجالات الأعمال والأكاديميين بالأسرة.',
+      legacy: 'رسّخ صندوق العائلة التعاوني وعزز حضور الأسرة في المحافل الاجتماعية والوطنية.'
+    }
+  ];
+
+  const localBios = JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]');
+  const allBios = [...localBios, ...DEFAULT_BIOGRAPHIES];
+
+  let currentTab = initialTab; // 'rules', 'bios'
+
+  function renderModal() {
+    const html = `
+      <div class="frules-wrap" style="max-width:800px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>⚖️</span> قواعد وميثاق العائلة وتراجم أعلامها
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          الدستور واللوائح الأخلاقية المنظمة لمجالس وشؤون أسرة آل مطارد، مع سجل وثائقي شامل لتراجم سير أعلام ورجالات الأسرة الذين بنوا مجدها وخلدوا أثرها.
+        </p>
+
+        <!-- Navigation Tabs -->
+        <div class="transcribe-tabs">
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'rules' ? 'active' : ''}" id="tab-btn-rules">
+            📜 ميثاق وقواعد العائلة الداخلية (5 بنود)
+          </button>
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'bios' ? 'active' : ''}" id="tab-btn-bios">
+            🏅 تراجم أعلام ورجالات آل مطارد (${allBios.length} أعلام)
+          </button>
+        </div>
+
+        <!-- Tab Content -->
+        <div style="max-height:480px;overflow-y:auto;padding-left:4px">
+          ${currentTab === 'rules' ? `
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
+                <b style="color:var(--gold);font-size:.95rem">«ميثاق الشرف والتكاتف الأسري لآل مطارد»</b>
+                <div style="font-size:.78rem;color:var(--txt);margin-top:4px">وثيقة عهد ومروءة أجمع عليها أعيان وشباب العائلة لتعزيز اللحمة وصلة الرحم.</div>
+              </div>
+
+              ${FAMILY_RULES.map(r => `
+                <div class="frules-rule-box">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="background:var(--gold);color:#0f172a;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.78rem">
+                      ${r.num}
+                    </span>
+                    <h3 style="margin:0;color:var(--gold);font-size:.92rem">${esc(r.title)}</h3>
+                  </div>
+                  <p style="margin:0;font-size:.84rem;color:var(--txt);line-height:1.65;padding-right:32px">
+                    ${esc(r.text)}
+                  </p>
+                </div>
+              `).join('')}
+            </div>
+          ` : `
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+                <span style="font-size:.78rem;color:var(--mut)">سير كبار الأجداد وأعيان الأسرة عبر الأجيال</span>
+                <button type="button" class="fstats-btn" id="btn-add-bio" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:4px 10px">
+                  ➕ إضافة ترجمة عَلَم
+                </button>
+              </div>
+
+              ${allBios.map(b => `
+                <div class="frules-bio-card">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                    <div>
+                      <h3 style="margin:0 0 2px 0;color:var(--gold);font-size:1.05rem;display:flex;align-items:center;gap:6px">
+                        <span>🏅</span> ${esc(b.name)}
+                      </h3>
+                      <div style="font-size:.8rem;font-weight:700;color:var(--txt)">${esc(b.title)}</div>
+                    </div>
+                    <span class="mstory-badge">🕒 ${esc(b.era)}</span>
+                  </div>
+
+                  <div style="font-size:.76rem;color:var(--mut)">📍 موطن الاستقرار: <b>${esc(b.location)}</b></div>
+
+                  <div style="font-size:.84rem;color:var(--txt);line-height:1.7;background:rgba(0,0,0,.25);padding:10px 14px;border-radius:8px">
+                    <div><b>• المآثر والخصال:</b> ${esc(b.achievements)}</div>
+                    <div style="margin-top:4px"><b>• الامتداد والذرية:</b> ${esc(b.descendants)}</div>
+                    <div style="margin-top:4px"><b>• الأثر الباقي:</b> ${esc(b.legacy)}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- Footer Actions -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px">
+            <button type="button" class="fstats-btn" id="btn-share-charter" style="background:#25d366;color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              📲 مشاركة بالواتساب
+            </button>
+            <button type="button" class="fstats-btn" id="btn-copy-charter" style="padding:5px 12px;font-size:.78rem">
+              📋 نسخ النص
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Tab bindings
+    $('#tab-btn-rules').onclick = () => { currentTab = 'rules'; renderModal(); };
+    $('#tab-btn-bios').onclick = () => { currentTab = 'bios'; renderModal(); };
+
+    // WhatsApp share
+    const waBtn = $('#btn-share-charter');
+    if (waBtn) {
+      waBtn.onclick = () => {
+        let msg = '';
+        if (currentTab === 'rules') {
+          msg = `⚖️ *ميثاق وقواعد أسرة آل مطارد:*\n\n`;
+          FAMILY_RULES.forEach(r => { msg += `${r.num}. *${r.title}*:\n${r.text}\n\n`; });
+        } else {
+          msg = `🏅 *من أعلام ورجالات أسرة آل مطارد:*\n\n`;
+          allBios.forEach(b => { msg += `• *${b.name}* (${b.era}):\n${b.title} - ${b.achievements}\n\n`; });
+        }
+        msg += `— موثقة عبر موقع شجرة آل مطارد:\n${window.location.href}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+      };
+    }
+
+    // Copy action
+    const copyBtn = $('#btn-copy-charter');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        let text = '';
+        if (currentTab === 'rules') {
+          text = `ميثاق وقواعد أسرة آل مطارد:\n\n`;
+          FAMILY_RULES.forEach(r => { text += `${r.num}. ${r.title}:\n${r.text}\n\n`; });
+        } else {
+          text = `تراجم أعلام ورجالات أسرة آل مطارد:\n\n`;
+          allBios.forEach(b => { text += `${b.name} (${b.era})\n${b.title}\n${b.achievements}\n\n`; });
+        }
+        navigator.clipboard.writeText(text).then(() => {
+          toast('✅ تم نسخ المحتوى بنجاح!');
+        });
+      };
+    }
+
+    // Add bio action
+    const addBioBtn = $('#btn-add-bio');
+    if (addBioBtn) {
+      addBioBtn.onclick = () => {
+        const name = prompt('اسم العَلَم كاملاً:');
+        if (!name) return;
+        const title = prompt('اللقب أو الصفة (مثال: وجيه الفرع / قاضي الناحية):') || 'عَلَم من أعلام الأسرة';
+        const era = prompt('الحقبة التاريخية (مثال: القرن الرابع عشر الهجري):') || 'العصر الحديث';
+        const location = prompt('موطن الاستقرار (النماص، الرياض، مكة...):') || 'المملكة';
+        const achievements = prompt('أبرز المآثر والخصال:') || '';
+        const descendants = prompt('الامتداد والذرية:') || '';
+        const legacy = prompt('الأثر الباقي:') || '';
+
+        const newBio = {
+          id: 'bio_user_' + Date.now(),
+          name,
+          title,
+          era,
+          location,
+          achievements,
+          descendants,
+          legacy
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]');
+        stored.push(newBio);
+        localStorage.setItem('almatarid_luminary_bios', JSON.stringify(stored));
+        allBios.push(newBio);
+        toast('✅ تمت إضافة ترجمة العَلَم بنجاح!');
+        renderModal();
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 
