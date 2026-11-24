@@ -666,11 +666,11 @@ function profile(id) {
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? (isVisitor ? 'محمية 🔒' : esc(mother.full_name)) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
       ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
-      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${lh ? '' : row('المدينة', esc(m.city))}${row('صور المناسبات', tagCountText(id))}${row('المشاركات', partText(id))}
+      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${lh ? '' : row('المدينة', esc(m.city))}${row('ألبوم الصور', `<span style="display:inline-flex;align-items:center;gap:6px"><span>${tagCountText(id) || 'صور ومناسبات'}</span><button type="button" class="x" data-act="open-album" style="color:var(--gold);font-weight:700">🖼️ فتح الألبوم ←</button></span>`)}${row('المشاركات', partText(id))}
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -931,6 +931,7 @@ $('#profile-body').addEventListener('click', e => {
      descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
      ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); },
      reorder: () => { $('#profile').close(); openSiblingReorderModal(m.id); },
+     'open-album': () => { openMemberPhotoAlbum(m.id); },
      'set-me': () => { localStorage.setItem('almatarid_me_id', m.id); profile(m.id); toast(`📍 تم تحديدك كـ «${m.full_name}»!`); },
      'unset-me': () => { localStorage.removeItem('almatarid_me_id'); profile(m.id); toast('تم إلغاء التعيين.'); } })[b.dataset.act]?.();
 });
@@ -9029,4 +9030,179 @@ function openCreateHelpRequestForm() {
 const mHelpRequests = $('#m-help-requests');
 if (mHelpRequests) {
   mHelpRequests.onclick = menuClose(() => openRelativesHelpBoard());
+}
+
+/* ============================================================
+   80) ألبوم صور العضو مرتب حسب الحدث أو السنة
+   ============================================================ */
+function getMemberAlbumPhotos(memberId) {
+  const m = S.byId.get(memberId);
+  if (!m) return [];
+
+  const photos = [];
+
+  if (S.photos.get(m.id)) {
+    photos.push({
+      id: 'photo_prof_' + m.id,
+      url: S.photos.get(m.id),
+      eventTitle: 'الصورة الشخصية الرسمية',
+      year: m.birth_year_text || (m.birth_date ? m.birth_date.slice(0, 4) : 2024),
+      caption: `صورة شخصية لـ ${m.full_name}`
+    });
+  }
+
+  (S.events || []).forEach(ev => {
+    const isAttendee = (ev.attendees && ev.attendees.includes(m.id)) || (ev._attendees && ev._attendees.includes(m.id));
+    const evYear = ev.event_date ? String(ev.event_date).slice(0, 4) : '2024';
+
+    if (ev._media && Array.isArray(ev._media)) {
+      ev._media.filter(x => x.kind === 'photo').forEach((item, idx) => {
+        photos.push({
+          id: `photo_ev_${ev.id}_${idx}`,
+          url: item.url,
+          eventTitle: ev.title,
+          year: evYear,
+          caption: item.caption || `مناسبة: ${ev.title}`
+        });
+      });
+    } else if (isAttendee && S.photos.get(m.id)) {
+      photos.push({
+        id: `photo_ev_att_${ev.id}`,
+        url: S.photos.get(m.id),
+        eventTitle: ev.title,
+        year: evYear,
+        caption: `حضور مناسبة: ${ev.title}`
+      });
+    }
+  });
+
+  const localAlbum = JSON.parse(localStorage.getItem('almatarid_album_' + m.id) || '[]');
+  localAlbum.forEach(p => photos.push(p));
+
+  return photos;
+}
+
+function openMemberPhotoAlbum(memberId, groupBy = 'event') {
+  const m = S.byId.get(memberId);
+  if (!m) return;
+
+  const photos = getMemberAlbumPhotos(memberId);
+
+  const groups = new Map();
+  photos.forEach(p => {
+    const key = groupBy === 'year' ? (`📅 عام ${p.year} م`) : (`🎉 ${p.eventTitle}`);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  });
+
+  const html = `
+    <div class="mem-album-wrap" style="max-width:580px">
+      <div class="fstats-head">
+        <h2>🖼️ ألبوم صور «${esc(m.full_name)}»</h2>
+        <p class="sub">مجموعة صور ومناسبات وذكريات العضو مرتبة زمنياً وبالمناسبات (${photos.length} صورة)</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <div style="display:flex;gap:6px">
+          <button type="button" class="fstats-btn ${groupBy === 'event' ? 'active' : ''}" id="album-grp-ev" style="padding:4px 10px;font-size:.78rem">
+            🎉 حسب المناسبة
+          </button>
+          <button type="button" class="fstats-btn ${groupBy === 'year' ? 'active' : ''}" id="album-grp-yr" style="padding:4px 10px;font-size:.78rem">
+            📅 حسب السنة
+          </button>
+        </div>
+
+        ${canMember(m) ? `
+          <div>
+            <label class="fstats-btn" style="padding:4px 10px;font-size:.78rem;cursor:pointer;background:var(--gold);color:#0f172a;font-weight:700">
+              ➕ إضافة صورة للألبوم
+              <input type="file" id="album-upload-input" accept="image/*" style="display:none">
+            </label>
+          </div>
+        ` : ''}
+      </div>
+
+      <div style="max-height:450px;overflow-y:auto;padding-left:4px">
+        ${photos.length ? Array.from(groups.entries()).map(([grpTitle, list]) => `
+          <div style="margin-bottom:14px">
+            <div style="font-size:.85rem;font-weight:700;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:4px;display:flex;justify-content:space-between">
+              <span>${esc(grpTitle)}</span>
+              <span style="font-size:.75rem;color:var(--mut)">${list.length} صورة</span>
+            </div>
+            <div class="mem-album-grid">
+              ${list.map(p => `
+                <div class="mem-album-card" data-album-img="${esc(p.url)}" data-album-cap="${esc(p.caption)}">
+                  <img src="${esc(p.url)}" class="mem-album-img" alt="${esc(p.caption)}" loading="lazy">
+                  <div class="mem-album-cap" title="${esc(p.caption)}">${esc(p.caption)}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('') : `
+          <div style="text-align:center;padding:30px 10px;color:var(--mut)">
+            <div style="font-size:2.5rem;margin-bottom:8px">📷</div>
+            <p style="margin:0">لا توجد صور مضافة في هذا الألبوم بعد.</p>
+            ${canMember(m) ? '<p style="font-size:.8rem;color:var(--gold);margin-top:4px">يمكنك إضافة أول صورة عبر الزر أعلاه!</p>' : ''}
+          </div>
+        `}
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;border-top:1px solid var(--line);padding-top:10px">
+        <button type="button" onclick="profile('${m.id}')" class="fstats-btn" style="padding:6px 14px;font-size:.8rem">
+          ← رجوع لملف العضو
+        </button>
+        <button type="button" onclick="$('#profile').close();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          إغلاق
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const bEv = $('#album-grp-ev');
+  if (bEv) bEv.onclick = () => openMemberPhotoAlbum(memberId, 'event');
+  const bYr = $('#album-grp-yr');
+  if (bYr) bYr.onclick = () => openMemberPhotoAlbum(memberId, 'year');
+
+  document.querySelectorAll('[data-album-img]').forEach(card => {
+    card.onclick = () => {
+      const url = card.dataset.albumImg;
+      const cap = card.dataset.albumCap;
+      showInfo(`
+        <div style="text-align:center;max-width:550px">
+          <img src="${esc(url)}" style="max-width:100%;max-height:65vh;border-radius:10px;border:1.5px solid var(--gold);display:block;margin:0 auto 10px auto">
+          <b style="color:var(--txt);font-size:.9rem">${esc(cap)}</b>
+          <div style="margin-top:12px;display:flex;justify-content:center;gap:8px">
+            <button type="button" class="fstats-btn" onclick="openMemberPhotoAlbum('${memberId}', '${groupBy}')">← رجوع للألبوم</button>
+            <a href="${esc(url)}" download="almatarid-photo.jpg" class="fstats-btn" style="text-decoration:none;background:var(--gold);color:#0f172a;font-weight:700">💾 تحميل الصورة</a>
+          </div>
+        </div>
+      `);
+    };
+  });
+
+  const uploadInput = $('#album-upload-input');
+  if (uploadInput) {
+    uploadInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const cap = prompt('اكتب تعليقاً على الصورة (مثال: حفل تخرج / مناسبة العيد):') || 'صورة عائلية';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const localAlbum = JSON.parse(localStorage.getItem('almatarid_album_' + m.id) || '[]');
+        localAlbum.push({
+          id: 'user_img_' + Date.now(),
+          url: ev.target.result,
+          eventTitle: cap,
+          year: new Date().getFullYear(),
+          caption: cap
+        });
+        localStorage.setItem('almatarid_album_' + m.id, JSON.stringify(localAlbum));
+        toast('✅ تمت إضافة الصورة إلى ألبوم العضو بنجاح!');
+        openMemberPhotoAlbum(memberId, groupBy);
+      };
+      reader.readAsDataURL(file);
+    };
+  }
 }
