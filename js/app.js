@@ -3987,7 +3987,7 @@ function openFamilyArchive() {
   const sortSel = $('#arch-sort');
 
   const updateList = () => {
-    const q = (qInp.value || '').trim().toLowerCase();
+    const q = stripKin(norm(qInp.value || ''));
     const era = eraSel.value;
     const type = typeSel.value;
     const sort = sortSel.value;
@@ -3996,7 +3996,7 @@ function openFamilyArchive() {
       if (era !== 'all' && it.era !== era) return false;
       if (type !== 'all' && it.type !== type) return false;
       if (q) {
-        const text = `${it.title} ${it.description} ${it.transcription} ${it.members_linked}`.toLowerCase();
+        const text = stripKin(norm(`${it.title} ${it.description} ${it.transcription} ${it.members_linked}`));
         if (!text.includes(q)) return false;
       }
       return true;
@@ -4417,8 +4417,8 @@ function openFamilyBook(activeTab = 'births') {
   const renderBirths = (filterTxt = '') => {
     let list = members.filter(m => !m.name_masked);
     if (filterTxt) {
-      const q = filterTxt.toLowerCase();
-      list = list.filter(m => (m.full_name || '').toLowerCase().includes(q) || (m.birth_year_text || '').includes(q));
+      const q = stripKin(norm(filterTxt));
+      list = list.filter(m => stripKin(norm(m.full_name || '')).includes(q) || stripKin(norm(m.birth_year_text || '')).includes(q));
     }
     list.sort((a, b) => {
       const ya = parseInt(a.birth_year_text || (a.birth_date ? a.birth_date.slice(0, 4) : 0), 10) || 0;
@@ -4465,8 +4465,8 @@ function openFamilyBook(activeTab = 'births') {
   const renderDeaths = (filterTxt = '') => {
     let list = members.filter(m => m.is_alive === false);
     if (filterTxt) {
-      const q = filterTxt.toLowerCase();
-      list = list.filter(m => (m.full_name || '').toLowerCase().includes(q) || (m.death_year_text || '').includes(q));
+      const q = stripKin(norm(filterTxt));
+      list = list.filter(m => stripKin(norm(m.full_name || '')).includes(q) || stripKin(norm(m.death_year_text || '')).includes(q));
     }
     list.sort((a, b) => {
       const ya = parseInt(a.death_year_text || (a.death_date ? a.death_date.slice(0, 4) : 0), 10) || 0;
@@ -4512,8 +4512,8 @@ function openFamilyBook(activeTab = 'births') {
   const renderMarriages = (filterTxt = '') => {
     let list = wives;
     if (filterTxt) {
-      const q = filterTxt.toLowerCase();
-      list = list.filter(w => (w.full_name || '').toLowerCase().includes(q) || (w.family_name || '').toLowerCase().includes(q));
+      const q = stripKin(norm(filterTxt));
+      list = list.filter(w => stripKin(norm(w.full_name || '')).includes(q) || stripKin(norm(w.family_name || '')).includes(q));
     }
 
     // Kinship stats
@@ -4681,10 +4681,10 @@ function openDuaMemorial() {
   const qInp = $('#dua-q');
 
   const updateSearch = () => {
-    const q = (qInp.value || '').trim().toLowerCase();
+    const q = stripKin(norm(qInp.value || ''));
     const filtered = deceased.filter(m => {
       if (!q) return true;
-      return (m.full_name || '').toLowerCase().includes(q) || (m.death_year_text || '').includes(q);
+      return stripKin(norm(m.full_name || '')).includes(q) || stripKin(norm(m.death_year_text || '')).includes(q);
     });
     grid.innerHTML = renderDuaCards(filtered, sampleDua);
     bindDuaWaButtons(filtered, sampleDua);
@@ -5239,11 +5239,11 @@ function showWomenDirectory() {
   }
 
   const renderCards = () => {
-    const q = (qInp.value || '').trim().toLowerCase();
+    const q = stripKin(norm(qInp.value || ''));
     const branch = branchSel.value;
 
     const filtered = women.filter(w => {
-      if (q && !(w.full_name || '').toLowerCase().includes(q)) return false;
+      if (q && !stripKin(norm(w.full_name || '')).includes(q)) return false;
       if (branch !== 'all') {
         const chain = getAncestryChain(w);
         const root = chain[chain.length - 1];
