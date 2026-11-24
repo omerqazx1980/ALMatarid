@@ -4881,3 +4881,215 @@ function openKidsMode(selectedMid = null) {
 }
 
 $('#m-kids-mode').onclick = menuClose(() => openKidsMode());
+
+/* ---------- 60) إشعارات ورسائل واتساب للإعلانات والمناسبات (فرع تجربة) ---------- */
+function openWaAnnouncements(activeTplKey = 'meeting') {
+  const templates = {
+    meeting: {
+      name: 'اجتماع عائلي',
+      icon: '💌',
+      fields: [
+        { id: 'f_title', label: 'عنوان اللقاء', val: 'الاجتماع السنوي لأسرة آل مطارد' },
+        { id: 'f_date', label: 'الموعد', val: 'الجمعة القادم بعد صلاة العصر' },
+        { id: 'f_place', label: 'المقر / القاعة', val: 'استراحة الأسرة - بني عمرو' },
+        { id: 'f_agenda', label: 'البرنامج', val: 'صلة الرحم، تكريم المتفوقين، واستعراض تحديثات شجرة العائلة' }
+      ],
+      generate: (d) =>
+        `💌 *دعوة لاجتماع أسرة آل مطارد (بنو عمرو)* 💌\n\n` +
+        `السلام عليكم ورحمة الله وبركاته،،\n` +
+        `يسر مجلس الأسرة دعوتكم لحضور: *${d.f_title}*\n\n` +
+        `📅 *الموعد:* ${d.f_date}\n` +
+        `📍 *المكان:* ${d.f_place}\n` +
+        `📋 *البرنامج:* ${d.f_agenda}\n\n` +
+        `حضوركم شرف لنا ويسعدنا جميعاً، نرجو تأكيد حضوركم عبر موقع الشجرة:\n` +
+        `🔗 https://omerqazx1980.github.io/ALMatarid/`
+    },
+    wedding: {
+      name: 'عقد قران وزواج',
+      icon: '💍',
+      fields: [
+        { id: 'f_groom', label: 'اسم العريس', val: 'عبدالعزيز بن محمد' },
+        { id: 'f_inlaws', label: 'العروس / الأسرة المصاهرة', val: 'كريمة فلان بن فلان' },
+        { id: 'f_date', label: 'الموعد', val: 'يوم الخميس الموافق ...' },
+        { id: 'f_hall', label: 'القاعة والمدينة', val: 'قاعة الروابي - أبها' }
+      ],
+      generate: (d) =>
+        `💍 *تهنئة بزواج مبارك - أسرة آل مطارد* 💍\n\n` +
+        `«بَارَكَ اللَّهُ لَكَ، وَبَارَكَ عَلَيْكَ، وَجَمَعَ بَيْنَكُمَا فِي خَيْرٍ»\n\n` +
+        `تتقدم أسرة آل مطارد بخالص التهاني والتبريكات لابن العم:\n` +
+        `*${d.f_groom}*\n` +
+        `بمناسبة عقد قرانه على: *${d.f_inlaws}*\n\n` +
+        `📅 *الموعد:* ${d.f_date}\n` +
+        `📍 *المكان:* ${d.f_hall}\n\n` +
+        `سائلين الله لهما حياة زوجية سعيدة ومباركة والذرية الصالحة.`
+    },
+    birth: {
+      name: 'مولود جديد',
+      icon: '👶',
+      fields: [
+        { id: 'f_parent', label: 'اسم الوالد', val: 'سعد بن إبراهيم' },
+        { id: 'f_baby', label: 'اسم المولود / المولودة', val: 'سلطان' },
+        { id: 'f_status', label: 'المولود', val: 'مولود ذكر' }
+      ],
+      generate: (d) =>
+        `👶 *بشرى مولود جديد في أسرة آل مطارد* 👶\n\n` +
+        `«بُورِكَ لَكَ فِي المَوْهُوبِ، وَشَكَرْتَ الوَاهِبَ، وَبَلَغَ أَشُدَّهُ، وَرُزِقْتَ بِرَّهُ»\n\n` +
+        `رزق ابن العم: *${d.f_parent}*\n` +
+        `بـ *${d.f_baby}*\n\n` +
+        `جعله الله من مواليد السعادة والصلاح، وأنبته نباتاً حسناً، وأقرّ به أعين والديه.`
+    },
+    grad: {
+      name: 'تخرج وإنجاز',
+      icon: '🎓',
+      fields: [
+        { id: 'f_name', label: 'اسم الخريج / صاحب الإنجاز', val: 'فيصل بن عبدالله' },
+        { id: 'f_degree', label: 'الدرجة والتخصص', val: 'بكالوريوس الهندسة الكهربائية' },
+        { id: 'f_uni', label: 'الجامعة / الجهة', val: 'جامعة الملك عبدالعزيز' }
+      ],
+      generate: (d) =>
+        `🎓 *تهنئة بالتخرج والإنجاز - فخر الأسرة* 🎓\n\n` +
+        `تبارك أسرة آل مطارد (بنو عمرو) لابنها المتميز:\n` +
+        `*${d.f_name}*\n` +
+        `بمناسبة حصوله على: *${d.f_degree}*\n` +
+        `من: *${d.f_uni}*\n\n` +
+        `سائلين الله له دوام التوفيق والنجاح ومزيداً من الرتب والمناصب العليا في خدمة الدين والوطن.`
+    },
+    condolence: {
+      name: 'تعزية ومواساة',
+      icon: '🕊️',
+      fields: [
+        { id: 'f_deceased', label: 'اسم الفقيد', val: 'الوالد علي بن سعيد رحمه الله' },
+        { id: 'f_relatives', label: 'أبناؤه / ذووه', val: 'أبنائه وإخوانه وكافة أسرة آل مطارد' },
+        { id: 'f_prayer', label: 'الصلاة والدفن', val: 'الصلاة عليه عصر اليوم في جامع ... والدفن بمقبرة ...' },
+        { id: 'f_cond_place', label: 'مقر العزاء', val: 'بمنزل الأسرة أو عبر الاتصال' }
+      ],
+      generate: (d) =>
+        `🕊️ *إنا لله وإنا إليه راجعون - تعزية ومواساة* 🕊️\n\n` +
+        `«يَا أَيَّتُهَا النَّفْسُ الْمُطْمَئِنَّةُ ارْجِعِي إِلَىٰ رَبِّكِ رَاضِيَةً مَّرْضِيَّةً فَادْخُلِي فِي عِبَادِي وَادْخُلِي جَنَّتِي»\n\n` +
+        `بقلوب مؤمنة بقضاء الله وقدره، تنعى أسرة آل مطارد الفقيد:\n` +
+        `*${d.f_deceased}*\n\n` +
+        `وتتقدم بخالص العزاء وصادق المواساة إلى: *${d.f_relatives}*\n\n` +
+        `🕌 *الصلاة والدفن:* ${d.f_prayer}\n` +
+        `📍 *مقر العزاء:* ${d.f_cond_place}\n\n` +
+        `اللهم اغفر له وارحمه وعافه واعف عنه واجعل قبره روضة من رياض الجنة.`
+    },
+    general: {
+      name: 'إعلان عام للأسرة',
+      icon: '📢',
+      fields: [
+        { id: 'f_gen_title', label: 'عنوان الإعلان', val: 'تحديث وتوثيق شجرة العائلة' },
+        { id: 'f_gen_body', label: 'نص الإعلان', val: 'نرجو من جميع أبناء وبنات الأسرة مراجعة بياناتهم وتحديث صكوكهم ومواليدهم عبر موقع الشجرة الجديد.' }
+      ],
+      generate: (d) =>
+        `📢 *إعلان عام من مجلس أسرة آل مطارد (بنو عمرو)* 📢\n\n` +
+        `*${d.f_gen_title}*\n\n` +
+        `${d.f_gen_body}\n\n` +
+        `للاطلاع والتحديث يرجى زيارة الرابط:\n` +
+        `🔗 https://omerqazx1980.github.io/ALMatarid/`
+    }
+  };
+
+  const renderView = () => {
+    const tpl = templates[activeTplKey];
+
+    const html = `
+      <div class="wa-ann-wrap">
+        <div class="fstats-head">
+          <h2>📢 مركز صياغة إعلانات ورسائل الواتساب</h2>
+          <p class="sub">صياغة قوالب احترافية منسقة للقروبات العائلية بنقرة زر واحدة</p>
+        </div>
+
+        <div class="wa-tpl-grid">
+          ${Object.entries(templates).map(([k, t]) => `
+            <button type="button" class="wa-tpl-btn ${k === activeTplKey ? 'active' : ''}" data-tpl="${k}">
+              <span style="font-size:1.4rem">${t.icon}</span>
+              <span>${esc(t.name)}</span>
+            </button>
+          `).join('')}
+        </div>
+
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px">
+          <b style="color:var(--gold);font-size:.85rem;display:block;margin-bottom:8px">📝 بيانات الرسالة:</b>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px" id="wa-form-inputs">
+            ${tpl.fields.map(f => `
+              <div>
+                <label style="font-size:.74rem;color:var(--mut)">${esc(f.label)}:</label>
+                <input type="text" id="${f.id}" value="${esc(f.val)}" style="width:100%;font-size:.82rem;padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt)">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div>
+          <b style="color:var(--gold);font-size:.85rem;display:block;margin-bottom:6px">💬 معاينة مباشرة كما ستظهر في واتساب:</b>
+          <div class="wa-preview-box">
+            <div class="wa-bubble" id="wa-preview-text"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button type="button" class="lcard-btn-wa" id="btn-wa-send" style="flex:1">
+            <span>💬 إرسال مباشر إلى واتساب</span>
+          </button>
+          <button type="button" class="btn ghost" id="btn-wa-copy" style="padding:10px 16px">
+            <span>📋 نسخ النص</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    const inputs = {};
+    tpl.fields.forEach(f => {
+      const el = $(`#${f.id}`);
+      if (el) {
+        inputs[f.id] = el.value;
+        el.oninput = () => {
+          inputs[f.id] = el.value;
+          updatePreview();
+        };
+      }
+    });
+
+    const updatePreview = () => {
+      const msg = tpl.generate(inputs);
+      const prevEl = $('#wa-preview-text');
+      if (prevEl) prevEl.textContent = msg;
+    };
+    updatePreview();
+
+    document.querySelectorAll('.wa-tpl-btn').forEach(btn => {
+      btn.onclick = () => {
+        activeTplKey = btn.dataset.tpl;
+        renderView();
+      };
+    });
+
+    const sendBtn = $('#btn-wa-send');
+    if (sendBtn) {
+      sendBtn.onclick = () => {
+        const msg = tpl.generate(inputs);
+        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank');
+      };
+    }
+
+    const copyBtn = $('#btn-wa-copy');
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        const msg = tpl.generate(inputs);
+        try {
+          await navigator.clipboard.writeText(msg);
+          toast('تم نسخ الرسالة بنجاح!');
+        } catch (_) {
+          toast('يرجى تحديد النص ونسخه يدوياً');
+        }
+      };
+    }
+  };
+
+  renderView();
+}
+
+$('#m-wa-announcements').onclick = menuClose(() => openWaAnnouncements());

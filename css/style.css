@@ -925,3 +925,12 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .kids-card-name{font-size:1.15rem;font-weight:800;color:#fff;margin-top:6px}
 .kids-actions-bar{display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap}
 .kids-big-btn{background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1204;font-size:1.15rem;font-weight:900;border:none;border-radius:14px;padding:14px 26px;cursor:pointer;box-shadow:0 6px 18px rgba(245,158,11,.4);display:inline-flex;align-items:center;gap:8px}
+
+/* ---------- 60) إشعارات ورسائل واتساب للإعلانات (فرع تجربة) ---------- */
+.wa-ann-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.wa-tpl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.wa-tpl-btn{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:.8rem;font-weight:700;color:var(--txt);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:.15s}
+.wa-tpl-btn:hover{border-color:var(--gold);color:var(--gold)}
+.wa-tpl-btn.active{background:rgba(37,211,102,.15);border-color:#25d366;color:#25d366}
+.wa-preview-box{background:#0b141a;border:1px solid #1f2c34;border-radius:12px;padding:14px;position:relative}
+.wa-bubble{background:#005c4b;color:#e9edef;border-radius:8px;padding:12px;font-size:.85rem;line-height:1.7;white-space:pre-wrap;box-shadow:0 2px 5px rgba(0,0,0,.3)}
