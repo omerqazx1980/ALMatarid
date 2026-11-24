@@ -4600,3 +4600,134 @@ function openDuaMemorial() {
 }
 
 $('#m-dua-deceased').onclick = menuClose(() => openDuaMemorial());
+
+/* ---------- 58) تقويم العائلة السنوي (فرع تجربة) ---------- */
+const AR_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const GREG_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+function getFixedOccasions(year, month) {
+  // month: 0-indexed (0 to 11)
+  const occ = [];
+  if (month === 1 && 22) occ.push({ day: 22, title: '🇸🇦 يوم التأسيس السعودي', type: 'national' });
+  if (month === 8 && 23) occ.push({ day: 23, title: '🇸🇦 اليوم الوطني السعودي', type: 'national' });
+  return occ;
+}
+
+function openAnnualCalendar(viewYear = null, viewMonth = null) {
+  const now = new Date();
+  const curY = viewYear != null ? viewYear : now.getFullYear();
+  const curM = viewMonth != null ? viewMonth : now.getMonth();
+
+  const firstDay = new Date(curY, curM, 1);
+  const startDayIdx = firstDay.getDay(); // 0: Sun, 1: Mon, ...
+  const daysInMonth = new Date(curY, curM + 1, 0).getDate();
+
+  const events = (S.events || []).filter(e => {
+    const d = new Date(e.event_date);
+    return d.getFullYear() === curY && d.getMonth() === curM;
+  });
+
+  const fixedOcc = getFixedOccasions(curY, curM);
+
+  const daysHtml = [];
+  // Empty cells before start of month
+  for (let i = 0; i < startDayIdx; i++) {
+    daysHtml.push('<div class="cal-day" style="opacity:.25"></div>');
+  }
+
+  // Days of current month
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(curY, curM, d);
+    const hj = gregToHijri(dateObj);
+    const isToday = now.getFullYear() === curY && now.getMonth() === curM && now.getDate() === d;
+    const dayEvs = events.filter(e => new Date(e.event_date).getDate() === d);
+    const dayFixed = fixedOcc.filter(o => o.day === d);
+    const hasAny = dayEvs.length || dayFixed.length;
+
+    daysHtml.push(`
+      <div class="cal-day ${isToday ? 'today' : ''} ${hasAny ? 'has-event' : ''}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="cal-day-num">${d}</span>
+          <span class="cal-day-hj">${hj.d} ${HJ_MONTHS[hj.m - 1].slice(0, 5)}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;overflow:hidden">
+          ${dayFixed.map(f => `<span class="cal-ev-dot" style="background:#0284c7;color:#fff" title="${esc(f.title)}">${esc(f.title)}</span>`).join('')}
+          ${dayEvs.map(e => `<span class="cal-ev-dot" data-ev-id="${esc(e.id)}" style="cursor:pointer" title="${esc(e.title)}">🎉 ${esc(e.title)}</span>`).join('')}
+        </div>
+      </div>
+    `);
+  }
+
+  const html = `
+    <div class="cal-wrap">
+      <div class="fstats-head">
+        <h2>📅 تقويم العائلة السنوي (هجري وميلادي)</h2>
+        <p class="sub">متابعة مواعيد مناسبات واجتماعات الأسرة مع المناسبات الوطنية والإسلامية</p>
+      </div>
+
+      <div class="cal-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn ghost" id="btn-cal-prev" style="padding:4px 10px">‹ الشهر السابق</button>
+          <b style="font-size:1.1rem;color:var(--gold)">${GREG_MONTHS[curM]} ${curY} م</b>
+          <button type="button" class="btn ghost" id="btn-cal-next" style="padding:4px 10px">الشهر التالي ›</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn ghost" id="btn-cal-today" style="padding:4px 10px;font-size:.78rem">اليوم</button>
+        </div>
+      </div>
+
+      <div class="cal-grid">
+        ${AR_DAYS.map(dayName => `<div class="cal-day-head">${dayName}</div>`).join('')}
+        ${daysHtml.join('')}
+      </div>
+
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:6px">
+        <b style="color:var(--gold);font-size:.85rem;display:block;margin-bottom:6px">🎉 مناسبات هذا الشهر (${events.length}):</b>
+        ${events.length ? events.map(e => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem">
+            <div>
+              <b>${esc(e.title)}</b> · <span style="color:var(--mut)">📅 ${new Date(e.event_date).toLocaleDateString('ar-SA')}</span>
+            </div>
+            <button type="button" class="x" data-evopen="${esc(e.id)}" style="color:var(--gold)">التفاصيل ←</button>
+          </div>
+        `).join('') : '<p class="sub" style="margin:0;font-size:.78rem">لا توجد اجتماعات عائلية مجدولة في هذا الشهر.</p>'}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const prevBtn = $('#btn-cal-prev');
+  const nextBtn = $('#btn-cal-next');
+  const todayBtn = $('#btn-cal-today');
+
+  if (prevBtn) {
+    prevBtn.onclick = () => {
+      let m = curM - 1, y = curY;
+      if (m < 0) { m = 11; y--; }
+      openAnnualCalendar(y, m);
+    };
+  }
+
+  if (nextBtn) {
+    nextBtn.onclick = () => {
+      let m = curM + 1, y = curY;
+      if (m > 11) { m = 0; y++; }
+      openAnnualCalendar(y, m);
+    };
+  }
+
+  if (todayBtn) {
+    todayBtn.onclick = () => openAnnualCalendar(now.getFullYear(), now.getMonth());
+  }
+
+  document.querySelectorAll('.cal-wrap [data-evopen], .cal-wrap [data-ev-id]').forEach(b => {
+    b.onclick = () => {
+      const eid = b.dataset.evopen || b.dataset.evId;
+      const x = S.events.find(z => String(z.id) === String(eid));
+      if (x) evDetails(x);
+    };
+  });
+}
+
+$('#m-calendar').onclick = menuClose(() => openAnnualCalendar());

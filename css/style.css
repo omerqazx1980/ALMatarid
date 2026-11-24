@@ -898,3 +898,15 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .dua-card-chain{font-size:.76rem;color:#cbd5e1;line-height:1.6;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px}
 .dua-text-box{font-size:.82rem;color:#d1fae5;line-height:1.7;background:rgba(6,78,59,.25);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:10px;font-style:italic}
 .dua-btn-wa{background:#059669;color:#fff;border-radius:8px;padding:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:.8rem;border:0}
+
+/* ---------- 58) تقويم العائلة السنوي (فرع تجربة) ---------- */
+.cal-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.cal-header{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.cal-day-head{text-align:center;font-size:.75rem;font-weight:700;color:var(--gold);padding:6px 0}
+.cal-day{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:6px 4px;min-height:64px;display:flex;flex-direction:column;justify-content:space-between;font-size:.75rem;position:relative}
+.cal-day.today{border-color:var(--gold);background:rgba(245,158,11,.08)}
+.cal-day.has-event{border-color:#38bdf8;background:rgba(56,189,248,.1)}
+.cal-day-num{font-weight:700;color:var(--txt)}
+.cal-day-hj{font-size:.65rem;color:var(--mut)}
+.cal-ev-dot{background:var(--gold);color:#1c1204;border-radius:4px;padding:1px 3px;font-size:.62rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
