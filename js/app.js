@@ -3068,6 +3068,7 @@ function openPdfExport() {
 
 $('#m-pdf').onclick = menuClose(() => openPdfExport());
 $('#m-blank-tree').onclick = menuClose(() => openBlankTreeModal());
+$('#m-ready-reports').onclick = menuClose(() => openReadyReportsModal());
 
 /* تصدير Excel (CSV بترميز يفتحه Excel بالعربية صحيحًا) */
 $('#m-csv').onclick = menuClose(() => {
@@ -13929,6 +13930,347 @@ function openBlankTreeModal() {
 
   renderModal();
 }
+
+/* ---------- 99) تقارير جاهزة: فرع كامل، قائمة جيل، سجل الأماكن (فرع تجربة) ---------- */
+function openReadyReportsModal(initialReportType = 'branch') {
+  let reportType = initialReportType; // 'branch', 'gen', 'places'
+  let selectedBranchId = (S.branches[0] && S.branches[0].root_id) ? S.branches[0].root_id : (S.members[0] ? S.members[0].id : '');
+  let selectedGen = 2;
+
+  function renderModal() {
+    let reportTitle = '';
+    let reportSummaryHtml = '';
+    let reportTableHtml = '';
+    let csvRows = [];
+
+    if (reportType === 'branch') {
+      const rootM = S.byId.get(selectedBranchId) || S.members[0];
+      const branchMembers = getSubtree(rootM ? rootM.id : null);
+      const aliveCount = branchMembers.filter(m => m.is_alive).length;
+      const deceasedCount = branchMembers.length - aliveCount;
+      const maleCount = branchMembers.filter(m => m.gender === 'male').length;
+      const femaleCount = branchMembers.length - maleCount;
+      const cities = Array.from(new Set(branchMembers.map(m => m.city).filter(Boolean)));
+
+      reportTitle = `تقرير فرع: ${rootM ? rootM.full_name : 'الفرع'}`;
+      reportSummaryHtml = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-bottom:12px">
+          <div class="fund-stat-box"><b style="color:var(--gold);font-size:1.1rem">${branchMembers.length}</b><div style="font-size:.72rem;color:var(--mut)">إجمالي أفراد الفرع</div></div>
+          <div class="fund-stat-box"><b style="color:#22c55e;font-size:1.1rem">${aliveCount}</b><div style="font-size:.72rem;color:var(--mut)">الأحياء</div></div>
+          <div class="fund-stat-box"><b style="color:#f87171;font-size:1.1rem">${deceasedCount}</b><div style="font-size:.72rem;color:var(--mut)">المتوفون</div></div>
+          <div class="fund-stat-box"><b style="color:var(--txt);font-size:1.1rem">${maleCount} ذكور / ${femaleCount} إناث</b><div style="font-size:.72rem;color:var(--mut)">توزيع الجنس</div></div>
+        </div>
+      `;
+
+      reportTableHtml = `
+        <table class="reports-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم الكامل</th>
+              <th>الأب</th>
+              <th>الجيل</th>
+              <th>الحالة</th>
+              <th>الميلاد</th>
+              <th>المدينة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${branchMembers.map((m, idx) => {
+              const f = m.father_id ? S.byId.get(m.father_id) : null;
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><b>${esc(m.full_name)}</b></td>
+                  <td>${f ? esc(f.full_name) : '—'}</td>
+                  <td>الجيل ${m._gen || '—'}</td>
+                  <td>${m.is_alive ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
+                  <td>${esc(m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '—'))}</td>
+                  <td>${esc(m.city || 'النماص')}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      csvRows = [
+        ['#', 'الاسم', 'الأب', 'الجيل', 'الحالة', 'الميلاد', 'المدينة'],
+        ...branchMembers.map((m, idx) => [
+          idx + 1,
+          m.full_name,
+          m.father_id ? (S.byId.get(m.father_id)?.full_name || '') : '',
+          m._gen || '',
+          m.is_alive ? 'حي' : 'متوفى',
+          m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || ''),
+          m.city || 'النماص'
+        ])
+      ];
+
+    } else if (reportType === 'gen') {
+      const genMembers = S.members.filter(m => (m._gen === selectedGen) || (!m._gen && selectedGen === 2));
+      const aliveCount = genMembers.filter(m => m.is_alive).length;
+
+      reportTitle = `قائمة وتعداد الجيل ${selectedGen}`;
+      reportSummaryHtml = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:8px;margin-bottom:12px">
+          <div class="fund-stat-box"><b style="color:var(--gold);font-size:1.1rem">${genMembers.length} فرد</b><div style="font-size:.72rem;color:var(--mut)">أفراد هذا الجيل</div></div>
+          <div class="fund-stat-box"><b style="color:#22c55e;font-size:1.1rem">${aliveCount}</b><div style="font-size:.72rem;color:var(--mut)">الأحياء</div></div>
+          <div class="fund-stat-box"><b style="color:var(--txt);font-size:1.1rem">${genMembers.length - aliveCount}</b><div style="font-size:.72rem;color:var(--mut)">المتوفون</div></div>
+        </div>
+      `;
+
+      reportTableHtml = `
+        <table class="reports-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم الكامل</th>
+              <th>الأب</th>
+              <th>الحالة</th>
+              <th>سنة الميلاد</th>
+              <th>المدينة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${genMembers.map((m, idx) => {
+              const f = m.father_id ? S.byId.get(m.father_id) : null;
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><b>${esc(m.full_name)}</b></td>
+                  <td>${f ? esc(f.full_name) : '—'}</td>
+                  <td>${m.is_alive ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
+                  <td>${esc(m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '—'))}</td>
+                  <td>${esc(m.city || 'النماص')}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      csvRows = [
+        ['#', 'الاسم', 'الأب', 'الجيل', 'الحالة', 'سنة الميلاد', 'المدينة'],
+        ...genMembers.map((m, idx) => [
+          idx + 1,
+          m.full_name,
+          m.father_id ? (S.byId.get(m.father_id)?.full_name || '') : '',
+          selectedGen,
+          m.is_alive ? 'حي' : 'متوفى',
+          m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || ''),
+          m.city || 'النماص'
+        ])
+      ];
+
+    } else {
+      // Places report
+      const cityMap = new Map();
+      S.members.forEach(m => {
+        const c = m.city || 'النماص (الموطن الأصلي)';
+        if (!cityMap.has(c)) cityMap.set(c, { total: 0, alive: 0, deceased: 0 });
+        const obj = cityMap.get(c);
+        obj.total++;
+        if (m.is_alive) obj.alive++; else obj.deceased++;
+      });
+
+      const cityList = Array.from(cityMap.entries()).sort((a, b) => b[1].total - a[1].total);
+
+      reportTitle = 'سجل وأطلس أماكن ومدن استقرار العائلة';
+      reportSummaryHtml = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:8px;margin-bottom:12px">
+          <div class="fund-stat-box"><b style="color:var(--gold);font-size:1.1rem">${cityList.length} مناطق ومدن</b><div style="font-size:.72rem;color:var(--mut)">أماكن التواجد المسجلة</div></div>
+          <div class="fund-stat-box"><b style="color:#22c55e;font-size:1.1rem">${S.members.length} فرد</b><div style="font-size:.72rem;color:var(--mut)">إجمالي الأفراد المحصين</div></div>
+        </div>
+      `;
+
+      reportTableHtml = `
+        <table class="reports-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>المدينة / المنطقة</th>
+              <th>إجمالي الأفراد</th>
+              <th>الأحياء</th>
+              <th>المتوفون</th>
+              <th>نسبة التواجد</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cityList.map(([cName, data], idx) => {
+              const pct = Math.round((data.total / Math.max(1, S.members.length)) * 100);
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><b>📍 ${esc(cName)}</b></td>
+                  <td><b>${data.total}</b></td>
+                  <td><span style="color:#22c55e">${data.alive}</span></td>
+                  <td><span style="color:#f87171">${data.deceased}</span></td>
+                  <td>${pct}%</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      csvRows = [
+        ['#', 'المدينة', 'الإجمالي', 'الأحياء', 'المتوفون', 'النسبة'],
+        ...cityList.map(([cName, data], idx) => [
+          idx + 1,
+          cName,
+          data.total,
+          data.alive,
+          data.deceased,
+          Math.round((data.total / Math.max(1, S.members.length)) * 100) + '%'
+        ])
+      ];
+    }
+
+    const html = `
+      <div class="reports-wrap" style="max-width:850px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📑</span> مركز التقارير الجاهزة والتعداد
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <!-- Report Tabs -->
+        <div class="transcribe-tabs">
+          <button type="button" class="transcribe-tab-btn ${reportType === 'branch' ? 'active' : ''}" id="rep-btn-branch">
+            🌿 تقرير فرع كامل
+          </button>
+          <button type="button" class="transcribe-tab-btn ${reportType === 'gen' ? 'active' : ''}" id="rep-btn-gen">
+            📜 قائمة وتعداد الجيل
+          </button>
+          <button type="button" class="transcribe-tab-btn ${reportType === 'places' ? 'active' : ''}" id="rep-btn-places">
+            📍 سجل وأطلس الأماكن
+          </button>
+        </div>
+
+        <!-- Filter Controls -->
+        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
+          ${reportType === 'branch' ? `
+            <div style="display:flex;align-items:center;gap:8px;flex:1">
+              <span style="font-size:.78rem;color:var(--gold);font-weight:700">اختر الفرع:</span>
+              <select id="rep-branch-sel" class="fstats-btn" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
+                ${S.branches.map(b => {
+                  const rootObj = S.byId.get(b.root_id);
+                  return `<option value="${b.root_id}" ${b.root_id === selectedBranchId ? 'selected' : ''}>فرع ${esc(b.name || (rootObj ? rootObj.full_name : 'الفرع'))}</option>`;
+                }).join('')}
+                ${!S.branches.length ? S.members.slice(0, 10).map(m => `<option value="${m.id}" ${m.id === selectedBranchId ? 'selected' : ''}>فرع ${esc(m.full_name)}</option>`).join('') : ''}
+              </select>
+            </div>
+          ` : reportType === 'gen' ? `
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:.78rem;color:var(--gold);font-weight:700">الجيل:</span>
+              ${[1, 2, 3, 4, 5].map(g => `
+                <button type="button" class="fstats-btn ${selectedGen === g ? 'active' : ''}" data-rep-gen="${g}" style="padding:4px 10px;font-size:.76rem">
+                  الجيل ${g}
+                </button>
+              `).join('')}
+            </div>
+          ` : `
+            <span style="font-size:.78rem;color:var(--mut)">توزيع أماكن ومدن استقرار العائلة ونسب التواجد في المملكة</span>
+          `}
+
+          <div style="display:flex;gap:6px">
+            <button type="button" class="fstats-btn" id="btn-print-rep" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              🖨️ طباعة التقرير
+            </button>
+            <button type="button" class="fstats-btn" id="btn-csv-rep" style="padding:5px 12px;font-size:.78rem">
+              📊 إكسل CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Report Render Area -->
+        <div id="ready-report-print-container" style="background:rgba(15,23,42,.85);border:1.5px solid var(--gold);border-radius:10px;padding:16px;max-height:480px;overflow-y:auto">
+          <div style="border-bottom:1.5px solid var(--gold);padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0;color:var(--gold);font-size:1.05rem">${esc(reportTitle)}</h3>
+            <span style="font-size:.74rem;color:var(--mut)">تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}</span>
+          </div>
+
+          ${reportSummaryHtml}
+          ${reportTableHtml}
+        </div>
+
+        <!-- Footer Actions -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px">
+            <button type="button" class="fstats-btn" id="btn-wa-rep" style="background:#25d366;color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              📲 مشاركة بالواتساب
+            </button>
+            <button type="button" class="fstats-btn" id="btn-copy-rep" style="padding:5px 12px;font-size:.78rem">
+              📋 نسخ الملخص
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Tab bindings
+    $('#rep-btn-branch').onclick = () => { reportType = 'branch'; renderModal(); };
+    $('#rep-btn-gen').onclick = () => { reportType = 'gen'; renderModal(); };
+    $('#rep-btn-places').onclick = () => { reportType = 'places'; renderModal(); };
+
+    // Branch select binding
+    const bSel = $('#rep-branch-sel');
+    if (bSel) {
+      bSel.onchange = () => {
+        selectedBranchId = bSel.value;
+        renderModal();
+      };
+    }
+
+    // Gen select binding
+    document.querySelectorAll('[data-rep-gen]').forEach(btn => {
+      btn.onclick = () => {
+        selectedGen = parseInt(btn.dataset.repGen);
+        renderModal();
+      };
+    });
+
+    // Print action
+    $('#btn-print-rep').onclick = () => {
+      window.print();
+    };
+
+    // CSV export
+    $('#btn-csv-rep').onclick = () => {
+      const csvContent = '\uFEFF' + csvRows.map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `almatarid-report-${reportType}-${Date.now()}.csv`;
+      a.click();
+      toast('📊 جاري تنزيل ملف الإكسل (CSV)...');
+    };
+
+    // WhatsApp share
+    $('#btn-wa-rep').onclick = () => {
+      const msg = `📑 *${reportTitle}*\nتاريخ الاستخراج: ${new Date().toLocaleDateString('ar-SA')}\n\n— مستخرج عبر شجرة عائلة آل مطارد:\n${window.location.href}`;
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+
+    // Copy action
+    $('#btn-copy-rep').onclick = () => {
+      const text = `${reportTitle}\nتاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}\nعبر شجرة آل مطارد`;
+      navigator.clipboard.writeText(text).then(() => {
+        toast('✅ تم نسخ ملخص التقرير بنجاح!');
+      });
+    };
+  }
+
+  renderModal();
+}
+
 
 
 

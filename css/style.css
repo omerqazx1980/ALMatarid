@@ -1225,6 +1225,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .blank-tree-wrap { display: flex; flex-direction: column; gap: 14px; }
 .blank-tree-preview-box { background: #fff; border: 2px solid var(--gold); border-radius: 12px; padding: 16px; overflow: auto; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,.3); max-height: 55vh; }
 
+/* ---------- 99) تقارير جاهزة ومخصصة ---------- */
+.reports-wrap { display: flex; flex-direction: column; gap: 14px; }
+.reports-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: 8px; }
+.reports-table th { background: rgba(245,158,11,.15); color: var(--gold); padding: 8px 10px; border: 1px solid var(--line); text-align: right; }
+.reports-table td { padding: 6px 10px; border: 1px solid var(--line); color: var(--txt); }
+.reports-table tr:nth-child(even) { background: rgba(15,23,42,.4); }
+
+
 
 
 
