@@ -4167,6 +4167,7 @@ function openFamilyArchive() {
 $('#m-archive').onclick = menuClose(() => openFamilyArchive());
 $('#m-ai-photo-restore').onclick = menuClose(() => openAiPhotoRestoreModal());
 $('#m-photo-analysis').onclick = menuClose(() => openPhotoAnalysisModal());
+$('#m-exif-map').onclick = menuClose(() => openPhotoExifMapModal());
 
 /* ---------- 54) البحث بالصوت في الشجرة (فرع تجربة) ---------- */
 let voiceRecognizer = null;
@@ -9866,5 +9867,315 @@ function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
     runAnalysis(S.photos.get(firstM.id), firstM.id);
   }
 }
+
+/* ---------- 83) قراءة بيانات الصور وعرض مكانها على الخريطة (فرع تجربة) ---------- */
+function parseExifDataFromBuffer(buffer) {
+  try {
+    const view = new DataView(buffer);
+    if (view.getUint16(0, false) !== 0xFFD8) return null; // Not JPEG
+    let offset = 2;
+    const length = view.byteLength;
+    while (offset < length) {
+      if (view.getUint16(offset, false) === 0xFFE1) { // APP1
+        const exifLength = view.getUint16(offset + 2, false);
+        const header = String.fromCharCode(
+          view.getUint8(offset + 4),
+          view.getUint8(offset + 5),
+          view.getUint8(offset + 6),
+          view.getUint8(offset + 7)
+        );
+        if (header !== 'Exif') return null;
+        const tiffOffset = offset + 10;
+        const littleEndian = view.getUint16(tiffOffset, false) === 0x4949;
+        const ifd0Offset = tiffOffset + view.getUint32(tiffOffset + 4, littleEndian);
+        
+        let make = '', model = '', dateTaken = '', gpsOffset = 0;
+        const numEntries = view.getUint16(ifd0Offset, littleEndian);
+        for (let i = 0; i < numEntries; i++) {
+          const entryOffset = ifd0Offset + 2 + (i * 12);
+          const tag = view.getUint16(entryOffset, littleEndian);
+          if (tag === 0x010F) { // Make
+            const strOffset = tiffOffset + view.getUint32(entryOffset + 8, littleEndian);
+            make = getStringFromBuffer(view, strOffset, 20);
+          } else if (tag === 0x0110) { // Model
+            const strOffset = tiffOffset + view.getUint32(entryOffset + 8, littleEndian);
+            model = getStringFromBuffer(view, strOffset, 25);
+          } else if (tag === 0x0132 || tag === 0x9003) { // DateTime
+            const strOffset = tiffOffset + view.getUint32(entryOffset + 8, littleEndian);
+            dateTaken = getStringFromBuffer(view, strOffset, 20);
+          } else if (tag === 0x8825) { // GPS IFD Pointer
+            gpsOffset = tiffOffset + view.getUint32(entryOffset + 8, littleEndian);
+          }
+        }
+
+        let lat = null, lng = null, latRef = 'N', lngRef = 'E';
+        if (gpsOffset > 0 && gpsOffset < length - 2) {
+          const gpsEntries = view.getUint16(gpsOffset, littleEndian);
+          for (let i = 0; i < gpsEntries; i++) {
+            const entryOffset = gpsOffset + 2 + (i * 12);
+            const tag = view.getUint16(entryOffset, littleEndian);
+            if (tag === 0x0001) { // LatRef
+              latRef = String.fromCharCode(view.getUint8(entryOffset + 8));
+            } else if (tag === 0x0002) { // Latitude
+              const valOffset = tiffOffset + view.getUint32(entryOffset + 8, littleEndian);
+              lat = parseRational3(view, valOffset, littleEndian);
+            } else if (tag === 0x0003) { // LngRef
+              lngRef = String.fromCharCode(view.getUint8(entryOffset + 8));
+            } else if (tag === 0x0004) { // Longitude
+              const valOffset = tiffOffset + view.getUint32(entryOffset + 8, littleEndian);
+              lng = parseRational3(view, valOffset, littleEndian);
+            }
+          }
+        }
+
+        if (lat !== null && latRef === 'S') lat = -lat;
+        if (lng !== null && lngRef === 'W') lng = -lng;
+
+        return {
+          make: make.trim(),
+          model: model.trim(),
+          dateTaken: dateTaken.trim(),
+          lat,
+          lng,
+          hasGPS: (lat !== null && lng !== null)
+        };
+      }
+      offset += 2 + view.getUint16(offset + 2, false);
+    }
+  } catch (e) {
+    console.warn('EXIF parse error:', e);
+  }
+  return null;
+}
+
+function getStringFromBuffer(view, offset, maxLen) {
+  let str = '';
+  for (let i = 0; i < maxLen; i++) {
+    const c = view.getUint8(offset + i);
+    if (c === 0) break;
+    str += String.fromCharCode(c);
+  }
+  return str;
+}
+
+function parseRational3(view, offset, littleEndian) {
+  try {
+    const dNum = view.getUint32(offset, littleEndian);
+    const dDen = view.getUint32(offset + 4, littleEndian) || 1;
+    const mNum = view.getUint32(offset + 8, littleEndian);
+    const mDen = view.getUint32(offset + 12, littleEndian) || 1;
+    const sNum = view.getUint32(offset + 16, littleEndian);
+    const sDen = view.getUint32(offset + 20, littleEndian) || 1;
+    return (dNum / dDen) + ((mNum / mDen) / 60) + ((sNum / sDen) / 3600);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Convert GPS (lat, lng) to SVG coordinates on Saudi map viewBox="0 0 600 520"
+function gpsToSvgCoords(lat, lng) {
+  // Approximate projection for Saudi Arabia:
+  // Lat: 16.0 (bottom, y~460) to 32.0 (top, y~60)
+  // Lng: 35.0 (left, x~60) to 55.0 (right, x~540)
+  const minLat = 16.0, maxLat = 32.0;
+  const minLng = 34.5, maxLng = 55.5;
+  const x = Math.round(60 + ((lng - minLng) / (maxLng - minLng)) * 480);
+  const y = Math.round(460 - ((lat - minLat) / (maxLat - minLat)) * 400);
+  return { x: Math.max(30, Math.min(570, x)), y: Math.max(30, Math.min(490, y)) };
+}
+
+function openPhotoExifMapModal() {
+  // Load initial collection from member photos and events
+  let photos = [];
+  const membersWithPhotos = S.members.filter(m => S.photos.get(m.id)).slice(0, 15);
+  membersWithPhotos.forEach(m => {
+    const city = m.city || 'النماص';
+    const cCoord = CITY_COORDS[city] || CITY_COORDS['النماص'];
+    photos.push({
+      id: 'mem_' + m.id,
+      title: m.full_name,
+      url: S.photos.get(m.id),
+      city: city,
+      x: cCoord.x,
+      y: cCoord.y,
+      dateTaken: m.birth_date ? m.birth_date.substring(0, 4) + 'م' : 'تاريخ عائلي',
+      camera: 'أرشيف العائلة',
+      lat: 19.117,
+      lng: 42.133,
+      isExifLive: false,
+      memberId: m.id
+    });
+  });
+
+  let activePhoto = photos[0] || null;
+
+  function renderMapModal() {
+    const html = `
+      <div class="exif-map-wrap" style="max-width:800px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📍</span> قراءة بيانات الصور وعرض مكانها على الخريطة (GPS & EXIF)
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          تقرأ الأداة بيانات التقاط الصور (إحداثيات GPS، تاريخ الالتقاط، وطراز الكاميرا/الهاتف) وترسم كل صورة على موقع التقاطها الجغرافي على خريطة المملكة مباشرة.
+        </p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:rgba(15,23,42,.7);padding:10px 14px;border-radius:8px;border:1px solid var(--line)">
+          <label class="ai-restore-btn" style="cursor:pointer;margin:0;background:var(--gold);color:#0f172a;font-weight:700">
+            📷 رفع صور لقراءة إحداثياتها (GPS)
+            <input type="file" id="exif-upload-input" accept="image/*" multiple style="display:none">
+          </label>
+          <span style="font-size:.78rem;color:var(--mut)">يمكنك رفع عدة صور دفعة واحدة ليتم تحديد مواقعها فوراً</span>
+        </div>
+
+        <div class="exif-photo-list" id="exif-list-container">
+          ${photos.map((p, idx) => `
+            <div class="exif-photo-item ${p === activePhoto ? 'active' : ''}" data-exif-idx="${idx}">
+              <img src="${esc(p.url)}" class="exif-photo-thumb" alt="${esc(p.title)}" loading="lazy">
+              <div style="font-size:.72rem;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.title)}</div>
+              <div class="exif-meta-pill">${p.isExifLive ? '🛰️ GPS دقيق' : '📍 ' + esc(p.city)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="position:relative;background:#06101e;border:1.5px solid var(--gold);border-radius:12px;overflow:hidden">
+          <svg viewBox="0 0 600 520" style="width:100%;height:auto;max-height:360px;display:block">
+            <defs>
+              <radialGradient id="saudi-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#1e293b" stop-opacity="0.8"/>
+                <stop offset="100%" stop-color="#0f172a" stop-opacity="1"/>
+              </radialGradient>
+            </defs>
+            <rect width="600" height="520" fill="url(#saudi-glow)"/>
+            
+            <!-- Saudi Outline stylized -->
+            <path d="M 120 70 L 260 50 L 390 120 L 460 160 L 520 220 L 540 280 L 450 360 L 360 440 L 240 480 L 210 430 L 150 340 L 120 220 Z" fill="#132337" stroke="#334155" stroke-width="2" stroke-dasharray="3 3"/>
+            
+            <!-- Province lines -->
+            <path d="M 220 380 Q 230 420 240 470" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-opacity="0.4"/>
+            <text x="215" y="405" fill="#f59e0b" font-size="11" font-weight="bold" opacity="0.6">السراة (النماص)</text>
+            <text x="345" y="245" fill="#94a3b8" font-size="11" opacity="0.4">الرياض</text>
+            <text x="140" y="325" fill="#94a3b8" font-size="11" opacity="0.4">الحجاز</text>
+
+            <!-- Render photo markers on map -->
+            ${photos.map((p, idx) => {
+              const isSel = (p === activePhoto);
+              const r = isSel ? 16 : 10;
+              return `
+                <g class="exif-pin-group" data-exif-idx="${idx}" style="cursor:pointer">
+                  ${isSel ? `<circle cx="${p.x}" cy="${p.y}" r="${r + 8}" fill="none" stroke="#f59e0b" stroke-width="2" opacity="0.7">
+                    <animate attributeName="r" values="${r + 4};${r + 14};${r + 4}" dur="2s" repeatCount="indefinite"/>
+                  </circle>` : ''}
+                  <circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${isSel ? '#f59e0b' : '#0284c7'}" stroke="#fff" stroke-width="2"/>
+                  <image href="${esc(p.url)}" x="${p.x - (r - 2)}" y="${p.y - (r - 2)}" width="${(r - 2) * 2}" height="${(r - 2) * 2}" clip-path="circle(${(r - 2)}px at ${(r - 2)}px ${(r - 2)}px)"/>
+                  <text x="${p.x}" y="${p.y - r - 4}" fill="${isSel ? '#f59e0b' : '#e2e8f0'}" font-size="10" font-weight="bold" text-anchor="middle">${esc(p.title)}</text>
+                </g>
+              `;
+            }).join('')}
+          </svg>
+
+          <!-- Active photo card details overlay -->
+          ${activePhoto ? `
+            <div style="position:absolute;bottom:10px;right:10px;left:10px;background:rgba(15,23,42,.94);border:1.5px solid var(--gold);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:12px;backdrop-filter:blur(6px)">
+              <img src="${esc(activePhoto.url)}" style="width:65px;height:65px;object-fit:cover;border-radius:8px;border:1px solid var(--gold)">
+              <div style="flex:1;min-width:0;font-size:.8rem;line-height:1.5">
+                <b style="color:var(--gold);font-size:.9rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(activePhoto.title)}</b>
+                <div style="color:var(--txt)">📍 الموقع: <b>${esc(activePhoto.city)}</b> (${activePhoto.lat.toFixed(3)}° N, ${activePhoto.lng.toFixed(3)}° E)</div>
+                <div style="color:var(--mut);font-size:.74rem">📅 التاريخ: ${esc(activePhoto.dateTaken)} · 📷 الجهاز: ${esc(activePhoto.camera)}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <a href="https://www.google.com/maps?q=${activePhoto.lat},${activePhoto.lng}" target="_blank" class="fstats-btn" style="text-decoration:none;font-size:.72rem;padding:4px 8px;background:rgba(245,158,11,.15);color:var(--gold);border-color:var(--gold);white-space:nowrap">
+                  🗺️ خرائط Google ↗
+                </a>
+                ${activePhoto.memberId ? `<button type="button" class="fstats-btn" style="font-size:.72rem;padding:4px 8px" onclick="profile('${activePhoto.memberId}')">ملف العضو</button>` : ''}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Bind item click
+    document.querySelectorAll('[data-exif-idx]').forEach(el => {
+      el.onclick = () => {
+        const idx = parseInt(el.dataset.exifIdx);
+        if (photos[idx]) {
+          activePhoto = photos[idx];
+          renderMapModal();
+        }
+      };
+    });
+
+    // Bind file upload
+    const upInp = $('#exif-upload-input');
+    if (upInp) {
+      upInp.onchange = (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+        let processed = 0;
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const buffer = ev.target.result;
+            const exif = parseExifDataFromBuffer(buffer);
+            const dataUrlReader = new FileReader();
+            dataUrlReader.onload = (eUrl) => {
+              let photoLat = 19.117;
+              let photoLng = 42.133;
+              let photoCity = 'النماص (الموطن الأصلي)';
+              let isLive = false;
+              let coords = { x: 222, y: 394 };
+
+              if (exif && exif.hasGPS) {
+                photoLat = exif.lat;
+                photoLng = exif.lng;
+                isLive = true;
+                coords = gpsToSvgCoords(photoLat, photoLng);
+                photoCity = `إحداثيات GPS مباشرة (${photoLat.toFixed(2)}°, ${photoLng.toFixed(2)}°)`;
+              }
+
+              photos.unshift({
+                id: 'upload_' + Date.now() + Math.random(),
+                title: file.name.replace(/\.[^/.]+$/, ""),
+                url: eUrl.target.result,
+                city: photoCity,
+                x: coords.x,
+                y: coords.y,
+                dateTaken: exif?.dateTaken || 'اليوم',
+                camera: (exif?.make || '') + ' ' + (exif?.model || 'هاتف ذكي'),
+                lat: photoLat,
+                lng: photoLng,
+                isExifLive: isLive
+              });
+
+              processed++;
+              if (processed === files.length) {
+                activePhoto = photos[0];
+                toast(`✅ تم تحليل وقراءة بيانات ${files.length} صورة وعرضها على الخريطة!`);
+                renderMapModal();
+              }
+            };
+            dataUrlReader.readAsDataURL(file);
+          };
+          reader.readAsArrayBuffer(file);
+        });
+      };
+    }
+  }
+
+  renderMapModal();
+}
+
 
 
