@@ -62,6 +62,8 @@ $('#gate-form').addEventListener('submit', async e => {
 });
 $('#gate-x').onclick = () => $('#gate').close();
 const canEdit = () => ['owner', 'editor'].includes(S.role);
+/* ميزة 3: الزائر (أو من لم يدخل بعد) لا يرى بيانات الأحياء الشخصية (ميلاد تفصيلي/مدينة/هاتف/كنية/نبذة/صورة/صوت) — تظهر للأقارب المسجلين فقط */
+const livingHidden = m => ((S.role === 'visitor' || !S.role) && !S.code) && m.is_alive !== false;
 const delegateName = b => S.byId.get(b?.delegate_id)?.full_name || b?.label || '';
 const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.father_id), i++) if (p.id === S.branch?.root_id) return true; return false; };
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
@@ -321,8 +323,8 @@ function collapseAll() { S.open = new Set(); for (const r of S.roots) { S.open.a
 /* ann24: على الجوال يبدأ العرض بالمؤسس فقط مطويًا (طلب المالك) */
 function collapseInitial() { if (window.matchMedia('(max-width: 640px)').matches) S.open = new Set(S.roots.map(r => r.id)); else collapseAll(); } /* ann48: المؤسس مفتوح بالجوال فتظهر الشجرة */
 /* أبناء العرض: نتجاوز العضوات المخفيات (لا بطاقة لهن عند الزوار بطلب المالك) ونُظهر أبناءهن إن وُجدوا في مكانهن */
-const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (S.filterMemberIds && !S.filterMemberIds.has(c.id)) continue; if (S.hiddenBranches && S.hiddenBranches.has(c.id)) continue; if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
-const dispRoots = () => { if (S.filterMode === 'descendants' && S.filterFocalId) { const focal = S.byId.get(S.filterFocalId); return focal ? [focal] : []; } if (S.filterMode === 'ancestors' && S.filterMemberIds) { const top = S.roots.find(r => S.filterMemberIds.has(r.id)); if (top) return [top]; } const out = []; const push = m => { if (S.hiddenBranches && S.hiddenBranches.has(m.id)) return; if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
+const dispKids = m => { const out = []; for (const c of (S.kids.get(m.id) || [])) { if (S.filterMemberIds && !S.filterMemberIds.has(c.id)) continue; if (c.name_masked) out.push(...dispKids(c)); else out.push(c); } return out; };
+const dispRoots = () => { if (S.filterMode === 'descendants' && S.filterFocalId) { const focal = S.byId.get(S.filterFocalId); return focal ? [focal] : []; } if (S.filterMode === 'ancestors' && S.filterMemberIds) { const top = S.roots.find(r => S.filterMemberIds.has(r.id)); if (top) return [top]; } const out = []; const push = m => { if (m.name_masked) (S.kids.get(m.id) || []).forEach(push); else out.push(m); }; S.roots.forEach(push); return out; };
 /* نص عدد الأبناء والبنات محسوبًا من كامل الأبناء (يشمل المخفيات) ليظهر في بطاقة الأب */
 const kidsTxt = m => { const ks = S.kids.get(m.id) || []; if (!ks.length) return ''; const s = ks.filter(c => c.gender === 'male').length, d = ks.length - s; return [s ? `👦 ${s}` : '', d ? `👧 ${d}` : ''].filter(Boolean).join(' · '); };
 const kidsOf = m => S.open.has(m.id) ? dispKids(m) : [];
@@ -347,9 +349,9 @@ function renderGraph(fitView) {
     const all = dispKids(m), ks = kidsOf(m), o = ks.length > 0, hit = S.hit?.has(m.id);
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
-      <i>الجيل ${gen(m)}</i>${S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}
-      <b>${esc(cardName(m))}</b><small class="stt ${m.is_alive === false ? 'dead' : 'alive'}">${m.is_alive === false ? ripText(m) : aliveText(m)}${m.nickname ? ' · ' + esc(m.nickname) : ''}</small>${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
-      <small class="meta">${esc([m.city ? '📍 ' + m.city : '', kidsTxt(m)].filter(Boolean).join(' · '))}</small>
+      <i>الجيل ${gen(m)}</i>${!livingHidden(m) && S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}
+      <b>${esc(cardName(m))}</b><small class="stt ${m.is_alive === false ? 'dead' : 'alive'}">${m.is_alive === false ? ripText(m) : aliveText(m)}${!livingHidden(m) && m.nickname ? ' · ' + esc(m.nickname) : ''}</small>${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
+      <small class="meta">${esc([(m.city && !livingHidden(m) ? '📍 ' + m.city : ''), kidsTxt(m)].filter(Boolean).join(' · '))}</small>
       ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'} ${all.length}</button>` : ''}</div>`;
   }
   const st = $('#stage'); st.style.width = mw + 'px'; st.style.height = mh + 'px';
@@ -397,7 +399,7 @@ function node(m) {
   const k = dispKids(m), o = S.open.has(m.id), hit = S.hit?.has(m.id);
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
     ${k.length ? `<button class="tg tgl" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'}</button>` : '<span class="tg dot"></span>'}
-    <div class="nm" data-p="${m.id}" tabindex="0" role="button">${S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}<small>الجيل ${gen(m)}${m.city ? ' · 📍 ' + esc(m.city) : ''}</small></div>
+    <div class="nm" data-p="${m.id}" tabindex="0" role="button">${!livingHidden(m) && S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${!livingHidden(m) && m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}<small>الجيل ${gen(m)}${m.city && !livingHidden(m) ? ' · 📍 ' + esc(m.city) : ''}</small></div>
     ${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${kidsTxt(m) ? `<span class="ct">${kidsTxt(m)}</span>` : ''}${m.is_alive === false ? `<span class="rip">${ripText(m)}</span>` : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
 }
@@ -544,6 +546,7 @@ function profile(id) {
   const datePair = iso => { if (!iso) return ''; const h = hijriShort(new Date(iso + 'T00:00:00Z')); return `${h} (${iso.replaceAll('-', '/')}م)`; };
   const isVisitor = (S.role === 'visitor' || !S.role) && !S.code;
   const isLiving = m.is_alive !== false;
+  const lh = isVisitor && isLiving; /* ميزة 3: إخفاء بيانات الأحياء عن الزوار */
   const born = isVisitor && isLiving ? (m.birth_year_text ? `${esc(m.birth_year_text)} (التاريخ التفصيلي محمي 🔒)` : 'محمي للأقارب المسجلين 🔒') : (m.birth_date ? datePair(m.birth_date) : (m.birth_year_text || ''));
   const died = m.is_alive === false ? (m.death_date ? datePair(m.death_date) : (m.death_year_text || 'غير معروف')) : '';
   $('#profile-body').dataset.id = id;
@@ -552,16 +555,16 @@ function profile(id) {
   const livingNotice = isVisitor && isLiving ? `<div style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:.76rem;color:var(--gold);display:flex;justify-content:space-between;align-items:center"><span>🔒 بيانات الأحياء الشخصية محمية وتظهر للأقارب المسجلين فقط.</span><button type="button" class="x" onclick="$('#profile').close();$('#btn-login').click();" style="color:var(--gold);font-weight:700">دخول الأقارب ←</button></div>` : '';
   const isMe = localStorage.getItem('almatarid_me_id') === id;
   const meBtn = isMe ? '<button type="button" class="ghost" data-act="unset-me" style="color:#10b981;font-weight:700">⭐ مسجل كـ «أنا» (إلغاء)</button>' : '<button type="button" class="ghost" data-act="set-me">👤 هذا أنا</button>';
-  $('#profile-body').innerHTML = `${livingNotice}${S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
-    <p class="sub">${m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · ' + ripText(m) : ''}</p>
+  $('#profile-body').innerHTML = `${livingNotice}${!lh && S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
+    <p class="sub">${!lh && m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · ' + ripText(m) : ''}</p>
     ${m.achievement_badge ? (m.badge_is_job ? `<p class="sub">الوظيفة: ${esc(m.achievement_badge)}</p>` : `<p><span class="bd">${esc(m.achievement_badge)}</span></p>`) : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? (isVisitor ? 'محمية 🔒' : esc(mother.full_name)) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
       ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
-      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${row('المدينة', esc(m.city))}${row('صور المناسبات', tagCountText(id))}${row('المشاركات', partText(id))}
+      ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${lh ? '' : row('المدينة', esc(m.city))}${row('صور المناسبات', tagCountText(id))}${row('المشاركات', partText(id))}
       ${row('الهاتف', phoneText)}</dl>
-    ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
-    ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
+    ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
+    ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
     ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
@@ -1263,7 +1266,7 @@ $('#m-inbox').onclick = inbox;
 $('#empty').addEventListener('click', e => { if (e.target.id === 'add-root') memberForm(null, null); });
 
 /* ---------- أقسام الاستعراض: الأسماء، المدن، الشرف، القرابة، التصدير ---------- */
-const nameBtn = m => m.name_masked ? '' : `<button class="nl" data-so="${esc(m.id)}">${esc(m.full_name)}<small>الجيل ${gen(m)}${m.city ? ' · ' + esc(m.city) : ''}</small></button>`;
+const nameBtn = m => m.name_masked ? '' : `<button class="nl" data-so="${esc(m.id)}">${esc(m.full_name)}<small>الجيل ${gen(m)}${m.city && !livingHidden(m) ? ' · ' + esc(m.city) : ''}</small></button>`;
 const byName = (a, b) => a.full_name.localeCompare(b.full_name, 'ar');
 const menuClose = fn => () => { $('.more').open = false; fn(); };
 
@@ -4471,7 +4474,7 @@ function openFamilyBook(activeTab = 'births') {
           <tbody>
             ${list.map((m, i) => {
               const father = m.father_id ? S.byId.get(m.father_id) : null;
-              const bYear = m.birth_year_text || (m.birth_date ? datePair(m.birth_date) : 'غير مدون');
+              const bYear = livingHidden(m) ? (m.birth_year_text ? m.birth_year_text + ' (التاريخ محمي 🔒)' : 'محمي 🔒') : (m.birth_year_text || (m.birth_date ? datePair(m.birth_date) : 'غير مدون'));
               return `
                 <tr>
                   <td>${i + 1}</td>
@@ -4480,7 +4483,7 @@ function openFamilyBook(activeTab = 'births') {
                   <td>${esc(bYear)}</td>
                   <td>${father ? nameBtn(father) : '—'}</td>
                   <td>${m.birth_order || '—'}</td>
-                  <td>${esc(m.city || 'الجنوب')}</td>
+                  <td>${livingHidden(m) ? '—' : esc(m.city || 'الجنوب')}</td>
                 </tr>
               `;
             }).join('')}
@@ -7437,12 +7440,12 @@ function renderDirCard(m) {
   const hit = S.hit?.has(m.id);
   return `
     <div class="dir-card${hit ? ' hit' : ''}${isMe ? ' me-highlight' : ''}" data-p="${m.id}" tabindex="0" role="button">
-      ${photo ? `<img class="gimg2" src="${photo}" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold)">` : `<div style="width:38px;height:38px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">${isFemale(m) ? '👧' : '👤'}</div>`}
+      ${photo && !livingHidden(m) ? `<img class="gimg2" src="${photo}" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold)">` : `<div style="width:38px;height:38px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">${isFemale(m) ? '👧' : '👤'}</div>`}
       <div style="flex:1;min-width:0">
         <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem;color:var(--txt)">${esc(cardName(m))}</b>
         <div style="font-size:.72rem;color:var(--mut);display:flex;gap:6px;align-items:center;margin-top:2px;flex-wrap:wrap">
           <span style="color:var(--gold)">الجيل ${gen(m)}</span>
-          ${m.city ? `<span>· 📍 ${esc(m.city)}</span>` : ''}
+          ${m.city && !livingHidden(m) ? `<span>· 📍 ${esc(m.city)}</span>` : ''}
           ${isDead ? `<span style="color:#94a3b8">· ${ripText(m)}</span>` : '<span style="color:#10b981">· حي</span>'}
           ${isMe ? '<span style="color:#fbbf24;font-weight:700">· أنت ⭐</span>' : ''}
         </div>
@@ -7488,180 +7491,3 @@ if (mMemberDir) {
     toast('📖 تم فتح دليل الأعضاء الكامل');
   });
 }
-
-/* ============================================================
-   71) أشجار منفصلة وإظهار/إخفاء الفروع
-   ============================================================ */
-S.hiddenBranches = S.hiddenBranches || new Set();
-
-function getMajorBranches() {
-  const list = [];
-  const seenRoots = new Set();
-  (S.branches || []).forEach(b => {
-    if (b.root_id && S.byId.has(b.root_id) && !seenRoots.has(b.root_id)) {
-      seenRoots.add(b.root_id);
-      const m = S.byId.get(b.root_id);
-      list.push({
-        id: b.root_id,
-        name: b.label ? `فرع ${b.label}` : `فرع ${m.full_name}`,
-        root: m
-      });
-    }
-  });
-
-  if (S.roots && S.roots.length > 0) {
-    S.roots.forEach(r => {
-      const kids = S.kids.get(r.id) || [];
-      kids.forEach(k => {
-        if (!seenRoots.has(k.id)) {
-          seenRoots.add(k.id);
-          list.push({
-            id: k.id,
-            name: `فرع ${k.full_name}`,
-            root: k
-          });
-        }
-      });
-    });
-  }
-  return list;
-}
-
-function updateBranchVisibilityBar() {
-  const bar = $('#branch-visibility-bar');
-  const chipsList = $('#branch-chips-list');
-  if (!bar || !chipsList) return;
-
-  const branches = getMajorBranches();
-  if (!branches.length) {
-    bar.style.display = 'none';
-    return;
-  }
-
-  bar.style.display = 'flex';
-  chipsList.innerHTML = branches.map(b => {
-    const isHidden = S.hiddenBranches.has(b.id);
-    return `
-      <button type="button" class="branch-chip ${isHidden ? 'hidden-branch' : 'active'}" data-branch-toggle="${b.id}" title="${isHidden ? 'انقر لإظهار هذا الفرع' : 'انقر لإخفاء هذا الفرع'}">
-        <span>${isHidden ? '👁️‍🗨️' : '👁️'}</span>
-        <span>${esc(b.name)}</span>
-      </button>
-    `;
-  }).join('');
-}
-
-function toggleBranch(branchId) {
-  if (S.hiddenBranches.has(branchId)) {
-    S.hiddenBranches.delete(branchId);
-    toast('تم إظهار الفرع');
-  } else {
-    S.hiddenBranches.add(branchId);
-    toast('تم إخفاء الفرع من الشجرة');
-  }
-  updateBranchVisibilityBar();
-  render(true);
-}
-
-function isolateBranch(branchId) {
-  const branches = getMajorBranches();
-  S.hiddenBranches = new Set(branches.filter(b => b.id !== branchId).map(b => b.id));
-  updateBranchVisibilityBar();
-  render(true);
-  const target = branches.find(b => b.id === branchId);
-  toast(`🌿 تم عزل وعرض «${target ? target.name : ''}» فقط`);
-}
-
-function showAllBranches() {
-  S.hiddenBranches.clear();
-  updateBranchVisibilityBar();
-  render(true);
-  toast('تم إظهار جميع فروع الشجرة');
-}
-
-function openBranchTreesModal() {
-  const branches = getMajorBranches();
-
-  const countBranch = (rootId) => {
-    let count = 0;
-    const q = [rootId];
-    while (q.length) {
-      const cur = q.shift();
-      count++;
-      const ks = S.kids.get(cur) || [];
-      ks.forEach(k => q.push(k.id));
-    }
-    return count;
-  };
-
-  const html = `
-    <div style="max-width:560px">
-      <div class="fstats-head">
-        <h2>🌿 أشجار الفروع: إظهار وإخفاء</h2>
-        <p class="sub">فصل فروع العائلة للتركيز على فرع مستقل أو إخفاء الفروع الأخرى من الشجرة</p>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px 0">
-        <span style="font-size:.85rem;color:var(--gold);font-weight:700">فروع العائلة الكبرى (${branches.length} فروع):</span>
-        <div style="display:flex;gap:6px">
-          <button type="button" id="bmodal-show-all" class="fstats-btn" style="padding:4px 10px;font-size:.75rem">إظهار الكل</button>
-          <button type="button" id="bmodal-hide-all" class="fstats-btn" style="padding:4px 10px;font-size:.75rem;background:transparent;border-color:var(--line);color:var(--mut)">إخفاء الكل</button>
-        </div>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;padding-left:4px">
-        ${branches.map(b => {
-          const isHidden = S.hiddenBranches.has(b.id);
-          const totalInBranch = countBranch(b.id);
-          return `
-            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.85);border:1.5px solid ${isHidden ? 'var(--line)' : 'var(--gold)'};border-radius:10px;padding:10px 14px;gap:10px">
-              <div>
-                <b style="font-size:.95rem;color:${isHidden ? 'var(--mut)' : '#f8fafc'}">${esc(b.name)}</b>
-                <div style="font-size:.75rem;color:var(--mut);margin-top:2px">
-                  رأس الفرع: ${esc(b.root.full_name)} · 👥 ${totalInBranch} فرد
-                </div>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <button type="button" class="fstats-btn" data-isolate-branch="${b.id}" style="padding:4px 10px;font-size:.75rem;background:rgba(245,158,11,.15);border-color:var(--gold);color:var(--gold)">
-                  عزل هذا الفرع فقط
-                </button>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:.8rem;color:${isHidden ? '#ef4444' : '#10b981'};font-weight:700">
-                  <input type="checkbox" data-modal-branch-toggle="${b.id}" ${isHidden ? '' : 'checked'}>
-                  <span>${isHidden ? 'مخفي' : 'ظاهر'}</span>
-                </label>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-
-  showInfo(html);
-
-  const bShowAll = $('#bmodal-show-all');
-  if (bShowAll) bShowAll.onclick = () => { showAllBranches(); openBranchTreesModal(); };
-  const bHideAll = $('#bmodal-hide-all');
-  if (bHideAll) bHideAll.onclick = () => { S.hiddenBranches = new Set(branches.map(b => b.id)); updateBranchVisibilityBar(); render(true); openBranchTreesModal(); };
-  document.querySelectorAll('[data-modal-branch-toggle]').forEach(ch => {
-    ch.onchange = () => { toggleBranch(ch.dataset.modalBranchToggle); openBranchTreesModal(); };
-  });
-  document.querySelectorAll('[data-isolate-branch]').forEach(btn => {
-    btn.onclick = () => { isolateBranch(btn.dataset.isolateBranch); $('#profile').close(); };
-  });
-}
-
-document.addEventListener('click', e => {
-  const chip = e.target.closest('[data-branch-toggle]');
-  if (chip) {
-    toggleBranch(chip.dataset.branchToggle);
-    return;
-  }
-});
-
-const branchVisAll = $('#branch-vis-all');
-if (branchVisAll) branchVisAll.onclick = showAllBranches;
-
-const mBranchTrees = $('#m-branch-trees');
-if (mBranchTrees) mBranchTrees.onclick = menuClose(() => openBranchTreesModal());
-
-setTimeout(updateBranchVisibilityBar, 300);
