@@ -13166,67 +13166,23 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
 
 /* ---------- 96) مجلس العائلة - الأعضاء والقرارات (فرع تجربة) ---------- */
 function openCouncilDecreesModal(initialTab = 'decrees') {
-  const DEFAULT_DECREES = [
-    {
-      id: 'dec_1',
-      number: '1445/01',
-      title: 'اعتماد اللائحة التنفيذية لصندوق تكافل أسرة آل مطارد',
-      dateText: '15 ربيع الأول 1445هـ',
-      status: 'active',
-      statusLabel: '🟢 نافذ وسارٍ',
-      category: 'مالي وتكافلي',
-      signatories: 'رئيس المجلس، وممثلو فروع النماص والرياض والغربية',
-      summary: 'بناءً على اجتماع مجلس الأسرة المنعقد بتاريخ 15 ربيع الأول 1445هـ، تقرر بالإجماع اعتماد اللائحة التنظيمية لصندوق التكافل، وتحديد الحساب البنكي المعتمد، وتسمية أمين الصندوق والمشرفين الماليين، على أن تُصرف المعونات وفق المعايير والضوابط المعتمدة في اللائحة.'
-    },
-    {
-      id: 'dec_2',
-      number: '1445/02',
-      title: 'تحديد موعد ومقر الاجتماع السنوي العام لعام 1446هـ',
-      dateText: '10 رجب 1445هـ',
-      status: 'active',
-      statusLabel: '🟢 نافذ وسارٍ',
-      category: 'اجتماعات وفعاليات',
-      signatories: 'أمانة المجلس ولجنة الفعاليات',
-      summary: 'تقرر أن يُعقد ملتقى العائلة السنوي القادم في الموطن الأصلي بمدينة النماص (محافظة عسير) في ثالث أيام عيد الفطر المبارك، وتكليف لجنة الفعاليات بوضع البرنامج الثقافي وتكريم المتفوقين وتوجيه الدعوات لعموم أفراد الأسرة.'
-    },
-    {
-      id: 'dec_3',
-      number: '1444/04',
-      title: 'مبادرة رقمنة وتوثيق شجرة العائلة الموحدة',
-      dateText: '25 شوال 1444هـ',
-      status: 'done',
-      statusLabel: '✅ منجز ومعتمد',
-      category: 'أنساب وتوثيق',
-      signatories: 'هيئة المجلس ولجنة الأنساب',
-      summary: 'اعتماد بناء المنصة الرقمية التفاعلية لشجرة وتاريخ أسرة آل مطارد، وحصر الفروع وتدقيق الأسماء بالتنسيق المباشر مع مسؤولي الفروع لحفظ النسب وصيانة التاريخ من التحريف.'
-    }
-  ];
-
-  const DEFAULT_COUNCIL_MEMBERS = [
-    { role: 'رئيس مجلس الأسرة', name: 'الشيخ صالح بن مسفر المطارد', branch: 'المجلس العام', icon: '👑' },
-    { role: 'نائب الرئيس', name: 'المهندس علي بن محمد المطارد', branch: 'فرع الرياض', icon: '🏛️' },
-    { role: 'الأمين العام للمجلس', name: 'الأستاذ سعد بن صالح المطارد', branch: 'فرع النماص', icon: '📜' },
-    { role: 'مسؤول فرع النماص والسراة', name: 'أ. مسفر بن علي المطارد', branch: 'منطقة عسير', icon: '📍' },
-    { role: 'مسؤول فرع الرياض والوسطى', name: 'أ. فهد بن مسفر المطارد', branch: 'منطقة الرياض', icon: '📍' },
-    { role: 'مسؤول فرع الغربية (جدة ومكة)', name: 'أ. عبدالرحمن بن صالح', branch: 'منطقة مكة المكرمة', icon: '📍' },
-    { role: 'رئيس لجنة صندوق التكافل', name: 'د. محمد بن سعد المطارد', branch: 'اللجنة المالية', icon: '🤝' },
-    { role: 'رئيس لجنة الأنساب والتوثيق', name: 'أ.د. سعيد بن محمد المطارد', branch: 'لجنة التاريخ', icon: '🌳' }
-  ];
-
-  const localDecrees = JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]');
-  const allDecrees = [...localDecrees, ...DEFAULT_DECREES];
+  /* قرارات وأعضاء المجلس من إدخال المستخدم فقط — بلا قرارات ولا تشكيل افتراضيين مختلقين */
+  const readDecrees = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]'); } catch (_) { return []; } };
+  const localDecrees = readDecrees();
+  const allDecrees = [...localDecrees];
+  const readMembers = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_members') || '[]'); } catch (_) { return []; } };
+  const allMembers = readMembers();
 
   let currentTab = initialTab; // 'decrees', 'members'
   let searchQuery = '';
+  let refocusSearch = false; /* إعادة التركيز لحقل البحث بعد إعادة الرسم عند الكتابة */
 
   function renderModal() {
     const filteredDecrees = allDecrees.filter(d => {
       if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return d.title.toLowerCase().includes(q) ||
-        d.number.toLowerCase().includes(q) ||
-        d.summary.toLowerCase().includes(q) ||
-        d.category.toLowerCase().includes(q);
+      const q = stripKin(normAr(searchQuery));
+      const hay = x => stripKin(normAr([x.title, x.number, x.summary, x.category].join(' ')));
+      return hay(d).includes(q);
     });
 
     const html = `
@@ -13239,16 +13195,16 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          المنصة الرسمية المعتمدة لمجلس عائلة آل مطارد: استعراض تشكيل هيئة المجلس واللجان المنبثقة، وسجل القرارات والتعاميم الصادرة المنظمة لمصالح واجتماعات الأسرة.
+          صفحة مجلس عائلة آل مطارد: تشكيل الهيئة وسجل القرارات والتعاميم — يُضاف التشكيل والقرارات من المالك أو المحرر.
         </p>
 
         <!-- Navigation Tabs -->
         <div class="transcribe-tabs">
           <button type="button" class="transcribe-tab-btn ${currentTab === 'decrees' ? 'active' : ''}" id="tab-btn-decrees">
-            📜 سجل القرارات والتعاميم المعتمدة (${allDecrees.length})
+            📜 سجل القرارات والتعاميم (${allDecrees.length})
           </button>
           <button type="button" class="transcribe-tab-btn ${currentTab === 'members' ? 'active' : ''}" id="tab-btn-members">
-            👥 أعضاء وهيئة المجلس واللجان (${DEFAULT_COUNCIL_MEMBERS.length})
+            👥 أعضاء وهيئة المجلس واللجان (${allMembers.length})
           </button>
         </div>
 
@@ -13265,7 +13221,7 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
                 ` : ''}
               </div>
 
-              ${filteredDecrees.map(d => `
+              ${filteredDecrees.length ? filteredDecrees.map(d => `
                 <div class="council-decree-card">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
                     <div>
@@ -13300,26 +13256,45 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
                     </button>
                   </div>
                 </div>
-              `).join('')}
+              `).join('') : `
+                <div style="text-align:center;padding:32px 10px;color:var(--mut)">
+                  <div style="font-size:2rem;margin-bottom:8px">📜</div>
+                  <div>لا توجد قرارات بعد — يُصدر المالك أو المحرر أول قرار عبر الزر أعلاه.</div>
+                </div>
+              `}
             </div>
           ` : `
             <div style="display:flex;flex-direction:column;gap:12px">
               <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
                 <b style="color:var(--gold);font-size:.95rem">هيئة مجلس أسرة آل مطارد لدورته الحالية</b>
-                <div style="font-size:.78rem;color:var(--txt);margin-top:3px">المجلس هو المرجع الرسمي لتمثيل الأسرة وإدارة شؤونها وأوقافها ورعاية لقاءاتها السنوية.</div>
+                <div style="font-size:.78rem;color:var(--txt);margin-top:3px">يُشكَّل المجلس من المالك أو المحرر، ويظهر هنا بعد إضافته — كل عضو مربوط بملفه في الشجرة.</div>
               </div>
 
+              ${canEdit() ? `
+                <div style="display:flex;justify-content:flex-end">
+                  <button type="button" class="fstats-btn" id="btn-add-council-member" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:5px 12px">
+                    ➕ إضافة عضو مجلس
+                  </button>
+                </div>
+              ` : ''}
+
               <div class="council-grid">
-                ${DEFAULT_COUNCIL_MEMBERS.map(m => `
+                ${allMembers.length ? allMembers.map(m => `
                   <div class="council-member-card">
-                    <div style="font-size:1.6rem">${m.icon}</div>
+                    <div style="font-size:1.6rem">${esc(m.icon || '👤')}</div>
                     <div style="min-width:0;flex:1">
                       <b style="color:var(--gold);font-size:.88rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</b>
                       <div style="font-size:.76rem;color:var(--txt);font-weight:700">${esc(m.role)}</div>
                       <div style="font-size:.7rem;color:var(--mut)">${esc(m.branch)}</div>
+                      ${m.memberId ? `<button type="button" class="x" style="font-size:.72rem;color:var(--gold);font-weight:700" onclick="profile('${m.memberId}')">👤 ملفه بالشجرة</button>` : ''}
                     </div>
                   </div>
-                `).join('')}
+                `).join('') : `
+                  <div style="text-align:center;padding:32px 10px;color:var(--mut);grid-column:1/-1">
+                    <div style="font-size:2rem;margin-bottom:8px">👥</div>
+                    <div>لم يُشكَّل المجلس بعد — يضيف المالك أو المحرر أعضاءه من أفراد الشجرة.</div>
+                  </div>
+                `}
               </div>
             </div>
           `}
@@ -13344,8 +13319,10 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
     if (sInp) {
       sInp.oninput = (e) => {
         searchQuery = e.target.value;
+        refocusSearch = true;
         renderModal();
       };
+      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (_) {} }
     }
 
     // WhatsApp share
@@ -13374,36 +13351,60 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
       };
     });
 
-    // Add decree action
+    // Add decree action — نموذج بدل سلسلة النوافذ المنبثقة (الزر يظهر للمالك/المحرر فقط)
     const addBtn = $('#btn-add-decree');
     if (addBtn) {
       addBtn.onclick = () => {
-        const number = prompt('رقم القرار (مثال: 1446/01):');
-        if (!number) return;
-        const title = prompt('موضوع القرار أو التعميم:');
-        if (!title) return;
-        const category = prompt('التصنيف (تنظيمي، مالي، اجتماعي، أنساب):') || 'عام';
-        const summary = prompt('نص القرار وموجزه التنفيذي:') || '';
-        const signatories = prompt('المعتمدون والموقعون:') || 'مجلس الأسرة';
+        openForm('➕ إصدار قرار مجلس جديد', [
+          { k: 'number', label: 'رقم القرار (مثال: 1446/01)', req: true, val: '' },
+          { k: 'title', label: 'موضوع القرار أو التعميم', req: true, val: '' },
+          { k: 'category', label: 'التصنيف', type: 'select', opts: [['عام', 'عام'], ['تنظيمي', 'تنظيمي'], ['مالي', 'مالي'], ['اجتماعي', 'اجتماعي'], ['أنساب', 'أنساب']], val: 'عام' },
+          { k: 'dateText', label: 'التاريخ', val: new Date().toLocaleDateString('ar-SA') },
+          { k: 'summary', label: 'نص القرار وموجزه التنفيذي', type: 'area', req: true, val: '' },
+          { k: 'signatories', label: 'المعتمدون والموقعون', val: 'مجلس الأسرة' }
+        ], async d => {
+          const newDec = {
+            id: 'dec_user_' + Date.now(),
+            number: (d.number || '').trim(),
+            title: (d.title || '').trim(),
+            dateText: (d.dateText || '').trim(),
+            status: 'active',
+            statusLabel: '🟢 نافذ وسارٍ',
+            category: d.category,
+            signatories: (d.signatories || '').trim() || 'مجلس الأسرة',
+            summary: (d.summary || '').trim()
+          };
+          const stored = readDecrees();
+          stored.unshift(newDec);
+          localStorage.setItem('almatarid_council_decrees', JSON.stringify(stored));
+          allDecrees.unshift(newDec);
+          toast('✅ تم إصدار قرار المجلس بنجاح!');
+          renderModal();
+        });
+      };
+    }
 
-        const newDec = {
-          id: 'dec_user_' + Date.now(),
-          number,
-          title,
-          dateText: new Date().toLocaleDateString('ar-SA'),
-          status: 'active',
-          statusLabel: '🟢 نافذ وسارٍ',
-          category,
-          signatories,
-          summary
-        };
-
-        const stored = JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]');
-        stored.unshift(newDec);
-        localStorage.setItem('almatarid_council_decrees', JSON.stringify(stored));
-        allDecrees.unshift(newDec);
-        toast('✅ تم إصدار وتوثيق قرار المجلس بنجاح!');
-        renderModal();
+    // Add council member action — عضو مربوط بملفه في الشجرة (المالك/المحرر فقط)
+    const addMemBtn = $('#btn-add-council-member');
+    if (addMemBtn) {
+      addMemBtn.onclick = () => {
+        const memOpts = [...S.members].sort(byName).map(m => [m.id, cardLongName(m)]);
+        openForm('➕ إضافة عضو مجلس', [
+          { k: 'memberId', label: 'العضو (من أفراد الشجرة)', type: 'select', opts: memOpts, val: '' },
+          { k: 'role', label: 'المنصب في المجلس', req: true, val: '' },
+          { k: 'branch', label: 'الفرع أو اللجنة', val: '' }
+        ], async d => {
+          const m = S.byId.get(d.memberId);
+          if (!m) throw new Error('اختر العضو من الشجرة');
+          if (allMembers.some(x => x.memberId === m.id)) throw new Error('هذا العضو في المجلس بالفعل');
+          const nm = { memberId: m.id, name: cardLongName(m), role: (d.role || '').trim(), branch: (d.branch || '').trim(), icon: '👤' };
+          const stored = readMembers();
+          stored.push(nm);
+          localStorage.setItem('almatarid_council_members', JSON.stringify(stored));
+          allMembers.push(nm);
+          toast('✅ تمت إضافة عضو المجلس بنجاح!');
+          renderModal();
+        });
       };
     }
   }
