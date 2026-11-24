@@ -1077,3 +1077,9 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .origin-sec{background:rgba(15,23,42,.7);border:1px solid var(--line);border-radius:10px;padding:14px}
 .origin-sec h3{color:var(--gold);font-size:1rem;margin:0 0 8px 0;display:flex;align-items:center;gap:6px}
 .origin-chain{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:.82rem;background:rgba(245,158,11,.08);padding:8px 12px;border-radius:8px;border:1px dashed var(--gold);margin:8px 0}
+
+/* ---------- 79) طلب مساعدة من الأقارب ---------- */
+.help-req-card{background:rgba(15,23,42,.85);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px;transition:all .15s ease}
+.help-req-card.open{border-color:var(--gold)}
+.help-req-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.help-req-badge{background:rgba(245,158,11,.15);color:var(--gold);border-radius:12px;padding:2px 8px;font-size:.73rem;font-weight:700}

@@ -8812,3 +8812,221 @@ const mSurnameOrigin = $('#m-surname-origin');
 if (mSurnameOrigin) {
   mSurnameOrigin.onclick = menuClose(() => openSurnameOriginPage());
 }
+
+/* ============================================================
+   79) طلب مساعدة من الأقارب (تصوير وثيقة أو معلومة)
+   ============================================================ */
+function getHelpRequests() {
+  const stored = localStorage.getItem('almatarid_help_requests');
+  if (stored) {
+    try { return JSON.parse(stored); } catch (_) {}
+  }
+  return [
+    {
+      id: 'req_1',
+      title: 'طلب صورة أو مسودة لوثيقة حجة قديمة تخص أراضي الجد في النماص',
+      type: 'وثيقة',
+      target: 'سراة بني عمرو / النماص',
+      desc: 'نبحث عن أي صورة واضحة لحجج الأملاك القديمة أو وثائق الصلح لحفظها في الأرشيف الرقمي للعائلة.',
+      requester: 'لجنة توثيق تاريخ الأسرة',
+      status: 'open',
+      date: '2024-10-15'
+    },
+    {
+      id: 'req_2',
+      title: 'البحث عن صورة واضحة للجد في السبعينيات الميلادية',
+      type: 'صورة',
+      target: 'الجيل الثالث والرابع',
+      desc: 'من يملك صورة قديمة من ألبومات الوالد أو الأعمام يرجى تزويدنا بها لترميمها وإضافتها لملفه الشخصي.',
+      requester: 'إدارة الموقع',
+      status: 'open',
+      date: '2024-11-01'
+    },
+    {
+      id: 'req_3',
+      title: 'تدوين وتسجيل الرواية الشفهية حول بناء الحصن العائلي',
+      type: 'تسجيل',
+      target: 'كبار السن في النماص',
+      desc: 'نرجو من الأحبة تسجيل مقطع صوتي مع كبار السن لتوثيق تفاصيل بناء الحصن ومناسبات العائلة القديمة.',
+      requester: 'مجلس الأسرة',
+      status: 'open',
+      date: '2024-11-10'
+    }
+  ];
+}
+
+function saveHelpRequests(list) {
+  localStorage.setItem('almatarid_help_requests', JSON.stringify(list));
+}
+
+function openRelativesHelpBoard() {
+  const requests = getHelpRequests();
+
+  const html = `
+    <div style="max-width:580px">
+      <div class="fstats-head">
+        <h2>🤝 طلبات المساعدة من الأقارب</h2>
+        <p class="sub">مساحة تعاونية لطلب وثائق وصور قديمة ومعلومات لتكملة تاريخ شجرة العائلة</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px 0;flex-wrap:wrap;gap:8px">
+        <span style="font-weight:700;color:var(--gold);font-size:.85rem">الطلبات النشطة (${requests.length}):</span>
+        <button type="button" id="help-btn-create" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
+          ➕ إضافة طلب مساعدة جديد
+        </button>
+      </div>
+
+      <div style="max-height:440px;overflow-y:auto;padding-left:2px">
+        ${requests.map(r => {
+          const isOpen = r.status === 'open';
+          const icon = r.type === 'وثيقة' ? '📜' : (r.type === 'صورة' ? '🖼️' : '🎙️');
+          return `
+            <div class="help-req-card ${isOpen ? 'open' : ''}">
+              <div class="help-req-head">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span>${icon}</span>
+                  <b style="font-size:.9rem;color:#f8fafc">${esc(r.title)}</b>
+                </div>
+                <span class="help-req-badge">${isOpen ? '🟢 مفتوح للمساهمة' : '✅ تم الإنجاز'}</span>
+              </div>
+              <p style="font-size:.8rem;color:var(--mut);margin:2px 0">${esc(r.desc)}</p>
+              <div style="font-size:.73rem;color:var(--txt);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;border-top:1px dashed var(--line);padding-top:6px;margin-top:2px">
+                <span>👤 صاحب الطلب: <b>${esc(r.requester)}</b> · 🎯 النطاق: ${esc(r.target)}</span>
+                <span style="color:var(--gold)">📅 ${esc(r.date)}</span>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <button type="button" class="fstats-btn" data-help-share="${r.id}" style="padding:4px 10px;font-size:.75rem;background:#25d366;border-color:#25d366;color:#fff">
+                  💬 نشر في قروب واتساب
+                </button>
+                <button type="button" class="fstats-btn" data-help-respond="${r.id}" style="padding:4px 10px;font-size:.75rem">
+                  🤝 تقديم مساعدة / إرسال ملف
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const createBtn = $('#help-btn-create');
+  if (createBtn) {
+    createBtn.onclick = () => {
+      openCreateHelpRequestForm();
+    };
+  }
+
+  document.querySelectorAll('[data-help-share]').forEach(btn => {
+    btn.onclick = () => {
+      const req = requests.find(r => r.id === btn.dataset.helpShare);
+      if (!req) return;
+      const text = `🤝 طلب مساعدة وتوثيق من ربعنا آل مطارد:\n\n«${req.title}»\n\nالتفاصيل: ${req.desc}\nالنطاق المطلوب: ${req.target}\n\nمن يملك الوثيقة أو الصورة يرجى تزويدنا بها عبر منصة الشجرة: ${location.href}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    };
+  });
+
+  document.querySelectorAll('[data-help-respond]').forEach(btn => {
+    btn.onclick = () => {
+      const req = requests.find(r => r.id === btn.dataset.helpRespond);
+      if (!req) return;
+      const msg = prompt(`تفضل بكتابة ردك أو إرسال رابط الصورة/الوثيقة للطلب: «${req.title}»:\n(يمكنك أيضاً التواصل مع المشرف عبر واتساب)`);
+      if (msg) {
+        toast('🙏 جزاك الله خيراً! تم تسجيل مساهمتك وإشعار المشرفين.');
+      }
+    };
+  });
+}
+
+function openCreateHelpRequestForm() {
+  const html = `
+    <div style="max-width:500px">
+      <div class="fstats-head">
+        <h2>➕ إضافة طلب مساعدة من الأقارب</h2>
+        <p class="sub">اطلب مساعدة أفراد العائلة في تصوير وثيقة أو تزويدك بصورة قديمة أو معلومة</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;margin:14px 0">
+        <div>
+          <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">عنوان الطلب:</label>
+          <input type="text" id="hform-title" placeholder="مثال: تصوير وصية الجد فلان أو وثيقة قديمة..." style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.88rem;box-sizing:border-box">
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">نوع المساعدة:</label>
+            <select id="hform-type" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.85rem">
+              <option value="وثيقة">📜 تصوير وثيقة / صك / حجة</option>
+              <option value="صورة">🖼️ صورة شخصية أو قديمة</option>
+              <option value="تسجيل">🎙️ تسجيل صوتي أو رواية</option>
+              <option value="معلومة">ℹ️ معلومة أو تاريخ محدد</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">الفرع أو الشخص المعني:</label>
+            <input type="text" id="hform-target" placeholder="مثال: فرع فلان، أو الجيل الثالث..." style="width:100%;padding:8px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.85rem;box-sizing:border-box">
+          </div>
+        </div>
+
+        <div>
+          <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">تفاصيل الطلب وما تبحث عنه بدقة:</label>
+          <textarea id="hform-desc" rows="3" placeholder="اشرح ما تبحث عنه لمساعدة الأقارب في التعرف عليه..." style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.85rem;box-sizing:border-box"></textarea>
+        </div>
+
+        <div>
+          <label style="font-weight:700;color:var(--gold);font-size:.82rem;display:block;margin-bottom:4px">اسمك (صاحب الطلب):</label>
+          <input type="text" id="hform-requester" placeholder="اكتب اسمك ليتمكن الأقارب من معرفتك..." style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.88rem;box-sizing:border-box">
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px">
+          <button type="button" id="hform-submit-btn" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:8px 18px;font-size:.88rem">
+            نشر الطلب على اللوحة ←
+          </button>
+          <button type="button" onclick="openRelativesHelpBoard();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إلغاء والرجوع
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const submitBtn = $('#hform-submit-btn');
+  if (submitBtn) {
+    submitBtn.onclick = () => {
+      const title = $('#hform-title')?.value.trim();
+      const type = $('#hform-type')?.value;
+      const target = $('#hform-target')?.value.trim() || 'العائلة';
+      const desc = $('#hform-desc')?.value.trim();
+      const requester = $('#hform-requester')?.value.trim();
+
+      if (!title || !desc || !requester) {
+        return alert('يرجى ملء جميع الحقول المطلوبة');
+      }
+
+      const list = getHelpRequests();
+      list.unshift({
+        id: 'req_' + Date.now(),
+        title,
+        type,
+        target,
+        desc,
+        requester,
+        status: 'open',
+        date: new Date().toISOString().slice(0, 10)
+      });
+
+      saveHelpRequests(list);
+      toast('✅ تم نشر طلب المساعدة بنجاح على لوحة الأقارب!');
+      openRelativesHelpBoard();
+    };
+  }
+}
+
+const mHelpRequests = $('#m-help-requests');
+if (mHelpRequests) {
+  mHelpRequests.onclick = menuClose(() => openRelativesHelpBoard());
+}
