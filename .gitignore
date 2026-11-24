@@ -1,0 +1,17 @@
+# Database (excluded)
+database/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.sw?
+
+# Logs & Environment
+*.log
+.env
+.env.local
