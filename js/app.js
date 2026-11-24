@@ -12967,41 +12967,10 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
     }
   ];
 
-  const DEFAULT_BIOGRAPHIES = [
-    {
-      id: 'bio_1',
-      name: 'الجد المؤسس: مطارد بن عمرو بن حجر',
-      title: 'الجد الجامع والرمز التاريخي للأسرة',
-      era: 'القرن الحادي عشر الهجري',
-      location: 'النماص ووادي السراة - بلاد بني عمرو',
-      achievements: 'من أعيان ورجالات السراة المعدودين، عُرف بالحكمة ورجاحة الرأي وحماية الحِمى، وإليه يرجع نسب الأسرة وتفرع بطونها المباركة.',
-      descendants: 'ذريته تمتد اليوم في فروع العائلة بالسراة والرياض ومكة وجدة وعسير.',
-      legacy: 'غرس قيم الشهامة وعمارة الأرض وأوقاف المياه التي بقيت معالمها شاهدة على أصالة البدايات.'
-    },
-    {
-      id: 'bio_2',
-      name: 'الشيخ القاضي: مسفر بن صالح المطارد',
-      title: 'عالم الشرع وقاضي الناحية بالسراة',
-      era: 'أواخر القرن الثالث عشر الهجري (نحو 1290-1348هـ)',
-      location: 'السراة والحجاز',
-      achievements: 'تلقى العلم في حلقات المسجد الحرام والمشايخ بالسراة، عُرف بالقضاء والعدل وإصلاح ذات البين وتوثيق الصكوك والأوقاف، وكان مرجعاً للقبائل في النوازل.',
-      descendants: 'خلّف ذرية حملت العلم والوجاهة ومسؤولية إدارة شؤون الأسرة.',
-      legacy: 'مخطوطاته وأحكامه الشرعية محفوظة في أرشيف وثائق العائلة.'
-    },
-    {
-      id: 'bio_3',
-      name: 'الوجيه: علي بن مسفر المطارد',
-      title: 'رائد اللقاءات وكبير أعيان الفرع',
-      era: 'منتصف القرن الرابع عشر الهجري (1320-1395هـ)',
-      location: 'النماص والرياض',
-      achievements: 'قاد أولى رحلات انتقال وتأسيس مجالس العائلة في العاصمة، وأسهم في دعم أبناء العمومة القادمين للدراسة والعمل، وكان بيته مأوى ومضافة للجميع.',
-      descendants: 'أبناؤه وأحفاده من كبار رجالات الأعمال والأكاديميين بالأسرة.',
-      legacy: 'رسّخ صندوق العائلة التعاوني وعزز حضور الأسرة في المحافل الاجتماعية والوطنية.'
-    }
-  ];
-
-  const localBios = JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]');
-  const allBios = [...localBios, ...DEFAULT_BIOGRAPHIES];
+  /* تراجم المستخدم فقط — بلا تراجم افتراضية مختلقة لأسلاف مسمّين بتواريخ وإنجازات لم تُوثَّق */
+  const readBios = () => { try { return JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]'); } catch (_) { return []; } };
+  const localBios = readBios();
+  const allBios = [...localBios];
 
   let currentTab = initialTab; // 'rules', 'bios'
 
@@ -13016,7 +12985,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          الدستور واللوائح الأخلاقية المنظمة لمجالس وشؤون أسرة آل مطارد، مع سجل وثائقي شامل لتراجم سير أعلام ورجالات الأسرة الذين بنوا مجدها وخلدوا أثرها.
+          قواعد مقترحة لتنظيم مجالس وشؤون أسرة آل مطارد، مع تراجم يكتبها أفراد العائلة لأعلامهم.
         </p>
 
         <!-- Navigation Tabs -->
@@ -13035,7 +13004,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
             <div style="display:flex;flex-direction:column;gap:12px">
               <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
                 <b style="color:var(--gold);font-size:.95rem">«ميثاق الشرف والتكاتف الأسري لآل مطارد»</b>
-                <div style="font-size:.78rem;color:var(--txt);margin-top:4px">وثيقة عهد ومروءة أجمع عليها أعيان وشباب العائلة لتعزيز اللحمة وصلة الرحم.</div>
+                <div style="font-size:.78rem;color:var(--txt);margin-top:4px">مسودة مقترحة للمناقشة والاعتماد من مجلس العائلة — ليست وثيقة معتمدة بعد.</div>
               </div>
 
               ${FAMILY_RULES.map(r => `
@@ -13061,7 +13030,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
                 </button>
               </div>
 
-              ${allBios.map(b => `
+              ${allBios.length ? allBios.map(b => `
                 <div class="frules-bio-card">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
                     <div>
@@ -13070,7 +13039,10 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
                       </h3>
                       <div style="font-size:.8rem;font-weight:700;color:var(--txt)">${esc(b.title)}</div>
                     </div>
-                    <span class="mstory-badge">🕒 ${esc(b.era)}</span>
+                    <span style="display:flex;gap:6px;align-items:center">
+                      <span class="mstory-badge">🕒 ${esc(b.era)}</span>
+                      ${b.memberId ? `<button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${b.memberId}')">👤 ملف العَلَم</button>` : ''}
+                    </span>
                   </div>
 
                   <div style="font-size:.76rem;color:var(--mut)">📍 موطن الاستقرار: <b>${esc(b.location)}</b></div>
@@ -13081,7 +13053,12 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
                     <div style="margin-top:4px"><b>• الأثر الباقي:</b> ${esc(b.legacy)}</div>
                   </div>
                 </div>
-              `).join('')}
+              `).join('') : `
+                <div style="text-align:center;padding:32px 10px;color:var(--mut)">
+                  <div style="font-size:2rem;margin-bottom:8px">🏅</div>
+                  <div>لا توجد تراجم بعد — أضف أول ترجمة عبر الزر أعلاه.</div>
+                </div>
+              `}
             </div>
           `}
         </div>
@@ -13121,7 +13098,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
           msg = `🏅 *من أعلام ورجالات أسرة آل مطارد:*\n\n`;
           allBios.forEach(b => { msg += `• *${b.name}* (${b.era}):\n${b.title} - ${b.achievements}\n\n`; });
         }
-        msg += `— موثقة عبر موقع شجرة آل مطارد:\n${window.location.href}`;
+        msg += `— عبر موقع شجرة آل مطارد:\n${window.location.href}`;
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
       };
     }
@@ -13144,36 +13121,42 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
       };
     }
 
-    // Add bio action
+    // Add bio action — نموذج بمنتقي عضو من الشجرة (أو اسم نصي إن لم يكن في الشجرة) بدل سلسلة النوافذ المنبثقة
     const addBioBtn = $('#btn-add-bio');
     if (addBioBtn) {
       addBioBtn.onclick = () => {
-        const name = prompt('اسم العَلَم كاملاً:');
-        if (!name) return;
-        const title = prompt('اللقب أو الصفة (مثال: وجيه الفرع / قاضي الناحية):') || 'عَلَم من أعلام الأسرة';
-        const era = prompt('الحقبة التاريخية (مثال: القرن الرابع عشر الهجري):') || 'العصر الحديث';
-        const location = prompt('موطن الاستقرار (النماص، الرياض، مكة...):') || 'المملكة';
-        const achievements = prompt('أبرز المآثر والخصال:') || '';
-        const descendants = prompt('الامتداد والذرية:') || '';
-        const legacy = prompt('الأثر الباقي:') || '';
-
-        const newBio = {
-          id: 'bio_user_' + Date.now(),
-          name,
-          title,
-          era,
-          location,
-          achievements,
-          descendants,
-          legacy
-        };
-
-        const stored = JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]');
-        stored.push(newBio);
-        localStorage.setItem('almatarid_luminary_bios', JSON.stringify(stored));
-        allBios.push(newBio);
-        toast('✅ تمت إضافة ترجمة العَلَم بنجاح!');
-        renderModal();
+        const memOpts = [['', '— اختر من الشجرة —'], ...[...S.members].sort(byName).map(m => [m.id, cardLongName(m)])];
+        openForm('➕ إضافة ترجمة عَلَم', [
+          { k: 'memberId', label: 'العَلَم (من أفراد الشجرة)', type: 'select', opts: memOpts, val: '' },
+          { k: 'name', label: 'الاسم (إن لم يكن في الشجرة)', val: '' },
+          { k: 'title', label: 'اللقب أو الصفة (مثال: وجيه الفرع / قاضي الناحية)', val: 'عَلَم من أعلام الأسرة' },
+          { k: 'era', label: 'الحقبة التاريخية', val: 'العصر الحديث' },
+          { k: 'location', label: 'موطن الاستقرار', val: '' },
+          { k: 'achievements', label: 'أبرز المآثر والخصال', type: 'area', val: '' },
+          { k: 'descendants', label: 'الامتداد والذرية', val: '' },
+          { k: 'legacy', label: 'الأثر الباقي', val: '' }
+        ], async d => {
+          const m = S.byId.get(d.memberId);
+          const name = (m ? cardLongName(m) : (d.name || '').trim());
+          if (!name) throw new Error('اختر العَلَم من الشجرة أو اكتب اسمه');
+          const newBio = {
+            id: 'bio_user_' + Date.now(),
+            memberId: m ? m.id : '',
+            name,
+            title: (d.title || '').trim() || 'عَلَم من أعلام الأسرة',
+            era: (d.era || '').trim() || 'العصر الحديث',
+            location: (d.location || '').trim(),
+            achievements: (d.achievements || '').trim(),
+            descendants: (d.descendants || '').trim(),
+            legacy: (d.legacy || '').trim()
+          };
+          const stored = readBios();
+          stored.push(newBio);
+          localStorage.setItem('almatarid_luminary_bios', JSON.stringify(stored));
+          allBios.push(newBio);
+          toast('✅ تمت إضافة ترجمة العَلَم بنجاح!');
+          renderModal();
+        });
       };
     }
   }
