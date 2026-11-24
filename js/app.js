@@ -1032,11 +1032,259 @@ $('#m-genstep').onclick = menuClose(() => { setPrefHidden('alm_genstep', !prefHi
 $('#m-stats').onclick = menuClose(() => { setPrefHidden('alm_stats', !prefHidden('alm_stats')); syncToggles(); });
 $('#m-ctl').onclick = menuClose(() => { setPrefHidden('alm_ctl', !prefHidden('alm_ctl')); syncToggles(); });
 
-$('#m-cities').onclick = menuClose(() => {
-  const g = new Map(); for (const m of S.members) { const c = (m.city || '').trim() || 'غير محددة'; (g.get(c) || g.set(c, []).get(c)).push(m); }
-  showInfo(`<h2>المدن والمحافظات</h2><p class="sub">${g.size} مدينة</p>${[...g].sort((a, b) => b[1].length - a[1].length).map(([c, L]) =>
-    `<details><summary>${esc(c)}<span>${L.length}</span></summary>${L.sort(byName).map(nameBtn).join('')}</details>`).join('')}`);
-});
+/* ---------- خريطة انتشار العائلة والمدن (فرع تجربة) ---------- */
+const CITY_COORDS = {
+  'النماص': { x: 222, y: 394, reg: 'منطقة عسير (الموطن الأصلي للأسرة)', origin: true },
+  'تنومة': { x: 223, y: 398, reg: 'منطقة عسير' },
+  'أبها': { x: 232, y: 420, reg: 'منطقة عسير' },
+  'خميس مشيط': { x: 238, y: 418, reg: 'منطقة عسير' },
+  'بيشة': { x: 235, y: 368, reg: 'منطقة عسير' },
+  'الباحة': { x: 205, y: 368, reg: 'منطقة الباحة' },
+  'بلجرشي': { x: 206, y: 372, reg: 'منطقة الباحة' },
+  'الطائف': { x: 175, y: 330, reg: 'منطقة مكة المكرمة' },
+  'مكة المكرمة': { x: 160, y: 327, reg: 'منطقة مكة المكرمة' },
+  'جدة': { x: 141, y: 322, reg: 'منطقة مكة المكرمة' },
+  'رابغ': { x: 136, y: 285, reg: 'منطقة مكة المكرمة' },
+  'الليث': { x: 168, y: 363, reg: 'منطقة مكة المكرمة' },
+  'القنفذة': { x: 193, y: 394, reg: 'منطقة مكة المكرمة' },
+  'الجموم': { x: 156, y: 321, reg: 'منطقة مكة المكرمة' },
+  'المدينة المنورة': { x: 153, y: 236, reg: 'منطقة المدينة المنورة' },
+  'ينبع': { x: 111, y: 247, reg: 'منطقة المدينة المنورة' },
+  'العلا': { x: 107, y: 173, reg: 'منطقة المدينة المنورة' },
+  'خيبر': { x: 144, y: 200, reg: 'منطقة المدينة المنورة' },
+  'الحناكية': { x: 177, y: 224, reg: 'منطقة المدينة المنورة' },
+  'المهد': { x: 187, y: 265, reg: 'منطقة المدينة المنورة' },
+  'بدر': { x: 130, y: 256, reg: 'منطقة المدينة المنورة' },
+  'وادي الفرع': { x: 156, y: 270, reg: 'منطقة المدينة المنورة' },
+  'العيص': { x: 108, y: 223, reg: 'منطقة المدينة المنورة' },
+  'الرياض': { x: 346, y: 229, reg: 'منطقة الرياض' },
+  'الخرج': { x: 363, y: 246, reg: 'منطقة الرياض' },
+  'الدوادمي': { x: 284, y: 235, reg: 'منطقة الرياض' },
+  'المجمعة': { x: 309, y: 194, reg: 'منطقة الرياض' },
+  'الزلفي': { x: 295, y: 182, reg: 'منطقة الرياض' },
+  'شقراء': { x: 307, y: 213, reg: 'منطقة الرياض' },
+  'وادي الدواسر': { x: 296, y: 354, reg: 'منطقة الرياض' },
+  'الأفلاج': { x: 347, y: 301, reg: 'منطقة الرياض' },
+  'حوطة بني تميم': { x: 350, y: 264, reg: 'منطقة الرياض' },
+  'الدمام': { x: 440, y: 181, reg: 'المنطقة الشرقية' },
+  'الخبر': { x: 442, y: 185, reg: 'المنطقة الشرقية' },
+  'الظهران': { x: 440, y: 186, reg: 'المنطقة الشرقية' },
+  'الجبيل': { x: 427, y: 162, reg: 'المنطقة الشرقية' },
+  'الأحساء': { x: 425, y: 209, reg: 'المنطقة الشرقية' },
+  'القطيف': { x: 437, y: 175, reg: 'المنطقة الشرقية' },
+  'حفر الباطن': { x: 326, y: 120, reg: 'المنطقة الشرقية' },
+  'تبوك': { x: 70, y: 121, reg: 'منطقة تبوك' },
+  'ضباء': { x: 46, y: 152, reg: 'منطقة تبوك' },
+  'الوجه': { x: 67, y: 184, reg: 'منطقة تبوك' },
+  'أملج': { x: 89, y: 220, reg: 'منطقة تبوك' },
+  'تيماء': { x: 124, y: 143, reg: 'منطقة تبوك' },
+  'حائل': { x: 210, y: 146, reg: 'منطقة حائل' },
+  'بريدة': { x: 272, y: 181, reg: 'منطقة القصيم' },
+  'عنيزة': { x: 272, y: 189, reg: 'منطقة القصيم' },
+  'الرس': { x: 259, y: 195, reg: 'منطقة القصيم' },
+  'عرعر': { x: 192, y: 45, reg: 'منطقة الحدود الشمالية' },
+  'سكاكا': { x: 169, y: 74, reg: 'منطقة الجوف' },
+  'القريات': { x: 91, y: 34, reg: 'منطقة الجوف' },
+  'جازان': { x: 234, y: 459, reg: 'منطقة جازان' },
+  'صبيا': { x: 235, y: 451, reg: 'منطقة جازان' },
+  'نجران': { x: 276, y: 442, reg: 'منطقة نجران' }
+};
+
+function openCityMap(selectedCity = null, viewMode = 'map') {
+  const g = new Map();
+  for (const m of S.members) {
+    const c = (m.city || '').trim() || 'غير محددة';
+    (g.get(c) || g.set(c, []).get(c)).push(m);
+  }
+  const total = S.members.length || 1;
+  const specified = [...g.entries()].filter(([c]) => c !== 'غير محددة');
+  const sorted = [...g.entries()].sort((a, b) => b[1].length - a[1].length);
+  const topCityEntry = sorted.find(([c]) => c !== 'غير محددة') || sorted[0] || ['لا توجد', []];
+  const originMembers = g.get('النماص') || [];
+  const foreignMembers = g.get('خارج المملكة') || [];
+  const unkMembers = g.get('غير محددة') || [];
+  
+  let sel = selectedCity;
+  if (!sel || !g.has(sel)) {
+    sel = g.has('النماص') ? 'النماص' : topCityEntry[0];
+  }
+  const activeList = g.get(sel) || [];
+  const activeCoord = CITY_COORDS[sel] || null;
+
+  let mapPins = '';
+  for (const [c, L] of g.entries()) {
+    const coord = CITY_COORDS[c];
+    if (!coord) continue;
+    const isSel = c === sel;
+    const isOrigin = !!coord.origin;
+    const r = Math.min(18, Math.max(8, 7 + Math.sqrt(L.length) * 2.6));
+    mapPins += `
+      <g class="city-pin-group ${isSel ? 'active' : ''} ${isOrigin ? 'is-origin' : ''}" data-city-pin="${esc(c)}" style="cursor:pointer">
+        <circle class="pin-pulse" cx="${coord.x}" cy="${coord.y}" r="${r + 7}"></circle>
+        <circle class="pin-dot" cx="${coord.x}" cy="${coord.y}" r="${r}"></circle>
+        <text class="pin-count" x="${coord.x}" y="${coord.y + 4}">${L.length}</text>
+        <text class="pin-label" x="${coord.x}" y="${coord.y - r - 4}">${isOrigin ? '👑 ' : ''}${esc(c)}</text>
+      </g>`;
+  }
+
+  const mapSvg = `
+    <div class="city-map-container">
+      <svg class="city-map-svg" viewBox="0 0 540 500" aria-label="خريطة انتشار أسرة آل مطارد في المملكة">
+        <rect width="100%" height="100%" class="map-sea" rx="14"></rect>
+        <text x="75" y="380" class="sea-lbl">البحر الأحمر</text>
+        <text x="445" y="125" class="sea-lbl">الخليج العربي</text>
+        <path class="map-land" d="
+          M 45,75 L 75,50 L 85,30 L 140,32 L 195,42 L 260,65 L 325,80 L 375,95 L 395,110
+          Q 425,145 425,160 Q 448,175 445,185 Q 430,225 435,240 Q 470,295 475,305
+          L 460,420 L 360,435 L 276,448 L 232,470
+          Q 215,440 195,400 Q 180,380 170,365 Q 155,340 140,322 Q 130,305 136,285
+          Q 120,265 111,247 Q 100,230 90,220 Q 80,200 70,185 Q 55,165 50,150 Z
+        "></path>
+        <path class="map-region-line" d="M 170,365 Q 230,380 340,340"></path>
+        <path class="map-region-line" d="M 136,285 Q 260,260 435,240"></path>
+        <path class="map-region-line" d="M 111,247 Q 240,170 375,95"></path>
+        <text x="346" y="248" class="reg-hint">الوسطى</text>
+        <text x="145" y="295" class="reg-hint">الغربية</text>
+        <text x="215" y="415" class="reg-hint">عسير</text>
+        <text x="430" y="200" class="reg-hint">الشرقية</text>
+        <text x="140" y="110" class="reg-hint">الشمالية</text>
+        ${mapPins}
+      </svg>
+      <div class="map-legend">
+        <span><i class="lg-dot origin"></i> النماص (موطن الأسرة)</span>
+        <span><i class="lg-dot"></i> مدن انتشار العائلة</span>
+      </div>
+    </div>`;
+
+  const chipsHtml = sorted.map(([c, L]) => {
+    const isSel = c === sel;
+    const isOrigin = c === 'النماص';
+    return `<button type="button" class="city-chip ${isSel ? 'active' : ''} ${isOrigin ? 'origin' : ''}" data-pick-city="${esc(c)}">${isOrigin ? '👑 ' : '📍 '}${esc(c)} <span class="cnum">${L.length}</span></button>`;
+  }).join('');
+
+  const males = activeList.filter(m => m.gender !== 'female').length;
+  const females = activeList.filter(m => m.gender === 'female').length;
+  const alive = activeList.filter(m => m.is_alive !== false).length;
+  const dead = activeList.filter(m => m.is_alive === false).length;
+  const pct = Math.round((activeList.length / total) * 100);
+
+  const detailHtml = `
+    <div class="city-detail-box">
+      <div class="city-detail-header">
+        <div>
+          <h3>${sel === 'النماص' ? '👑 ' : '📍 '}<b>${esc(sel)}</b> <span class="city-badge">${activeList.length} فرد (${pct}%)</span></h3>
+          <p class="sub">${activeCoord ? activeCoord.reg : (sel === 'خارج المملكة' ? 'مبتعثون ومقيمون خارج المملكة' : (sel === 'غير محددة' ? 'أفراد لم تُسجل مدنهم بعد' : 'مدينة موثقة'))}</p>
+        </div>
+      </div>
+      <div class="city-mini-stats">
+        <span title="ذكور">👨 <b>${males}</b></span>
+        <span title="إناث">👩 <b>${females}</b></span>
+        <span title="أحياء">🌱 <b>${alive}</b></span>
+        ${dead ? `<span title="متوفون">🕊️ <b>${dead}</b></span>` : ''}
+      </div>
+      <input type="search" id="city-filter-q" class="city-search-input" placeholder="ابحث بين أفراد ${esc(sel)}…" autocomplete="off">
+      <div id="city-members-container" class="city-members-box">
+        ${activeList.sort(byName).map(nameBtn).join('')}
+      </div>
+    </div>`;
+
+  const listViewHtml = `
+    <div class="city-list-view">
+      ${sorted.map(([c, L]) => {
+        const p = Math.round((L.length / total) * 100);
+        const isO = c === 'النماص';
+        return `
+          <details class="city-list-item" ${c === sel ? 'open' : ''}>
+            <summary>
+              <div class="cli-title">
+                <b>${isO ? '👑 ' : '📍 '}${esc(c)}</b>
+                <div class="cli-bar"><div class="cli-bar-fill ${isO ? 'origin' : ''}" style="width:${Math.max(p, 4)}%"></div></div>
+              </div>
+              <span class="cli-count">${L.length} <small>(${p}%)</small></span>
+            </summary>
+            <div class="cli-body">
+              ${L.sort(byName).map(nameBtn).join('')}
+            </div>
+          </details>`;
+      }).join('')}
+    </div>`;
+
+  const fullHtml = `
+    <div class="city-feature-wrap">
+      <div class="cf-header">
+        <h2>🗺️ خريطة انتشار العائلة والمدن</h2>
+        <p class="sub">${specified.length} مدينة موثقة بالمملكة · ${total - unkMembers.length} من ${total} فرد موثق</p>
+      </div>
+
+      <div class="cf-stats-bar">
+        <div class="cfs-card origin">
+          <small>موطن الأسرة (بنو عمرو)</small>
+          <b>النماص</b>
+          <span>${originMembers.length} فرد</span>
+        </div>
+        <div class="cfs-card">
+          <small>الأكثر تواجداً</small>
+          <b>${esc(topCityEntry[0])}</b>
+          <span>${topCityEntry[1].length} فرد</span>
+        </div>
+        <div class="cfs-card">
+          <small>المدن الموثقة</small>
+          <b>${specified.length}</b>
+          <span>مدينة</span>
+        </div>
+        ${foreignMembers.length ? `
+        <div class="cfs-card">
+          <small>خارج المملكة</small>
+          <b>${foreignMembers.length}</b>
+          <span>فرد</span>
+        </div>` : ''}
+      </div>
+
+      <div class="cf-view-toggle">
+        <button type="button" class="cf-tab ${viewMode === 'map' ? 'active' : ''}" data-cf-view="map">🗺️ الخريطة التفاعلية</button>
+        <button type="button" class="cf-tab ${viewMode === 'list' ? 'active' : ''}" data-cf-view="list">📋 قائمة المدن والتوزيع</button>
+      </div>
+
+      ${viewMode === 'map' ? `
+        <div class="city-chips-scroller">
+          ${chipsHtml}
+        </div>
+        ${mapSvg}
+        ${detailHtml}
+      ` : listViewHtml}
+    </div>`;
+
+  showInfo(fullHtml);
+
+  const pb = $('#profile-body');
+  if (!pb) return;
+
+  pb.querySelectorAll('[data-cf-view]').forEach(btn => {
+    btn.onclick = () => openCityMap(sel, btn.dataset.cfView);
+  });
+
+  pb.querySelectorAll('[data-city-pin]').forEach(el => {
+    el.onclick = () => openCityMap(el.dataset.cityPin, 'map');
+  });
+
+  pb.querySelectorAll('[data-pick-city]').forEach(el => {
+    el.onclick = () => openCityMap(el.dataset.pickCity, 'map');
+  });
+
+  const searchInput = $('#city-filter-q');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = norm(searchInput.value.trim());
+      const filtered = activeList.filter(m => !q || norm(m.full_name).includes(q) || norm(m.nickname || '').includes(q));
+      const box = $('#city-members-container');
+      if (box) {
+        box.innerHTML = filtered.length ? filtered.sort(byName).map(nameBtn).join('') : '<p class="sub" style="padding:10px 0;text-align:center">لا توجد أسماء مطابقة للبحث في هذه المدينة.</p>';
+      }
+    });
+  }
+}
+
+$('#m-cities').onclick = menuClose(() => openCityMap());
 
 $('#m-honor').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) if (m.achievement_badge && !m.badge_is_job) (g.get(m.achievement_badge) || g.set(m.achievement_badge, []).get(m.achievement_badge)).push(m);
@@ -1463,7 +1711,7 @@ $('#m-family').onclick = menuClose(() => familyEditor(null));
 /* ---------- الأقسام المُبرزة بالشريط العلوي (ann25) ---------- */
 /* المالك والمحرر يفعّلان ⭐ من قائمة الأقسام نفسها، فتظهر كأزرار بارزة أعلى الصفحة لكل الزوار */
 const FEAT = [
-  ['cities', '📍 المدن والمحافظات', '#m-cities'], ['names', '📋 جميع الأسماء', '#m-names'],
+  ['cities', '🗺️ خريطة المدن', '#m-cities'], ['names', '📋 جميع الأسماء', '#m-names'],
   ['events', '🎉 مناسبات الأسرة', '#m-events'], ['honor', '🏅 لوحة الشرف', '#m-honor'],
   ['cards', '💌 بطاقات التهاني والتعازي', '#m-cards'], ['kin', '🧭 مستكشف القرابة', '#m-kin'],
   ['suggest', '📝 اقتراح وتصحيح', '#m-suggest'], ['csv', '📊 تصدير إكسل', '#m-csv']
