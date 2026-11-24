@@ -50,7 +50,7 @@ h1{font-size:clamp(.95rem,3.6vw,1.25rem);font-weight:800;white-space:nowrap}
 .ctl{display:flex;gap:2px;flex:none}
 .lnk{background:transparent;color:var(--gold);padding:4px 8px;font-size:.8rem;font-weight:600}
 
-.bar{display:flex;gap:8px;padding:8px 16px}
+.bar{display:flex;gap:8px;padding:8px 16px;max-width:900px;margin-inline:auto}
 #q{flex:1 1 220px;min-width:0;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
 #qn{display:flex;align-items:center;gap:4px;flex:none;font-size:.8rem;color:var(--mut);white-space:nowrap}
 #qn button{padding:2px 10px;font-size:1.1rem}
