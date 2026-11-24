@@ -4038,3 +4038,246 @@ function initVoiceSearch() {
 }
 
 initVoiceSearch();
+
+/* ---------- 55) وضع العرض التلقائي للشاشات والاجتماعات (فرع تجربة) ---------- */
+let kioskInterval = null;
+let kioskSlideIdx = 0;
+let isKioskPlaying = true;
+
+function openKioskMode() {
+  if (kioskInterval) clearInterval(kioskInterval);
+  const existing = document.querySelector('.kiosk-overlay');
+  if (existing) existing.remove();
+
+  const roots = S.roots || [];
+  const totalCount = S.members.length;
+  const maxGen = Math.max(1, ...S.members.map(gen));
+  const aliveCount = S.members.filter(m => m.is_alive !== false).length;
+  const deceasedCount = totalCount - aliveCount;
+  const upEvents = [...(S.events || [])].filter(e => new Date(e.event_date).getTime() >= Date.now() - 86400000).slice(0, 3);
+  const elders = S.members.filter(m => gen(m) <= 2);
+
+  const slides = [
+    // Slide 1: Welcome
+    {
+      title: 'شجرة أسرة آل مطارد - بنو عمرو',
+      render: () => `
+        <div class="kiosk-slide">
+          <img src="logo.jpg" alt="" width="110" height="110" style="border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 30px rgba(245,158,11,.4)">
+          <div style="font-size:1.6rem;color:var(--gold);font-weight:800;letter-spacing:1px">« ذُرِّيَّةً بَعْضُهَا مِن بَعْضٍ »</div>
+          <h1 style="font-size:2.6rem;margin:6px 0;font-weight:900;text-shadow:0 4px 16px rgba(0,0,0,.8)">
+            مرحباً بكم في اجتماع أسرة آل مطارد
+          </h1>
+          <p style="font-size:1.3rem;color:#cbd5e1;max-width:750px;line-height:1.7">
+            «وَأُو۟لُوا۟ ٱلْأَرْحَامِ بَعْضُهُمْ أَوْلَىٰ بِبَعْضٍ فِى كِتَـٰبِ ٱللَّهِ»<br>
+            حياكم الله في ملتقى الأسرة وصلة الأرحام وتوثيق الأنساب والتاريخ المجيد
+          </p>
+          <div style="margin-top:10px;font-size:1rem;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid var(--gold);padding:8px 24px;border-radius:99px">
+            📍 بني عمرو · عسير · المملكة العربية السعودية
+          </div>
+        </div>
+      `
+    },
+    // Slide 2: Statistics
+    {
+      title: 'إحصائيات وأرقام الشجرة العائلية',
+      render: () => `
+        <div class="kiosk-slide">
+          <div style="font-size:1.1rem;color:var(--gold);font-weight:700">📊 شجرة العائلة بالأرقام</div>
+          <h2 style="font-size:2.2rem;margin:0 0 10px 0;font-weight:800">سجل متصل عبر الأجيال والتاريخ</h2>
+          <div class="kiosk-stat-grid">
+            <div class="kiosk-stat-box">
+              <div class="kiosk-stat-num">${totalCount}</div>
+              <div class="kiosk-stat-lbl">إجمالي أفراد العائلة</div>
+            </div>
+            <div class="kiosk-stat-box">
+              <div class="kiosk-stat-num">${maxGen}</div>
+              <div class="kiosk-stat-lbl">أجيال موثقة</div>
+            </div>
+            <div class="kiosk-stat-box">
+              <div class="kiosk-stat-num">${aliveCount}</div>
+              <div class="kiosk-stat-lbl">أحياء حفظهم الله</div>
+            </div>
+            <div class="kiosk-stat-box">
+              <div class="kiosk-stat-num">${deceasedCount}</div>
+              <div class="kiosk-stat-lbl">متوفين رحمهم الله</div>
+            </div>
+          </div>
+          <div style="background:rgba(0,0,0,.4);border:1px solid var(--line);border-radius:12px;padding:14px 20px;width:100%;font-size:1rem;color:#cbd5e1">
+            🏛️ <b>فروع الأسرة الرئيسية:</b> ${roots.map(r => r.full_name).join(' · ')}
+          </div>
+        </div>
+      `
+    },
+    // Slide 3: Founders & Elders
+    {
+      title: 'أعلام وأجداد الجيل الأول والثاني',
+      render: () => `
+        <div class="kiosk-slide">
+          <div style="font-size:1.1rem;color:var(--gold);font-weight:700">🎖️ رواد التأسيس والأجداد</div>
+          <h2 style="font-size:2.2rem;margin:0 0 10px 0;font-weight:800">أعلام وفروع آل مطارد - بنو عمرو</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;width:100%">
+            ${elders.slice(0, 6).map(m => `
+              <div style="background:rgba(15,23,42,.75);border:1px solid var(--gold);border-radius:12px;padding:14px;text-align:center">
+                <div style="font-size:1.15rem;font-weight:800;color:var(--gold)">${esc(m.full_name)}</div>
+                <div style="font-size:.82rem;color:#cbd5e1;margin-top:4px">الجيل ${gen(m)} · ${m.is_alive === false ? 'رحمه الله' : 'حفظه الله'}</div>
+                <div style="font-size:.76rem;color:var(--mut);margin-top:4px">${m.city || 'الجنوب'}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `
+    },
+    // Slide 4: Upcoming Events
+    {
+      title: 'مناسبات ولقاءات الأسرة القادمة',
+      render: () => `
+        <div class="kiosk-slide">
+          <div style="font-size:1.1rem;color:var(--gold);font-weight:700">🎉 مناسبات واجتماعات العائلة</div>
+          <h2 style="font-size:2.2rem;margin:0 0 10px 0;font-weight:800">المواعيد واللقاءات الدورية</h2>
+          <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:750px">
+            ${upEvents.length ? upEvents.map(e => `
+              <div style="background:rgba(15,23,42,.8);border:1.5px solid var(--gold);border-radius:12px;padding:16px;text-align:start;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <h3 style="font-size:1.25rem;color:#fff;margin:0 0 6px 0">${esc(e.title)}</h3>
+                  <div style="font-size:.9rem;color:#cbd5e1">📅 ${new Date(e.event_date).toLocaleDateString('ar-SA')} · ${e.location_name || 'المقر الرئيسي'}</div>
+                </div>
+                <span style="font-size:2rem">💌</span>
+              </div>
+            `).join('') : '<p style="font-size:1.2rem;color:var(--mut)">لا توجد مناسبات قادمة مجدولة حالياً.</p>'}
+          </div>
+        </div>
+      `
+    }
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'kiosk-overlay';
+  overlay.innerHTML = `
+    <div class="kiosk-top-bar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.4rem">📺</span>
+        <div>
+          <b style="color:var(--gold);font-size:1.1rem">وضع العرض العائلي للشاشات والاجتماعات</b>
+          <div style="font-size:.75rem;color:var(--mut)" id="kiosk-time"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button type="button" id="btn-kiosk-play" style="background:transparent;border:1px solid var(--line);color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:.85rem">
+          ⏸️ إيقاف
+        </button>
+        <button type="button" id="btn-kiosk-fs" style="background:transparent;border:1px solid var(--line);color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:.85rem">
+          ⛶ ملء الشاشة
+        </button>
+        <button type="button" id="btn-kiosk-exit" style="background:rgba(239,68,68,.2);border:1px solid #ef4444;color:#fca5a5;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:700;font-size:.85rem">
+          ✕ خروج
+        </button>
+      </div>
+    </div>
+
+    <div class="kiosk-slide-stage" id="kiosk-stage"></div>
+
+    <div class="kiosk-bottom-bar">
+      <button type="button" id="btn-kiosk-prev" style="background:transparent;border:1px solid var(--line);color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer">
+        ‹ السابق
+      </button>
+      <div class="kiosk-dots" id="kiosk-dots">
+        ${slides.map((_, i) => `<div class="kiosk-dot ${i === 0 ? 'active' : ''}" data-ki="${i}"></div>`).join('')}
+      </div>
+      <button type="button" id="btn-kiosk-next" style="background:transparent;border:1px solid var(--line);color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer">
+        التالي ›
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const stage = overlay.querySelector('#kiosk-stage');
+  const dotsBox = overlay.querySelector('#kiosk-dots');
+  const timeBox = overlay.querySelector('#kiosk-time');
+  const playBtn = overlay.querySelector('#btn-kiosk-play');
+  const fsBtn = overlay.querySelector('#btn-kiosk-fs');
+  const exitBtn = overlay.querySelector('#btn-kiosk-exit');
+  const nextBtn = overlay.querySelector('#btn-kiosk-next');
+  const prevBtn = overlay.querySelector('#btn-kiosk-prev');
+
+  const updateTime = () => {
+    if (timeBox) timeBox.textContent = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+  updateTime();
+  const timeTimer = setInterval(updateTime, 1000);
+
+  const renderCurrentSlide = () => {
+    const s = slides[kioskSlideIdx];
+    if (stage) stage.innerHTML = s.render();
+    overlay.querySelectorAll('.kiosk-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === kioskSlideIdx);
+    });
+  };
+
+  const nextSlide = () => {
+    kioskSlideIdx = (kioskSlideIdx + 1) % slides.length;
+    renderCurrentSlide();
+  };
+
+  const prevSlide = () => {
+    kioskSlideIdx = (kioskSlideIdx - 1 + slides.length) % slides.length;
+    renderCurrentSlide();
+  };
+
+  renderCurrentSlide();
+
+  const startAutoPlay = () => {
+    if (kioskInterval) clearInterval(kioskInterval);
+    kioskInterval = setInterval(nextSlide, 8500);
+  };
+  startAutoPlay();
+
+  playBtn.onclick = () => {
+    isKioskPlaying = !isKioskPlaying;
+    if (isKioskPlaying) {
+      playBtn.textContent = '⏸️ إيقاف';
+      startAutoPlay();
+    } else {
+      playBtn.textContent = '▶ تشغيل';
+      clearInterval(kioskInterval);
+    }
+  };
+
+  nextBtn.onclick = () => {
+    nextSlide();
+    if (isKioskPlaying) startAutoPlay();
+  };
+
+  prevBtn.onclick = () => {
+    prevSlide();
+    if (isKioskPlaying) startAutoPlay();
+  };
+
+  dotsBox.onclick = (e) => {
+    const d = e.target.closest('.kiosk-dot');
+    if (!d) return;
+    kioskSlideIdx = parseInt(d.dataset.ki, 10);
+    renderCurrentSlide();
+    if (isKioskPlaying) startAutoPlay();
+  };
+
+  fsBtn.onclick = () => {
+    if (!document.fullscreenElement) {
+      overlay.requestFullscreen?.().catch(() => {});
+      fsBtn.textContent = '⛶ نافذة عادية';
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+      fsBtn.textContent = '⛶ ملء الشاشة';
+    }
+  };
+
+  exitBtn.onclick = () => {
+    if (kioskInterval) clearInterval(kioskInterval);
+    clearInterval(timeTimer);
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    overlay.remove();
+  };
+}
+
+$('#m-kiosk').onclick = menuClose(() => openKioskMode());
