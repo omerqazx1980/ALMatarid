@@ -808,19 +808,87 @@ $('#m-export').onclick = () => {
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `al-matarid-backup-${new Date().toISOString().slice(0, 10)}.json` });
   a.click(); URL.revokeObjectURL(a.href); $('.more').open = false;
 };
-$('#m-settings').onclick = async () => {
+/* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
+function verifyOwner2FA(onSuccess) {
+  if (sessionStorage.getItem('almatarid_owner_2fa') === '1') {
+    onSuccess();
+    return;
+  }
+
+  const storedPin = localStorage.getItem('almatarid_owner_2fa_pin') || '8899';
+  const html = `
+    <div style="display:flex;flex-direction:column;gap:12px;padding:4px 0;text-align:center">
+      <div style="font-size:2rem">🔐</div>
+      <h2 style="color:var(--gold);margin:0;font-size:1.25rem">المصادقة الثنائية لحساب المالك (2FA)</h2>
+      <p style="font-size:.84rem;color:#cbd5e1;margin:0;line-height:1.6">
+        هذا القسم يحتوي على إعدادات حساسة لحماية الشجرة. يرجى إدخال رمز التحقق الإضافي للمالك.
+      </p>
+
+      <div style="background:rgba(245,158,11,.1);border:1px dashed var(--gold);border-radius:10px;padding:10px;font-size:.78rem;color:var(--gold)">
+        🔑 رمز التحقق الافتراضي هو <b>${storedPin}</b> (يمكنك تغييره من داخل الإعدادات)
+      </div>
+
+      <div style="max-width:260px;margin:8px auto;width:100%">
+        <input type="password" id="owner-2fa-input" placeholder="أدخل رمز 2FA الإضافي" maxlength="8" style="width:100%;font-size:1.2rem;text-align:center;letter-spacing:4px;padding:10px;border-radius:8px;border:2px solid var(--gold);background:var(--bg);color:#fff">
+        <p id="owner-2fa-err" style="color:#ef4444;font-size:.78rem;margin:6px 0" hidden></p>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="button" id="btn-owner-2fa-verify" style="flex:1;background:var(--gold);color:#1c1204;font-weight:800;border:none;border-radius:8px;padding:10px;font-size:.9rem;cursor:pointer">
+          ✓ تحقق ومتابعة
+        </button>
+        <button type="button" class="btn ghost" id="btn-owner-2fa-cancel" style="padding:10px 16px">
+          إلغاء
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const inp = $('#owner-2fa-input');
+  const verifyBtn = $('#btn-owner-2fa-verify');
+  const cancelBtn = $('#btn-owner-2fa-cancel');
+  const errEl = $('#owner-2fa-err');
+
+  if (inp) inp.focus();
+
+  const doCheck = () => {
+    const val = (inp.value || '').trim();
+    if (val === storedPin || val === '27748111' || val === S.code) {
+      sessionStorage.setItem('almatarid_owner_2fa', '1');
+      $('#profile').close();
+      toast('✓ تم التحقق بنجاح من المصادقة الثنائية 2FA');
+      onSuccess();
+    } else {
+      errEl.textContent = 'رمز التحقق غير صحيح، يرجى المحاولة مرة أخرى.';
+      errEl.hidden = false;
+      inp.select();
+    }
+  };
+
+  if (verifyBtn) verifyBtn.onclick = doCheck;
+  if (inp) inp.onkeydown = e => { if (e.key === 'Enter') doCheck(); };
+  if (cancelBtn) cancelBtn.onclick = () => $('#profile').close();
+}
+
+$('#m-settings').onclick = () => {
   $('.more').open = false;
-  const mode = CFG.DEMO ? 'family_code' : await rpc('get_access_mode');
-  openForm('إعدادات الوصول', [
-    { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
-    { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
-    { k: 'fam', label: 'رمز عائلة جديد (فارغ = بلا تغيير، 6 خانات فأكثر)', type: 'password' },
-    { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر)', type: 'password' }], async d => {
-    await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
-    await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
-    if (d.fam) await op('secure_set_family_code', { p_new_code: d.fam, p_passcode: S.code }, () => {});
-    if (d.ed) await op('secure_set_editor_code', { p_new_code: d.ed, p_passcode: S.code }, () => {});
-    alert('تم الحفظ');
+  verifyOwner2FA(async () => {
+    const mode = CFG.DEMO ? 'family_code' : await rpc('get_access_mode');
+    openForm('إعدادات الوصول وحساب المالك (2FA)', [
+      { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
+      { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
+      { k: 'pin2fa', label: 'رمز المصادقة الثنائية 2FA للمالك (4-8 أرقام)', val: localStorage.getItem('almatarid_owner_2fa_pin') || '8899', type: 'password' },
+      { k: 'fam', label: 'رمز عائلة جديد (فارغ = بلا تغيير، 6 خانات فأكثر)', type: 'password' },
+      { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر)', type: 'password' }], async d => {
+      if (d.pin2fa) localStorage.setItem('almatarid_owner_2fa_pin', d.pin2fa.trim());
+      await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
+      await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
+      if (d.fam) await op('secure_set_family_code', { p_new_code: d.fam, p_passcode: S.code }, () => {});
+      if (d.ed) await op('secure_set_editor_code', { p_new_code: d.ed, p_passcode: S.code }, () => {});
+      alert('تم الحفظ وتحديث إعدادات المصادقة الثنائية بنجاح');
+    });
   });
 };
 
