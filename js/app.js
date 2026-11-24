@@ -551,7 +551,7 @@ function profile(id) {
       ${row('الهاتف', digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '')}</dl>
     ${m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button>${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : '<div class="row adm"><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>'}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -793,7 +793,8 @@ $('#profile-body').addEventListener('click', e => {
   if (b.dataset.wd) return delWife(b.dataset.wd);
   ({ edit: () => { $('#profile').close(); memberForm(m); }, child: () => { $('#profile').close(); memberForm(null, m.id); },
      wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m),
-     photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); } })[b.dataset.act]?.();
+     photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); },
+     lcard: () => { openLineageCard(m.id); } })[b.dataset.act]?.();
 });
 $('#m-export').onclick = () => {
   const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), members: S.members, wives: S.wives, events: S.events }, null, 1)], { type: 'application/json' });
@@ -3299,3 +3300,133 @@ $('#bb-events').onclick = () => { $('#m-events').click(); };
   b.addEventListener('click', () => { q.value = ''; q.dispatchEvent(new Event('input', { bubbles: true })); q.focus(); });
   sync();
 })();
+
+/* ---------- 51) بطاقة النسب الرقمية للواتساب (فرع تجربة) ---------- */
+function getAncestryChain(m) {
+  const chain = [];
+  let cur = m;
+  const visited = new Set();
+  while (cur && !visited.has(cur.id)) {
+    visited.add(cur.id);
+    chain.push(cur);
+    if (!cur.father_id || !S.byId.has(cur.father_id)) break;
+    cur = S.byId.get(cur.father_id);
+  }
+  return chain;
+}
+
+function openLineageCard(targetId = null) {
+  const members = [...S.members].sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
+  const target = targetId && S.byId.has(targetId) ? S.byId.get(targetId) : (S.roots[0] || S.members[0]);
+  if (!target) return;
+
+  const chain = getAncestryChain(target);
+  const root = chain[chain.length - 1];
+  const kidsCount = (S.kids.get(target.id) || []).length;
+  const gNum = gen(target);
+  const statusStr = target.is_alive === false ? 'رحمه الله' : 'حفظه الله ورعاه';
+  const branchName = root ? root.full_name : 'آل مطارد';
+
+  const chainNames = chain.map(c => c.first || c.full_name.split(' ')[0]);
+  const fullLineageText = chainNames.join(' بن ') + ' (من آل مطارد - بنو عمرو)';
+
+  const waShareText = `🌿 *بطاقة نسب رقمية - أسرة آل مطارد (بنو عمرو)* 🌿\n\n` +
+    `👤 *الاسم:* ${target.full_name}\n` +
+    `📜 *سلسلة النسب:* ${fullLineageText}\n` +
+    `🎖️ *الجيل:* الجيل ${gNum}\n` +
+    `🏛️ *الفرع:* ${branchName}\n` +
+    `📍 *المدينة:* ${target.city || 'الجنوب'}\n` +
+    `🤲 *الحالة:* ${statusStr}\n\n` +
+    `🔗 تصفح شجرة العائلة التفاعلية: https://omerqazx1980.github.io/ALMatarid/`;
+
+  const html = `
+    <div class="lcard-wrap">
+      <div class="fstats-head">
+        <h2>📇 بطاقة النسب الرقمية للمشاركة</h2>
+        <p class="sub">توثيق سلسلة النسب والبيانات العائلية ببطاقة رقمية جاهزة للمشاركة عبر واتساب</p>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin:6px 0">
+        <label for="lcard-sel" style="font-size:.84rem;font-weight:700">اختر العضو:</label>
+        <select id="lcard-sel" style="flex:1;padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--txt)">
+          ${members.map(m => `<option value="${m.id}" ${m.id === target.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="lcard-box" id="lcard-display">
+        <div class="lcard-top">
+          <div style="font-size:.78rem;color:var(--gold);letter-spacing:1px;font-weight:700">« ذُرِّيَّةً بَعْضُهَا مِن بَعْضٍ »</div>
+          <div style="font-size:.82rem;color:var(--mut)">شجرة أسرة آل مطارد - بنو عمرو</div>
+          <div class="lcard-name">${esc(target.full_name)}</div>
+          <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:4px 0">
+            <span class="bd" style="background:rgba(245,158,11,.15);border:1px solid var(--gold);color:var(--gold);padding:2px 8px;border-radius:99px;font-size:.75rem">الجيل ${gNum}</span>
+            <span class="bd" style="background:rgba(56,189,248,.15);border:1px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:99px;font-size:.75rem">فرع: ${esc(branchName)}</span>
+            <span class="bd" style="background:rgba(52,211,153,.15);border:1px solid #34d399;color:#34d399;padding:2px 8px;border-radius:99px;font-size:.75rem">${statusStr}</span>
+            ${target.city ? `<span class="bd" style="background:rgba(148,163,184,.15);border:1px solid var(--line);color:var(--txt);padding:2px 8px;border-radius:99px;font-size:.75rem">📍 ${esc(target.city)}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="lcard-chain">
+          <div style="font-size:.75rem;color:var(--gold);margin-bottom:4px;font-weight:700">📜 سلسلة النسب المتصل:</div>
+          <div><b>${chain.map(c => esc(c.full_name.split(' ')[0] || c.first)).join(' بن ')}</b></div>
+          <div style="font-size:.78rem;color:var(--mut);margin-top:6px">وصولاً إلى الجد المؤسس لفرع <b>${esc(branchName)}</b> من قبيلة آل مطارد - بنو عمرو.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;text-align:center;font-size:.8rem;background:rgba(0,0,0,.2);border-radius:8px;padding:8px">
+          <div><span style="color:var(--mut)">الأبناء:</span> <b>${kidsCount}</b></div>
+          <div><span style="color:var(--mut)">الكنية:</span> <b>${esc(target.nickname || '—')}</b></div>
+          <div><span style="color:var(--mut)">سنة الميلاد:</span> <b>${esc(target.birth_year_text || (target.birth_date ? target.birth_date.slice(0,4) : '—'))}</b></div>
+        </div>
+      </div>
+
+      <div class="lcard-actions">
+        <button type="button" class="lcard-btn-wa" id="btn-lcard-wa">
+          <span>💬 مشاركة عبر واتساب</span>
+        </button>
+        <button type="button" class="btn ghost" id="btn-lcard-copy" style="padding:9px 14px">
+          <span>📋 نسخ النص</span>
+        </button>
+        <button type="button" class="btn ghost" id="btn-lcard-view" style="padding:9px 14px">
+          <span>🌳 عرض في الشجرة</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const sel = $('#lcard-sel');
+  if (sel) {
+    sel.onchange = () => openLineageCard(sel.value);
+  }
+
+  const btnWa = $('#btn-lcard-wa');
+  if (btnWa) {
+    btnWa.onclick = () => {
+      const url = `https://wa.me/?text=${encodeURIComponent(waShareText)}`;
+      window.open(url, '_blank');
+    };
+  }
+
+  const btnCopy = $('#btn-lcard-copy');
+  if (btnCopy) {
+    btnCopy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(waShareText);
+        toast('تم نسخ بطاقة النسب بنجاح!');
+      } catch (_) {
+        toast('يرجى تحديد النص ونسخه يدويًا');
+      }
+    };
+  }
+
+  const btnView = $('#btn-lcard-view');
+  if (btnView) {
+    btnView.onclick = () => {
+      $('#profile').close();
+      focusMember(target.id);
+    };
+  }
+}
+
+$('#m-lcard').onclick = menuClose(() => openLineageCard());
