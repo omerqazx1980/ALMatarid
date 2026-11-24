@@ -2192,6 +2192,198 @@ function openFamilyTimeline() {
 
 $('#m-timeline').onclick = menuClose(() => openFamilyTimeline());
 
+/* ---------- القصص الصوتية لكبار العائلة (فرع تجربة) ---------- */
+let audioMediaRecorder = null;
+let recordedAudioChunks = [];
+let localAudioStories = [];
+
+function openAudioStories(selectedStoryId = null) {
+  const defaultStories = [
+    {
+      id: 'story-1',
+      title: 'ذكريات النماص وبني عمرو وبدايات الأسرة',
+      speaker: 'كبار أعيان الأسرة',
+      member_id: S.roots[0]?.id || S.members[0]?.id,
+      duration: '4:15',
+      date: 'توثيق تراثي',
+      audio_url: '',
+      text: 'كانت ديار بني عمرو في النماص عامرة بالمجالس والترابط الوثيق. وكان كبار الأسرة يجتمعون للتشاور وصلة الأرحام وحل النزاعات. تميز أجدادنا بحب الخير وإكرام الضيف، وظلت تلك القيم متوارثة جيلاً بعد جيل حتى يومنا هذا.'
+    },
+    {
+      id: 'story-2',
+      title: 'رحلة الاستقرار في بيشة وتجارة الحبوب والتمور',
+      speaker: 'أحد أعلام الجيل الرابع',
+      member_id: (S.members.find(m => m.city === 'بيشة') || S.members[1])?.id,
+      duration: '3:40',
+      date: 'أواسط القرن 14 هـ',
+      audio_url: '',
+      text: 'انتقل بعض الآباء والأجداد في عهد النهضة المباركة إلى بيشة نظراً لأهميتها الزراعية وموقعها التجاري الخصيب، وأسسوا هناك بيوتاً كريمة كانت وما زالت منارات للضيافة وصلة الرحم بين أبناء عمومتهم.'
+    },
+    {
+      id: 'story-3',
+      title: 'حكاية النخوة ونجدة القريب في مواسم الحصاد',
+      speaker: 'الرواة والذاكرة الشفهية',
+      member_id: (S.members.find(m => gen(m) === 3) || S.members[2])?.id,
+      duration: '5:10',
+      date: 'من تراث الأجداد',
+      audio_url: '',
+      text: 'في مواسم الأمطار والزراعة، كان أبناء آل مطارد يقفون صفاً واحداً مع كل قريب يحتاج العون. لا يُترك أحد حتى تكتمل مزارعه وبيته، وكان هذا التكاتف هو سر بقاء الأسرة وسمعتها الطيبة بين القبائل.'
+    }
+  ];
+
+  const allStories = [...defaultStories, ...localAudioStories];
+  let curStory = allStories.find(s => s.id === selectedStoryId) || allStories[0];
+  const speakerMember = S.byId.get(curStory.member_id);
+
+  const html = `
+    <div class="audio-stories-wrap">
+      <div class="fstats-head">
+        <h2>🎙️ القصص الصوتية والتراث الشفهي لكبار العائلة</h2>
+        <p class="sub">تسجيلات وذكريات وروايات أجداد وكبار أسرة آل مطارد مربوطة بملفات أصحابها</p>
+      </div>
+
+      <div class="as-player-card">
+        <div class="as-speaker-header">
+          <img class="as-avatar" src="${(speakerMember && S.photos.get(speakerMember.id)) || 'logo.jpg'}" alt="">
+          <div class="as-speaker-info">
+            <h3>${esc(curStory.title)}</h3>
+            <p>الراوي: <b>${esc(curStory.speaker || speakerMember?.full_name || 'أحد الأعيان')}</b> · ${esc(curStory.date)}</p>
+          </div>
+        </div>
+
+        <audio class="as-audio-el" controls preload="none" src="${esc(curStory.audio_url || (speakerMember && speakerMember.audio_url) || '')}">
+          المتصفح لا يدعم مشغل الصوت.
+        </audio>
+
+        <div class="as-story-text">
+          <b>📖 نص الرواية المكتوب:</b><br>
+          ${esc(curStory.text || speakerMember?.biography_story || speakerMember?.bio || 'لا يوجد نص مكتوب لهذه القصة بعد.').replace(/\n/g, '<br>')}
+        </div>
+
+        ${speakerMember ? `
+          <div style="display:flex;justify-content:flex-end">
+            ${nameBtn(speakerMember)}
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="as-record-box">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;font-size:.9rem;color:var(--gold)">🎙️ توثيق قصة صوتية جديدة</span>
+          <span style="font-size:.75rem;color:var(--mut)">من كبار الأسرة</span>
+        </div>
+        <input type="text" id="rec-story-title" placeholder="عنوان القصة أو الذكرى…" style="padding:6px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font-size:.82rem" />
+        <textarea id="rec-story-text" placeholder="نص القصة أو ملخص الرواية…" rows="2" style="padding:6px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font-size:.82rem;font-family:inherit"></textarea>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="btn-record-audio" class="as-record-btn">
+            ⏺️ ابدأ التسجيل المباشر
+          </button>
+          <button type="button" id="btn-save-story" class="ghost" style="font-size:.82rem">
+            💾 حفظ القصة بالمكتبة
+          </button>
+        </div>
+        <div id="rec-status" style="font-size:.78rem;color:var(--mut);display:none"></div>
+      </div>
+
+      <div style="font-size:.95rem;font-weight:700;color:var(--txt);margin-top:4px">
+        📚 مكتبة التسجيلات التراثية (${allStories.length})
+      </div>
+      <div class="as-list">
+        ${allStories.map(s => {
+          const isSel = s.id === curStory.id;
+          return `
+            <div class="as-item ${isSel ? 'active' : ''}" data-story-id="${esc(s.id)}">
+              <div>
+                <b style="color:${isSel ? 'var(--gold)' : 'var(--txt)'}">🎙️ ${esc(s.title)}</b>
+                <div style="font-size:.75rem;color:var(--mut)">${esc(s.speaker)} · ${esc(s.duration)}</div>
+              </div>
+              <button type="button" style="padding:4px 10px;font-size:.75rem;border-radius:6px;background:${isSel ? 'var(--gold)' : 'rgba(255,255,255,.08)'};color:${isSel ? '#1c1204' : 'var(--txt)'}">
+                ${isSel ? 'جارٍ التشغيل ▶' : 'استماع 🎧'}
+              </button>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  showInfo(html);
+
+  const pb = $('#profile-body');
+  if (!pb) return;
+
+  pb.querySelectorAll('[data-story-id]').forEach(el => {
+    el.onclick = () => openAudioStories(el.dataset.storyId);
+  });
+
+  const recBtn = $('#btn-record-audio');
+  const recStatus = $('#rec-status');
+  let recordedBlobUrl = null;
+
+  if (recBtn) {
+    let isRecording = false;
+    recBtn.onclick = async () => {
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          recordedAudioChunks = [];
+          audioMediaRecorder = new MediaRecorder(stream);
+          audioMediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedAudioChunks.push(e.data); };
+          audioMediaRecorder.onstop = () => {
+            const blob = new Blob(recordedAudioChunks, { type: 'audio/webm' });
+            recordedBlobUrl = URL.createObjectURL(blob);
+            if (recStatus) {
+              recStatus.style.display = 'block';
+              recStatus.innerHTML = `✅ تم التقاط التسجيل بنجاح! جاهز للحفظ.`;
+            }
+          };
+          audioMediaRecorder.start();
+          isRecording = true;
+          recBtn.classList.add('recording');
+          recBtn.textContent = '⏹️ إيقاف وإنهاء التسجيل';
+          if (recStatus) {
+            recStatus.style.display = 'block';
+            recStatus.textContent = '🔴 جارٍ التسجيل الآن... تحدث بوضوح.';
+          }
+        } catch (err) {
+          toast('تعذر الوصول إلى الميكروفون: ' + err.message);
+        }
+      } else {
+        if (audioMediaRecorder && audioMediaRecorder.state !== 'inactive') {
+          audioMediaRecorder.stop();
+        }
+        isRecording = false;
+        recBtn.classList.remove('recording');
+        recBtn.textContent = '⏺️ إعادة التسجيل';
+      }
+    };
+  }
+
+  const saveBtn = $('#btn-save-story');
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const title = $('#rec-story-title')?.value.trim();
+      const text = $('#rec-story-text')?.value.trim();
+      if (!title) {
+        toast('يرجى كتابة عنوان للقصة أولاً');
+        return;
+      }
+      const newStory = {
+        id: 'user-story-' + Date.now(),
+        title,
+        speaker: 'تسجيل مسجل جديد',
+        duration: 'مقطع صوتي',
+        date: 'الآن',
+        audio_url: recordedBlobUrl || '',
+        text: text || 'تم تسجيل هذه القصة حديثاً وحفظها في التراث الأسري.'
+      };
+      localAudioStories.push(newStory);
+      toast('تمت إضافة القصة الصوتية بنجاح 🎙️');
+      openAudioStories(newStory.id);
+    };
+  }
+}
+
+$('#m-audio-stories').onclick = menuClose(() => openAudioStories());
+
 /* ---------- تصدير الشجرة PDF والطباعة ومحرر المشجر الجداري (فرع تجربة) ---------- */
 function openPdfExport() {
   const roots = S.roots || [];

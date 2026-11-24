@@ -781,3 +781,23 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .tl-title{font-size:1.05rem;font-weight:700;color:#fff}
 .tl-desc{font-size:.85rem;color:#cbd5e1;line-height:1.6}
 .tl-members{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+
+/* ---------- 49) القصص الصوتية لكبار العائلة (فرع تجربة) ---------- */
+.audio-stories-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.as-player-card{background:linear-gradient(135deg,rgba(30,41,59,.95),rgba(15,23,42,.95));border:1.5px solid var(--gold);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.as-speaker-header{display:flex;align-items:center;gap:12px}
+.as-avatar{width:54px;height:54px;border-radius:50%;border:2px solid var(--gold);object-fit:cover;background:#1e293b}
+.as-speaker-info h3{font-size:1.05rem;color:#fff;margin:0}
+.as-speaker-info p{font-size:.78rem;color:var(--mut);margin:0}
+.as-audio-el{width:100%;height:38px;border-radius:8px;margin-top:4px}
+.as-story-text{font-size:.85rem;color:#cbd5e1;line-height:1.7;background:rgba(0,0,0,.25);padding:10px 12px;border-radius:8px;max-height:140px;overflow-y:auto;border-inline-start:3px solid var(--gold)}
+
+.as-record-box{background:var(--panel);border:1px dashed var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.as-record-btn{background:#ef4444;color:#fff;border-radius:8px;padding:8px 14px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.as-record-btn.recording{animation:pulse-rec 1.2s infinite}
+@keyframes pulse-rec{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
+
+.as-list{display:flex;flex-direction:column;gap:8px}
+.as-item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;transition:.15s}
+.as-item:hover{border-color:var(--gold);background:rgba(245,158,11,.08)}
+.as-item.active{border-color:var(--gold);background:rgba(245,158,11,.15)}
