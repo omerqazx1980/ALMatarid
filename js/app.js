@@ -3067,6 +3067,7 @@ function openPdfExport() {
 }
 
 $('#m-pdf').onclick = menuClose(() => openPdfExport());
+$('#m-blank-tree').onclick = menuClose(() => openBlankTreeModal());
 
 /* تصدير Excel (CSV بترميز يفتحه Excel بالعربية صحيحًا) */
 $('#m-csv').onclick = menuClose(() => {
@@ -13661,6 +13662,274 @@ function openFamilyFundModal() {
 
   renderModal();
 }
+
+/* ---------- 98) شجرة فارغة قابلة للطباعة والتعبئة يدوياً (فرع تجربة) ---------- */
+function generateBlankTreeSvg(depth = 4, style = 'tree', rootName = '') {
+  const width = 1100, height = 750;
+  let elements = '';
+
+  // Background & Decorative Borders
+  elements += `
+    <rect width="${width}" height="${height}" fill="#fffdfa" stroke="#b45309" stroke-width="6"/>
+    <rect x="14" y="14" width="${width - 28}" height="${height - 28}" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6 3"/>
+    <rect x="22" y="22" width="${width - 44}" height="${height - 44}" fill="none" stroke="#f59e0b" stroke-width="1"/>
+    
+    <!-- Ornate Corner Motifs -->
+    <g fill="#b45309" opacity="0.8">
+      <circle cx="34" cy="34" r="5"/><circle cx="${width - 34}" cy="34" r="5"/>
+      <circle cx="34" cy="${height - 34}" r="5"/><circle cx="${width - 34}" cy="${height - 34}" r="5"/>
+    </g>
+
+    <!-- Header Banner -->
+    <g transform="translate(${width / 2}, 65)" text-anchor="middle">
+      <text y="-14" fill="#78350f" font-size="12" font-family="sans-serif">بِسْمِ اللَّـهِ الرَّحْمَـٰنِ الرَّحِيمِ</text>
+      <text y="14" fill="#92400e" font-size="24" font-weight="bold" font-family="sans-serif">شَجَرَةُ نَسَبِ عَائِلَةِ آلِ مُطَارِدِ المُبَارَكَة</text>
+      <text y="36" fill="#b45309" font-size="13" font-family="sans-serif">مُخَطَّطُ تَدْوِينِ الأَنْسَابِ وَصِلَةِ الأَرْحَامِ بِخَطِّ اليَدِ (${depth} أَجْيَال)</text>
+      <line x1="-220" y1="46" x2="220" y2="46" stroke="#b45309" stroke-width="1.5"/>
+    </g>
+  `;
+
+  if (style === 'tree') {
+    // Hierarchical Tree
+    const genCount = depth; // 3, 4, or 5
+    const startY = 150;
+    const endY = 620;
+    const yStep = (endY - startY) / (genCount - 1);
+
+    // Generation 1 (Root / Grandfather) at bottom or top (Ancestral tree with root at top)
+    const genBoxes = [];
+
+    // Gen 1 (1 root)
+    genBoxes.push([{ x: width / 2, y: startY, w: 200, h: 54, label: 'الجد الأكبر / رأس الفرع', val: rootName }]);
+
+    // Gen 2
+    const g2Count = genCount >= 4 ? 3 : 2;
+    const g2List = [];
+    const g2Step = (width - 240) / (g2Count + 1);
+    for (let i = 1; i <= g2Count; i++) {
+      g2List.push({ x: 120 + i * g2Step, y: startY + yStep, w: 160, h: 50, label: `الابن / الجد (${i})` });
+    }
+    genBoxes.push(g2List);
+
+    // Gen 3
+    const g3Count = genCount === 5 ? 6 : (genCount === 4 ? 6 : 4);
+    const g3List = [];
+    const g3Step = (width - 160) / (g3Count + 1);
+    for (let i = 1; i <= g3Count; i++) {
+      g3List.push({ x: 80 + i * g3Step, y: startY + yStep * 2, w: 120, h: 48, label: `الحفيد (${i})` });
+    }
+    genBoxes.push(g3List);
+
+    // Gen 4 (if depth >= 4)
+    if (genCount >= 4) {
+      const g4Count = genCount === 5 ? 12 : 8;
+      const g4List = [];
+      const g4Step = (width - 100) / (g4Count + 1);
+      for (let i = 1; i <= g4Count; i++) {
+        g4List.push({ x: 50 + i * g4Step, y: startY + yStep * 3, w: 90, h: 44, label: `ابن الحفيد` });
+      }
+      genBoxes.push(g4List);
+    }
+
+    // Gen 5 (if depth === 5)
+    if (genCount === 5) {
+      const g5Count = 16;
+      const g5List = [];
+      const g5Step = (width - 60) / (g5Count + 1);
+      for (let i = 1; i <= g5Count; i++) {
+        g5List.push({ x: 30 + i * g5Step, y: startY + yStep * 4, w: 60, h: 40, label: `الجيل 5` });
+      }
+      genBoxes.push(g5List);
+    }
+
+    // Draw connecting lines between generations
+    for (let g = 0; g < genBoxes.length - 1; g++) {
+      const parents = genBoxes[g];
+      const children = genBoxes[g + 1];
+      parents.forEach(p => {
+        children.forEach(c => {
+          if (Math.abs(p.x - c.x) < (width / parents.length) * 0.9) {
+            elements += `<line x1="${p.x}" y1="${p.y + p.h / 2}" x2="${c.x}" y2="${c.y - c.h / 2}" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+          }
+        });
+      });
+    }
+
+    // Draw boxes with handwriting dotted lines
+    genBoxes.forEach(list => {
+      list.forEach(box => {
+        const bx = box.x - box.w / 2;
+        const by = box.y - box.h / 2;
+        elements += `
+          <g>
+            <rect x="${bx}" y="${by}" width="${box.w}" height="${box.h}" rx="6" fill="#ffffff" stroke="#92400e" stroke-width="1.5"/>
+            <text x="${box.x}" y="${by + 14}" fill="#78350f" font-size="10" font-family="sans-serif" text-anchor="middle" font-weight="bold">${esc(box.label)}</text>
+            <line x1="${bx + 8}" y1="${by + box.h * 0.55}" x2="${bx + box.w - 8}" y2="${by + box.h * 0.55}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2 2"/>
+            <line x1="${bx + 8}" y1="${by + box.h * 0.85}" x2="${bx + box.w - 8}" y2="${by + box.h * 0.85}" stroke="#cbd5e1" stroke-width="0.8" stroke-dasharray="2 2"/>
+            ${box.val ? `<text x="${box.x}" y="${by + box.h * 0.6}" fill="#0f172a" font-size="12" font-family="sans-serif" text-anchor="middle" font-weight="bold">${esc(box.val)}</text>` : ''}
+          </g>
+        `;
+      });
+    });
+  } else {
+    // Heritage Fan Chart layout (Arc radial)
+    const cx = width / 2, cy = 640;
+    const rStart = 70;
+    const rStep = 95;
+
+    for (let g = 0; g < depth; g++) {
+      const rInner = rStart + g * rStep;
+      const rOuter = rInner + rStep;
+      const count = Math.pow(2, g);
+      const angleStep = Math.PI / count;
+
+      for (let i = 0; i < count; i++) {
+        const a1 = Math.PI - (i * angleStep);
+        const a2 = a1 - angleStep;
+
+        const x1 = cx + rInner * Math.cos(a1);
+        const y1 = cy - rInner * Math.sin(a1);
+        const x2 = cx + rOuter * Math.cos(a1);
+        const y2 = cy - rOuter * Math.sin(a1);
+        const x3 = cx + rOuter * Math.cos(a2);
+        const y3 = cy - rOuter * Math.sin(a2);
+        const x4 = cx + rInner * Math.cos(a2);
+        const y4 = cy - rInner * Math.sin(a2);
+
+        elements += `
+          <path d="M ${x1} ${y1} L ${x2} ${y2} A ${rOuter} ${rOuter} 0 0 1 ${x3} ${y3} L ${x4} ${y4} A ${rInner} ${rInner} 0 0 0 ${x1} ${y1}" fill="${g % 2 === 0 ? '#ffffff' : '#fffbeb'}" stroke="#b45309" stroke-width="1.2"/>
+        `;
+      }
+    }
+  }
+
+  // Footer Signature & Handwriting Record Block
+  elements += `
+    <g transform="translate(40, ${height - 50})" font-family="sans-serif" font-size="11" fill="#78350f">
+      <text x="0" y="0">دُوّنت بخط اليد بواسطة: ................................................................</text>
+      <text x="440" y="0">التاريخ: ...... / ...... / 144..هـ</text>
+      <text x="700" y="0">الموقع / المدينة: ........................................</text>
+      <text x="0" y="24" fill="#b45309" font-size="10">قال رسول الله ﷺ: «تَعَلَّمُوا مِنْ أَنْسَابِكُمْ مَا تَصِلُونَ بِهِ أَرْحَامَكُمْ»</text>
+    </g>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;max-width:1000px;display:block;margin:0 auto" id="blank-tree-svg-el">${elements}</svg>`;
+}
+
+function openBlankTreeModal() {
+  let depth = 4;
+  let style = 'tree'; // 'tree', 'fan'
+  let rootName = S.members[0] ? S.members[0].full_name : 'الجد الجامع لآل مطارد';
+
+  function renderModal() {
+    const svgCode = generateBlankTreeSvg(depth, style, rootName);
+
+    const html = `
+      <div class="blank-tree-wrap" style="max-width:920px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>🖨️</span> شجرة فارغة قابلة للطباعة والتعبئة يدوياً (3–5 أجيال)
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          قالب شجرة نسب فارغ ومزخرف فائق الدقة مخصص للطباعة على ورق (A4 أو A3)، لتمكين الأبناء والأحفاد وكبار العائلة من تدوين أسماء الأجداد والآباء والأبناء بخط اليد وحفظها في إطار تذكاري.
+        </p>
+
+        <!-- Configuration Toolbar -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(15,23,42,.7);padding:8px 14px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--gold);font-weight:700">عدد الأجيال:</span>
+            <button type="button" class="fstats-btn ${depth === 3 ? 'active' : ''}" id="btn-dep-3" style="padding:4px 10px;font-size:.76rem">3 أجيال</button>
+            <button type="button" class="fstats-btn ${depth === 4 ? 'active' : ''}" id="btn-dep-4" style="padding:4px 10px;font-size:.76rem">4 أجيال (موصى به)</button>
+            <button type="button" class="fstats-btn ${depth === 5 ? 'active' : ''}" id="btn-dep-5" style="padding:4px 10px;font-size:.76rem">5 أجيال</button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--gold);font-weight:700">نمط المخطط:</span>
+            <button type="button" class="fstats-btn ${style === 'tree' ? 'active' : ''}" id="btn-sty-tree" style="padding:4px 10px;font-size:.76rem">🌳 شجرة هرمية</button>
+            <button type="button" class="fstats-btn ${style === 'fan' ? 'active' : ''}" id="btn-sty-fan" style="padding:4px 10px;font-size:.76rem">🪭 مروحة دائرية</button>
+          </div>
+        </div>
+
+        <!-- SVG Preview Container -->
+        <div class="blank-tree-preview-box" id="blank-tree-print-area">
+          ${svgCode}
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn" id="btn-print-blank" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
+              🖨️ طباعة فورية (Print A4 / A3)
+            </button>
+            <button type="button" class="fstats-btn" id="btn-dl-svg" style="padding:6px 14px;font-size:.82rem">
+              📄 تنزيل كملف SVG متجهي
+            </button>
+            <button type="button" class="fstats-btn" id="btn-dl-png" style="padding:6px 14px;font-size:.82rem">
+              💾 تنزيل صورة عالية الدقة (PNG)
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Bind controls
+    $('#btn-dep-3').onclick = () => { depth = 3; renderModal(); };
+    $('#btn-dep-4').onclick = () => { depth = 4; renderModal(); };
+    $('#btn-dep-5').onclick = () => { depth = 5; renderModal(); };
+
+    $('#btn-sty-tree').onclick = () => { style = 'tree'; renderModal(); };
+    $('#btn-sty-fan').onclick = () => { style = 'fan'; renderModal(); };
+
+    // Print action
+    $('#btn-print-blank').onclick = () => {
+      window.print();
+    };
+
+    // Download SVG
+    $('#btn-dl-svg').onclick = () => {
+      const blob = new Blob([generateBlankTreeSvg(depth, style, rootName)], { type: 'image/svg+xml;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `almatarid-blank-tree-${depth}gen.svg`;
+      a.click();
+      toast('📄 جاري تنزيل ملف SVG المتجهي للطباعة...');
+    };
+
+    // Download PNG
+    $('#btn-dl-png').onclick = () => {
+      const svgEl = document.getElementById('blank-tree-svg-el');
+      if (!svgEl) return;
+      const svgData = new XMLSerializer().serializeToString(svgEl);
+      const canvas = document.createElement('canvas');
+      canvas.width = 2200;
+      canvas.height = 1500;
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 2200, 1500);
+        ctx.drawImage(img, 0, 0, 2200, 1500);
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `almatarid-blank-tree-${depth}gen.png`;
+        a.click();
+        toast('💾 جاري تنزيل الصورة عالية الدقة للطباعة...');
+      };
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    };
+  }
+
+  renderModal();
+}
+
 
 
 
