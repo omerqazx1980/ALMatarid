@@ -12734,47 +12734,14 @@ function openMemberStoriesModal(filterMemberId = null) {
     { key: 'generosity', label: '☕ كرم وضيافة' }
   ];
 
-  const DEFAULT_STORIES = [
-    {
-      id: 'story_1',
-      title: 'إجارة القوافل وإكرام الضيوف في عقبة سنان',
-      memberId: S.members[0] ? S.members[0].id : '',
-      memberName: 'الجد مسفر بن علي المطارد (رحمه الله)',
-      category: 'bravery',
-      categoryLabel: '⚔️ شجاعة ومروءة',
-      era: 'نحو عام 1345هـ (قبل قرن)',
-      narrator: 'رواية متواترة عن كبار السراة',
-      body: 'كان الجد مسفر رحمه الله مشهوراً بنجدة عابري السبيل في عقبة سنان الرابطة بين جبال السراة وتهامة. وفي إحدى سنوات الشدة حاصرت السيول الجارفة قافلة تجارية محملة بالمؤن، فخرج بنفسه ومعه إخوانه ورجال العائلة وقاموا بإنقاذ الركاب والدواب، واستضافوهم في مجلس الأسرة لأكثر من أسبوع حتى هدأ السيل، وقدم لهم الزاد والعتاد لإكمال سفرهم دون مقابل، في موقف سجلته ذاكرة أهل المنطقة بالثناء والدعاء.'
-    },
-    {
-      id: 'story_2',
-      title: 'رحلة الحج الشاقة على الأقدام والإبل',
-      memberId: S.members[1] ? S.members[1].id : '',
-      memberName: 'صالح بن مسفر المطارد',
-      category: 'travel',
-      categoryLabel: '🐪 رحلات وذكريات',
-      era: 'عام 1362هـ',
-      narrator: 'عن مذكرات الركب القديم',
-      body: 'انطلق ركب الحج من بلاد النماص في أواخر شهر ذي القعدة، وسلكوا المسالك الجبلية الوعرة عبر الأودية والشعاب. وكان لصالح بن مسفر دور القيادة ومعرفة موارد المياه والآبار في الطريق. ورغم شح الزاد ومخاطر الطريق، تحلت القافلة بالصبر والتكاتف حتى لاحت لهم مآذن الحرم المكي الشريف، وسجد الجميع شكراً لله على تمام النعمة ولقاء أبناء العمومة في مكة المكرمة.'
-    },
-    {
-      id: 'story_3',
-      title: 'عمارة قصر السراة وبئر الجماعة',
-      memberId: S.members[2] ? S.members[2].id : '',
-      memberName: 'علي بن صالح المطارد',
-      category: 'waqf',
-      categoryLabel: '🏛️ أوقاف وبناء',
-      era: 'نحو عام 1370هـ',
-      narrator: 'أعيان مجلس العائلة',
-      body: 'اجتمع أعيان العائلة بريادة علي بن صالح لتوسعة القصر الحجري التراثي وتجهيز بئر الجماعة لتكون سبيلاً جارياً لعموم أهل القرية وعابري السبيل. وتطوع أبناء الأسرة بنقل حجارة الجرانيت المشذبة من أطراف الوادي، وجعلوا ريع المزرعة المجاورة صدقة جارية لإطعام المحتاجين، وظلت البئر تفيض بالماء العذب لعقود طويلة شاهدة على بر الأجداد وتكاتفهم.'
-    }
-  ];
-
-  const localStories = JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]');
-  const allStories = [...localStories, ...DEFAULT_STORIES];
+  /* قصص المستخدم فقط — بلا قصص افتراضية مختلقة: تُدوَّن القصص من أفراد العائلة وتربط بعضو حقيقي من الشجرة */
+  const readStories = () => { try { return JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]'); } catch (_) { return []; } };
+  const localStories = readStories();
+  const allStories = [...localStories];
 
   let activeCat = 'all';
   let searchQuery = '';
+  let refocusSearch = false; /* إعادة التركيز لحقل البحث بعد إعادة الرسم عند الكتابة */
   let activeMid = filterMemberId || '';
 
   function renderModal() {
@@ -12782,11 +12749,9 @@ function openMemberStoriesModal(filterMemberId = null) {
       if (activeCat !== 'all' && s.category !== activeCat) return false;
       if (activeMid && s.memberId !== activeMid) return false;
       if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return s.title.toLowerCase().includes(q) ||
-          s.memberName.toLowerCase().includes(q) ||
-          s.body.toLowerCase().includes(q) ||
-          (s.era && s.era.toLowerCase().includes(q));
+        const q = stripKin(normAr(searchQuery));
+        const hay = s => stripKin(normAr([s.title, s.memberName, s.body, s.era || ''].join(' ')));
+        return hay(s).includes(q);
       }
       return true;
     });
@@ -12801,7 +12766,7 @@ function openMemberStoriesModal(filterMemberId = null) {
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          ديوان القصص المكتوبة والحكايات التراثية الموثقة المنسوبة لأصحابها من أفراد وأعلام أسرة آل مطارد، لحفظ مآثر الأجداد والقدوات الصالحة للأجيال القادمة.
+          ديوان القصص المكتوبة والحكايات التراثية المنسوبة لأصحابها من أفراد أسرة آل مطارد، يدوّنها أفراد العائلة لحفظ مآثر الأجداد والقدوات الصالحة للأجيال القادمة.
         </p>
 
         <!-- Search Bar and Add Button -->
@@ -12877,7 +12842,7 @@ function openMemberStoriesModal(filterMemberId = null) {
         </div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
-          <span style="font-size:.74rem;color:var(--mut)">القصص والمأثورات الموثقة: <b>${allStories.length} قصة</b></span>
+          <span style="font-size:.74rem;color:var(--mut)">القصص المدوّنة: <b>${allStories.length} قصة</b></span>
           <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
@@ -12900,8 +12865,10 @@ function openMemberStoriesModal(filterMemberId = null) {
     if (sInp) {
       sInp.oninput = (e) => {
         searchQuery = e.target.value;
+        refocusSearch = true;
         renderModal();
       };
+      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (_) {} }
     }
 
     // WhatsApp share
@@ -12910,7 +12877,7 @@ function openMemberStoriesModal(filterMemberId = null) {
         const id = btn.dataset.shareStory;
         const story = allStories.find(s => s.id === id);
         if (story) {
-          const msg = `📜 *قصة من مآثر عائلة آل مطارد:*\n*${story.title}*\nصاحب القصة: ${story.memberName}\nالحقبة: ${story.era}\n\n${story.body}\n\n— موثقة عبر شجرة وتاريخ عائلة آل مطارد:\n${window.location.href}`;
+          const msg = `📜 *قصة من مآثر عائلة آل مطارد:*\n*${story.title}*\nصاحب القصة: ${story.memberName}\nالحقبة: ${story.era}\n\n${story.body}\n\n— عبر شجرة عائلة آل مطارد:\n${window.location.href}`;
           window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
         }
       };
@@ -12930,43 +12897,39 @@ function openMemberStoriesModal(filterMemberId = null) {
       };
     });
 
-    // Add new story
+    // Add new story — نموذج بمنتقي عضو حقيقي من الشجرة (بحث مطبَّع) بدل سلسلة النوافذ المنبثقة والاسم النصي الحر
     const addBtn = $('#btn-add-story');
     if (addBtn) {
       addBtn.onclick = () => {
-        const title = prompt('عنوان القصة أو المأثرة:');
-        if (!title) return;
-        const memberName = prompt('اسم صاحب القصة من أفراد العائلة (مثال: الجد مسفر المطارد):') || 'أحد الأجداد';
-        const era = prompt('الحقبة أو السنة التقريبية (مثال: نحو عام 1350هـ):') || 'زمن الأجداد';
-        const body = prompt('نص وتفاصيل القصة:') || '';
-        const narrator = prompt('مصدر الرواية أو الراوي (اختياري):') || 'رواية متواترة';
-        const catKey = prompt('رمز التصنيف: (bravery=شجاعة، travel=رحلات، waqf=أوقاف، generosity=كرم):') || 'bravery';
-
-        const catLabels = {
-          bravery: '⚔️ شجاعة ومروءة',
-          travel: '🐪 رحلات وذكريات',
-          waqf: '🏛️ أوقاف وبناء',
-          generosity: '☕ كرم وضيافة'
-        };
-
-        const newStory = {
-          id: 'story_user_' + Date.now(),
-          title,
-          memberId: '',
-          memberName,
-          category: catKey,
-          categoryLabel: catLabels[catKey] || '📜 مأثورات عامة',
-          era,
-          narrator,
-          body
-        };
-
-        const stored = JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]');
-        stored.unshift(newStory);
-        localStorage.setItem('almatarid_written_stories', JSON.stringify(stored));
-        allStories.unshift(newStory);
-        toast('✅ تم حفظ وتوثيق القصة في ديوان العائلة بنجاح!');
-        renderModal();
+        const memOpts = [['', '— بدون ربط بعضو —'], ...[...S.members].sort(byName).map(m => [m.id, cardLongName(m)])];
+        openForm('✍️ تدوين وإضافة قصة جديدة', [
+          { k: 'title', label: 'عنوان القصة أو المأثرة', req: true, val: '' },
+          { k: 'memberId', label: 'صاحب القصة (من أفراد الشجرة)', type: 'select', opts: memOpts, val: '' },
+          { k: 'category', label: 'التصنيف', type: 'select', opts: [['bravery', '⚔️ شجاعة ومروءة'], ['travel', '🐪 رحلات وذكريات'], ['waqf', '🏛️ أوقاف وبناء'], ['generosity', '☕ كرم وضيافة']], val: 'bravery' },
+          { k: 'era', label: 'الحقبة أو السنة التقريبية', val: 'زمن الأجداد' },
+          { k: 'body', label: 'نص وتفاصيل القصة', type: 'area', req: true, val: '' },
+          { k: 'narrator', label: 'مصدر الرواية أو الراوي (اختياري)', val: '' }
+        ], async d => {
+          const m = S.byId.get(d.memberId);
+          const catLabels = { bravery: '⚔️ شجاعة ومروءة', travel: '🐪 رحلات وذكريات', waqf: '🏛️ أوقاف وبناء', generosity: '☕ كرم وضيافة' };
+          const newStory = {
+            id: 'story_user_' + Date.now(),
+            title: (d.title || '').trim(),
+            memberId: m ? m.id : '',
+            memberName: m ? cardLongName(m) : 'أحد الأجداد',
+            category: d.category,
+            categoryLabel: catLabels[d.category] || '📜 مأثورات عامة',
+            era: (d.era || '').trim() || 'زمن الأجداد',
+            narrator: (d.narrator || '').trim(),
+            body: (d.body || '').trim()
+          };
+          const stored = readStories();
+          stored.unshift(newStory);
+          localStorage.setItem('almatarid_written_stories', JSON.stringify(stored));
+          allStories.unshift(newStory);
+          toast('✅ تم حفظ القصة في ديوان العائلة بنجاح!');
+          renderModal();
+        });
       };
     }
   }
