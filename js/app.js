@@ -670,7 +670,7 @@ function profile(id) {
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -928,6 +928,7 @@ $('#profile-body').addEventListener('click', e => {
      wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m),
      photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); },
      lcard: () => { openLineageCard(m.id); },
+     'qr-card': () => { openQrShareModal(m.id); },
      descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
      ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); },
      reorder: () => { $('#profile').close(); openSiblingReorderModal(m.id); },
@@ -3666,6 +3667,7 @@ function openLineageCard(targetId = null) {
 }
 
 $('#m-lcard').onclick = menuClose(() => openLineageCard());
+$('#m-qr-share').onclick = menuClose(() => openQrShareModal());
 
 /* ---------- 52) دعوات الاجتماعات وتأكيد الحضور (فرع تجربة) ---------- */
 function getEventRsvps(evId) {
@@ -10704,6 +10706,360 @@ function openCemeteriesModal() {
 
   renderModal();
 }
+
+/* ---------- 86) مشاركة الشجرة وبطاقة العضو برمز QR مع كود (فرع تجربة) ---------- */
+// Lightweight pure-JS QR Code generator
+const CompactQR = (() => {
+  function createMatrix(text) {
+    const dataBytes = [];
+    for (let i = 0; i < text.length; i++) {
+      let code = text.charCodeAt(i);
+      if (code < 128) {
+        dataBytes.push(code);
+      } else if (code < 2048) {
+        dataBytes.push(192 | (code >> 6), 128 | (code & 63));
+      } else {
+        dataBytes.push(224 | (code >> 12), 128 | ((code >> 6) & 63), 128 | (code & 63));
+      }
+    }
+
+    const ver = dataBytes.length > 32 ? 4 : 3;
+    const size = ver * 4 + 17;
+    const grid = Array.from({ length: size }, () => Array(size).fill(0));
+    const reserved = Array.from({ length: size }, () => Array(size).fill(false));
+
+    function setFinder(r, c) {
+      for (let y = -1; y <= 7; y++) {
+        for (let x = -1; x <= 7; x++) {
+          const cy = r + y, cx = c + x;
+          if (cy >= 0 && cy < size && cx >= 0 && cx < size) {
+            reserved[cy][cx] = true;
+            if (y >= 0 && y <= 6 && x >= 0 && x <= 6) {
+              grid[cy][cx] = (y === 0 || y === 6 || x === 0 || x === 6 || (y >= 2 && y <= 4 && x >= 2 && x <= 4)) ? 1 : 0;
+            } else {
+              grid[cy][cx] = 0;
+            }
+          }
+        }
+      }
+    }
+
+    setFinder(0, 0);
+    setFinder(0, size - 7);
+    setFinder(size - 7, 0);
+
+    for (let i = 8; i < size - 8; i++) {
+      grid[6][i] = (i % 2 === 0) ? 1 : 0; reserved[6][i] = true;
+      grid[i][6] = (i % 2 === 0) ? 1 : 0; reserved[i][6] = true;
+    }
+
+    grid[4 * ver + 9][8] = 1;
+    reserved[4 * ver + 9][8] = true;
+
+    const bits = [0, 1, 0, 0];
+    for (let b = 7; b >= 0; b--) bits.push((dataBytes.length >> b) & 1);
+    for (let b = 0; b < dataBytes.length; b++) {
+      for (let i = 7; i >= 0; i--) bits.push((dataBytes[b] >> i) & 1);
+    }
+    while (bits.length % 8 !== 0) bits.push(0);
+
+    let bitIdx = 0;
+    let right = size - 1;
+    let dir = -1;
+    while (right > 0) {
+      if (right === 6) right--;
+      const col1 = right, col2 = right - 1;
+      let y = dir === -1 ? size - 1 : 0;
+      while (y >= 0 && y < size) {
+        if (!reserved[y][col1]) {
+          const val = bitIdx < bits.length ? bits[bitIdx++] : (((y + col1) % 2) ? 1 : 0);
+          grid[y][col1] = ((y + col1) % 2 === 0) ? (val ^ 1) : val;
+        }
+        if (!reserved[y][col2]) {
+          const val = bitIdx < bits.length ? bits[bitIdx++] : (((y + col2) % 2) ? 1 : 0);
+          grid[y][col2] = ((y + col2) % 2 === 0) ? (val ^ 1) : val;
+        }
+        y += dir;
+      }
+      dir = -dir;
+      right -= 2;
+    }
+
+    return { size, grid };
+  }
+
+  function drawToCanvas(canvas, text, options = {}) {
+    const { size, grid } = createMatrix(text);
+    const scale = options.scale || 8;
+    const margin = options.margin || 4;
+    const totalDim = (size + margin * 2) * scale;
+    canvas.width = totalDim;
+    canvas.height = totalDim;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = options.bg || '#ffffff';
+    ctx.fillRect(0, 0, totalDim, totalDim);
+
+    ctx.fillStyle = options.fg || '#0f172a';
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (grid[y][x]) {
+          const px = (x + margin) * scale;
+          const py = (y + margin) * scale;
+          ctx.fillRect(px, py, scale, scale);
+        }
+      }
+    }
+
+    if (options.emblem !== false) {
+      const emblemSize = scale * 6;
+      const ex = (totalDim - emblemSize) / 2;
+      const ey = (totalDim - emblemSize) / 2;
+      ctx.fillStyle = options.bg || '#ffffff';
+      ctx.fillRect(ex - 4, ey - 4, emblemSize + 8, emblemSize + 8);
+      ctx.strokeStyle = options.fg || '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ex - 4, ey - 4, emblemSize + 8, emblemSize + 8);
+
+      ctx.fillStyle = options.fg || '#b45309';
+      ctx.font = `bold ${Math.round(emblemSize * 0.34)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('آل مطارد', totalDim / 2, totalDim / 2);
+    }
+  }
+
+  return { createMatrix, drawToCanvas };
+})();
+
+function openQrShareModal(targetMemberId = null) {
+  let activeMid = targetMemberId || '';
+  let activeBranch = '';
+  let includeCode = true;
+  let customCode = '27748111';
+  let activeTheme = 'gold';
+
+  function getShareUrl() {
+    const base = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    if (activeMid) {
+      params.set('p', activeMid);
+    } else if (activeBranch) {
+      params.set('b', activeBranch);
+    }
+    if (includeCode && customCode) {
+      params.set('code', customCode);
+    }
+    const query = params.toString();
+    return query ? `${base}?${query}` : base;
+  }
+
+  function getThemeColors() {
+    if (activeTheme === 'gold') {
+      return { fg: '#92400e', bg: '#fffbeb' };
+    } else if (activeTheme === 'emerald') {
+      return { fg: '#065f46', bg: '#ecfdf5' };
+    } else {
+      return { fg: '#0f172a', bg: '#ffffff' };
+    }
+  }
+
+  function renderModal() {
+    const curM = activeMid ? S.byId.get(activeMid) : null;
+    const shareUrl = getShareUrl();
+    const colors = getThemeColors();
+
+    const html = `
+      <div class="qr-share-wrap" style="max-width:720px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📱</span> مشاركة الشجرة أو بطاقة العضو برمز QR مع كود
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          توليد بطاقة رمز استجابة سريعة (QR Code) عالية الدقة لمشاركتها في الواتساب أو طباعتها في مجالس واجتماعات العائلة، مع إمكانية دمج كود الدخول السريع لفتح الشجرة فوراً.
+        </p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <!-- Controls Column -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">وجهة الرمز (الهدف):</label>
+              <select id="qr-target-select" class="fstats-btn" style="width:100%;background:#0f172a;color:var(--txt);border:1px solid var(--line);padding:6px 10px;font-size:.8rem">
+                <option value="" ${!activeMid ? 'selected' : ''}>🌐 شجرة العائلة بالكامل (الرئيسية)</option>
+                ${S.members.slice(0, 30).map(m => `
+                  <option value="${m.id}" ${m.id === activeMid ? 'selected' : ''}>
+                    👤 بطاقة نسب: ${esc(m.full_name)}
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div style="background:rgba(15,23,42,.7);border:1px solid var(--line);border-radius:8px;padding:10px">
+              <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--txt);cursor:pointer">
+                <input type="checkbox" id="qr-inc-code" ${includeCode ? 'checked' : ''} style="accent-color:var(--gold)">
+                <span>تضمين كود الدخول في الرابط والرمز تلقائياً</span>
+              </label>
+              <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+                <span style="font-size:.74rem;color:var(--mut)">الكود:</span>
+                <input type="text" id="qr-code-val" value="${esc(customCode)}" style="background:#0f172a;color:var(--gold);border:1px solid var(--gold);padding:4px 8px;border-radius:6px;font-size:.85rem;font-weight:700;width:120px;text-align:center">
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:.78rem;color:var(--gold);display:block;margin-bottom:4px">سمة وألوان الرمز:</label>
+              <div style="display:flex;gap:6px">
+                <button type="button" class="fstats-btn ${activeTheme === 'gold' ? 'active' : ''}" id="qr-thm-gold" style="flex:1;padding:4px 8px;font-size:.76rem">👑 ذهبي ملكي</button>
+                <button type="button" class="fstats-btn ${activeTheme === 'emerald' ? 'active' : ''}" id="qr-thm-emerald" style="flex:1;padding:4px 8px;font-size:.76rem">🌿 أخضر سعودي</button>
+                <button type="button" class="fstats-btn ${activeTheme === 'dark' ? 'active' : ''}" id="qr-thm-dark" style="flex:1;padding:4px 8px;font-size:.76rem">🖤 كلاسيكي</button>
+              </div>
+            </div>
+
+            <div style="background:rgba(15,23,42,.5);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;font-size:.74rem;color:var(--mut)">
+              🔗 الرابط المضمن:
+              <div style="color:var(--gold);word-break:break-all;direction:ltr;text-align:left;margin-top:2px;font-family:monospace">
+                ${esc(shareUrl)}
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview & Card Column -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div class="qr-card-preview" id="qr-card-container">
+              <div style="color:var(--gold);font-weight:700;font-size:.95rem">
+                ${curM ? 'بطاقة نسب رقمية' : 'شجرة أسرة آل مطارد'}
+              </div>
+              ${curM ? `<div style="font-size:.8rem;color:#e2e8f0;margin-top:-6px">${esc(curM.full_name)}</div>` : ''}
+
+              <div class="qr-canvas-box">
+                <canvas id="qr-share-canvas" style="display:block;width:180px;height:180px"></canvas>
+              </div>
+
+              ${includeCode && customCode ? `
+                <div style="font-size:.74rem;color:var(--mut)">
+                  كود الدخول المعتمد:
+                  <div class="qr-passcode-badge">${esc(customCode)}</div>
+                </div>
+              ` : ''}
+              <div style="font-size:.68rem;color:var(--mut)">امسح بالكاميرا للدخول المباشر</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn" id="btn-qr-download" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.8rem">
+              💾 تحميل الرمز (PNG)
+            </button>
+            <button type="button" class="fstats-btn" id="btn-qr-wa" style="background:#25d366;color:#0f172a;font-weight:700;padding:6px 14px;font-size:.8rem">
+              📲 مشاركة عبر واتساب
+            </button>
+            <button type="button" class="fstats-btn" id="btn-qr-copy" style="padding:6px 14px;font-size:.8rem">
+              📋 نسخ الرابط والكود
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Draw QR canvas
+    const canvas = $('#qr-share-canvas');
+    if (canvas) {
+      CompactQR.drawToCanvas(canvas, shareUrl, {
+        scale: 7,
+        margin: 3,
+        fg: colors.fg,
+        bg: colors.bg,
+        emblem: true
+      });
+    }
+
+    // Bind controls
+    const sel = $('#qr-target-select');
+    if (sel) {
+      sel.onchange = () => {
+        activeMid = sel.value;
+        renderModal();
+      };
+    }
+
+    const incChk = $('#qr-inc-code');
+    if (incChk) {
+      incChk.onchange = () => {
+        includeCode = incChk.checked;
+        renderModal();
+      };
+    }
+
+    const cVal = $('#qr-code-val');
+    if (cVal) {
+      cVal.oninput = () => {
+        customCode = cVal.value.trim();
+        const cvs = $('#qr-share-canvas');
+        if (cvs) {
+          CompactQR.drawToCanvas(cvs, getShareUrl(), {
+            scale: 7,
+            margin: 3,
+            fg: colors.fg,
+            bg: colors.bg,
+            emblem: true
+          });
+        }
+      };
+    }
+
+    const tGold = $('#qr-thm-gold');
+    if (tGold) tGold.onclick = () => { activeTheme = 'gold'; renderModal(); };
+    const tEmd = $('#qr-thm-emerald');
+    if (tEmd) tEmd.onclick = () => { activeTheme = 'emerald'; renderModal(); };
+    const tDrk = $('#qr-thm-dark');
+    if (tDrk) tDrk.onclick = () => { activeTheme = 'dark'; renderModal(); };
+
+    // Download action
+    const dlBtn = $('#btn-qr-download');
+    if (dlBtn && canvas) {
+      dlBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.download = `almatarid-qr-${activeMid || 'family'}-${Date.now()}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+        toast('💾 جاري تنزيل رمز QR...');
+      };
+    }
+
+    // WhatsApp action
+    const waBtn = $('#btn-qr-wa');
+    if (waBtn) {
+      waBtn.onclick = () => {
+        const title = curM ? `بطاقة نسب: ${curM.full_name}` : 'شجرة أسرة آل مطارد التفاعلية';
+        const msg = `🌿 السلام عليكم ورحمة الله وبركاته،\nأدعوكم لزيارة وتصفح ${title}:\n🔗 ${shareUrl}\n${includeCode && customCode ? `🔑 رمز الدخول: ${customCode}\n` : ''}حياكم الله بين أهلكم وأقاربكم.`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+      };
+    }
+
+    // Copy action
+    const copyBtn = $('#btn-qr-copy');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        const text = `رابط الوصول: ${shareUrl}${includeCode && customCode ? `\nكود الدخول: ${customCode}` : ''}`;
+        navigator.clipboard.writeText(text).then(() => {
+          toast('✅ تم نسخ رابط الدخول وكود المشاركة!');
+        });
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 
