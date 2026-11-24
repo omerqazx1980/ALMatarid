@@ -1100,3 +1100,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .ai-restore-btn { background: rgba(245,158,11,.15); border: 1px solid var(--gold); color: var(--gold); border-radius: 6px; padding: 6px 12px; font-size: .8rem; font-weight: 700; cursor: pointer; transition: all .15s ease; }
 .ai-restore-btn:hover, .ai-restore-btn.active { background: var(--gold); color: #0f172a; }
 
+/* ---------- 82) تحليل الصور القديمة واستنتاج تاريخها ومكانها ---------- */
+.photo-analysis-wrap { display: flex; flex-direction: column; gap: 14px; }
+.photo-analysis-grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+@media (max-width: 640px) { .photo-analysis-grid { grid-template-columns: 1fr; } }
+.analysis-img-box { background: rgba(15,23,42,.9); border: 1.5px solid var(--gold); border-radius: 10px; overflow: hidden; text-align: center; padding: 10px; }
+.analysis-card { background: rgba(15,23,42,.7); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.analysis-card h4 { margin: 0 0 6px 0; color: var(--gold); font-size: .88rem; display: flex; align-items: center; gap: 6px; }
+.analysis-meter { height: 6px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.analysis-bar { height: 100%; background: linear-gradient(90deg, var(--gold), #22c55e); border-radius: 4px; }
+
+

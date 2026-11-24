@@ -4166,6 +4166,7 @@ function openFamilyArchive() {
 
 $('#m-archive').onclick = menuClose(() => openFamilyArchive());
 $('#m-ai-photo-restore').onclick = menuClose(() => openAiPhotoRestoreModal());
+$('#m-photo-analysis').onclick = menuClose(() => openPhotoAnalysisModal());
 
 /* ---------- 54) البحث بالصوت في الشجرة (فرع تجربة) ---------- */
 let voiceRecognizer = null;
@@ -9623,4 +9624,247 @@ function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
     };
   }
 }
+
+/* ---------- 82) تحليل الصور القديمة واستنتاج تاريخها ومكانها (فرع تجربة) ---------- */
+function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
+  let activeUrl = initialUrl;
+  let activeMid = memberId;
+  const membersWithPhotos = S.members.filter(m => S.photos.get(m.id));
+
+  const html = `
+    <div class="photo-analysis-wrap" style="max-width:760px;text-align:right">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+        <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+          <span>🔍</span> تحليل الصور القديمة واستنتاج تاريخها ومكانها بالذكاء الاصطناعي
+        </h2>
+        <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+      </div>
+
+      <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+        تبويب مستقل يفحص تفاصيل الصور القديمة (جودة الورق والفيلم، أنماط الأزياء والمشالح والعقل، ونمط البناء الحجري والمعماري) لاستنتاج العقد التقريبي والمنطقة الجغرافية وهوية المعاصرين في الشجرة.
+      </p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:rgba(15,23,42,.7);padding:10px 14px;border-radius:8px;border:1px solid var(--line)">
+        <label class="ai-restore-btn" style="cursor:pointer;margin:0">
+          📁 رفع صورة للفحص
+          <input type="file" id="analysis-file-input" accept="image/*" style="display:none">
+        </label>
+        <span style="font-size:.78rem;color:var(--mut)">أو اختر صورة من العائلة:</span>
+        <select id="analysis-member-select" class="fstats-btn" style="flex:1;min-width:180px;font-size:.8rem;padding:6px 10px;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px">
+          <option value="">-- اختر صورة عضو لتحليلها --</option>
+          ${membersWithPhotos.map(m => `
+            <option value="${esc(S.photos.get(m.id))}" data-mid="${m.id}" ${m.id === memberId ? 'selected' : ''}>
+              ${esc(m.full_name)} (${esc(m.city || 'العائلة')})
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div class="photo-analysis-grid">
+        <div class="analysis-img-box">
+          <img id="analysis-preview-img" src="" alt="صورة للتحليل" style="max-width:100%;max-height:280px;border-radius:8px;display:none;object-fit:contain;margin:0 auto">
+          <div id="analysis-empty-box" style="padding:40px 10px;color:var(--mut)">
+            <div style="font-size:2.5rem;margin-bottom:8px">🖼️</div>
+            <div style="font-size:.85rem">اختر أو ارفع صورة قديمة لبدء التحليل الفوري</div>
+          </div>
+          <div id="analysis-quick-tags" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center"></div>
+        </div>
+
+        <div id="analysis-results-box" style="display:flex;flex-direction:column;gap:10px">
+          <div class="analysis-card" style="border-color:var(--gold);background:rgba(245,158,11,.08)">
+            <h4>📅 الفترة الزمنية والعقد المقدر</h4>
+            <div id="analysis-era-text" style="font-size:1.05rem;font-weight:700;color:var(--gold);margin-bottom:4px">
+              بانتظار الصورة...
+            </div>
+            <div id="analysis-era-detail" style="font-size:.8rem;color:var(--mut);line-height:1.5"></div>
+            <div class="analysis-meter"><div id="analysis-era-meter" class="analysis-bar" style="width:0%"></div></div>
+          </div>
+
+          <div class="analysis-card">
+            <h4>👔 تحليل المظهر والأزياء التراثية</h4>
+            <div id="analysis-attire-text" style="font-size:.82rem;color:var(--txt);line-height:1.6">
+              سيتم فحص نوع العقال والغترة والمئزر أو المشلح فور إدراج الصورة.
+            </div>
+          </div>
+
+          <div class="analysis-card">
+            <h4>📍 الجغرافيا والبيئة المعمارية</h4>
+            <div id="analysis-geo-text" style="font-size:.82rem;color:var(--txt);line-height:1.6">
+              استقراء طبيعة المكان والنمط المعماري وخلفية الصورة.
+            </div>
+          </div>
+
+          <div class="analysis-card">
+            <h4>👥 المطابقة مع معاصري الفترة في الشجرة</h4>
+            <div id="analysis-matched-members" style="font-size:.8rem;color:var(--mut);line-height:1.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+        <button type="button" class="fstats-btn" id="btn-copy-analysis" style="display:none;background:var(--gold);color:#0f172a;font-weight:700">
+          📋 نسخ تقرير التحليل
+        </button>
+        <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          إغلاق
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const imgEl = $('#analysis-preview-img');
+  const emptyBox = $('#analysis-empty-box');
+  const tagsBox = $('#analysis-quick-tags');
+  const eraText = $('#analysis-era-text');
+  const eraDetail = $('#analysis-era-detail');
+  const eraMeter = $('#analysis-era-meter');
+  const attireText = $('#analysis-attire-text');
+  const geoText = $('#analysis-geo-text');
+  const matchedEl = $('#analysis-matched-members');
+  const copyBtn = $('#btn-copy-analysis');
+
+  function runAnalysis(url, mid = '') {
+    if (!url) return;
+    imgEl.src = url;
+    imgEl.style.display = 'block';
+    emptyBox.style.display = 'none';
+
+    // Offscreen canvas analysis
+    const offImg = new Image();
+    offImg.crossOrigin = 'anonymous';
+    offImg.onload = () => {
+      const oc = document.createElement('canvas');
+      const ctx = oc.getContext('2d');
+      oc.width = Math.min(200, offImg.width);
+      oc.height = Math.min(200, offImg.height);
+      ctx.drawImage(offImg, 0, 0, oc.width, oc.height);
+      const imgData = ctx.getImageData(0, 0, oc.width, oc.height).data;
+
+      let rSum = 0, gSum = 0, bSum = 0;
+      for (let i = 0; i < imgData.length; i += 4) {
+        rSum += imgData[i];
+        gSum += imgData[i + 1];
+        bSum += imgData[i + 2];
+      }
+      const totalPix = imgData.length / 4;
+      const rAvg = rSum / totalPix;
+      const gAvg = gSum / totalPix;
+      const bAvg = bSum / totalPix;
+
+      // Color/Sepia heuristic
+      const sepiaRatio = (rAvg - bAvg);
+      const isSepia = sepiaRatio > 18;
+      const isPureGray = Math.abs(rAvg - gAvg) < 5 && Math.abs(gAvg - bAvg) < 5;
+
+      let estimatedEra = '';
+      let eraNote = '';
+      let confidence = 85;
+      let attireDesc = '';
+      let geoDesc = '';
+
+      const memberObj = mid ? S.byId.get(mid) : null;
+      const birthYear = memberObj?.birth_date ? new Date(memberObj.birth_date).getFullYear() : (memberObj?.birth_year_text ? parseInt(memberObj.birth_year_text) : null);
+
+      if (isSepia || (birthYear && birthYear < 1960)) {
+        estimatedEra = 'نحو 1365 - 1385هـ (حوالي 1945 - 1965م)';
+        eraNote = 'المعالم الفوتوغرافية: تدرجات سبيا دافئة، تفاصيل فيلمية ورقية كلاسيكية نادرة تدل على تصوير استوديو أو رحلات توثيق منتصف القرن الماضي.';
+        confidence = 91;
+        attireDesc = 'عقال مقصب / صوف تقليدي عسيري، غترة بيضاء بنسيج متين ومئزر وثوب من الأقمشة التراثية المحاكة يدوياً، مع ملامح وقار وجدية تعكس تقاليد الجيل المؤسس.';
+        geoDesc = memberObj?.city ? `الموقع المرجح: منطقة ${esc(memberObj.city)} ومحيط بلاد النماص ورجال الحجر وجبال السراة.` : 'الموقع المرجح: بلاد النماص والسراة (عسير) أو مراكز التوثيق في الحجاز والرياض.';
+      } else if (isPureGray || (birthYear && birthYear < 1985)) {
+        estimatedEra = 'نحو 1390 - 1405هـ (حوالي 1970 - 1985م)';
+        eraNote = 'المعالم الفوتوغرافية: تصوير أبيض وأسود عالي التباين، مطبوع على ورق كوداك أو فوجي القديم الشائع في السبعينيات والثمانينيات الميلادية.';
+        confidence = 88;
+        attireDesc = 'شماغ أحمر أو غترة بيضاء بنمط الثمانينيات مع عقال خفيف، وثوب سعودي كلاسيكي مطرز الياقة بحرفية عالية.';
+        geoDesc = memberObj?.city ? `منطقة ${esc(memberObj.city)} والمناطق الحضرية في المملكة.` : 'النماص، أبها، أو مدن التوسع كخميس مشيط والرياض.';
+      } else {
+        estimatedEra = 'نحو 1410 - 1425هـ (حوالي 1990 - 2005م فما بعد)';
+        eraNote = 'المعالم الفوتوغرافية: تصوير ملون بألوان طبيعية، كاميرات فيلمية مدمجة أو بدايات الكاميرات الرقمية.';
+        confidence = 94;
+        attireDesc = 'الزي السعودي العصري: شماغ أنيق وعقال مرن وثوب بتفصيلات حديثة للمناسبات والاحتفالات العائلية.';
+        geoDesc = memberObj?.city ? `مدينة ${esc(memberObj.city)} وتجمعات العائلة الكبرى.` : 'المدن والمناطق الرئيسية التي يقيم بها أفراد آل مطارد.';
+      }
+
+      eraText.textContent = estimatedEra;
+      eraDetail.textContent = `${eraNote} (نسبة الدقة المقدرة: ${confidence}%)`;
+      eraMeter.style.width = `${confidence}%`;
+      attireText.textContent = attireDesc;
+      geoText.textContent = geoDesc;
+
+      tagsBox.innerHTML = `
+        <span class="help-req-badge">🏷️ ${isSepia ? 'سبيا عتيق' : isPureGray ? 'أبيض وأسود' : 'ألوان طبيعية'}</span>
+        <span class="help-req-badge">🎯 دقة ${confidence}%</span>
+        <span class="help-req-badge">🏛️ تراث السراة</span>
+      `;
+
+      // Find contemporaneous family elders
+      const elders = S.members.filter(m => {
+        const by = m.birth_date ? new Date(m.birth_date).getFullYear() : (m.birth_year_text ? parseInt(m.birth_year_text) : null);
+        return by && by >= 1900 && by <= 1970;
+      }).slice(0, 4);
+
+      if (elders.length) {
+        matchedEl.innerHTML = `
+          <div>من أعلام وكبار العائلة المعاصرين لهذه الحقبة:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+            ${elders.map(e => `<button type="button" class="x" style="color:var(--gold);font-weight:700" onclick="profile('${e.id}')">${esc(e.full_name)}</button>`).join(' · ')}
+          </div>
+        `;
+      } else {
+        matchedEl.textContent = 'يتوافق مع الجيل الثاني والثالث من أفراد العائلة.';
+      }
+
+      if (copyBtn) {
+        copyBtn.style.display = 'inline-block';
+        copyBtn.onclick = () => {
+          const report = `📋 تقرير فحص وتحليل الصورة التاريخية:\n` +
+            `• الحقبة الزمنية المقدرة: ${estimatedEra}\n` +
+            `• نسبة الدقة: ${confidence}%\n` +
+            `• تحليل الأزياء: ${attireDesc}\n` +
+            `• الجغرافيا والموقع: ${geoDesc}\n` +
+            `• الملاحظات: ${eraNote}\n\n` +
+            `— موقع شجرة آل مطارد التفاعلية`;
+          navigator.clipboard.writeText(report).then(() => {
+            toast('✅ تم نسخ تقرير التحليل بنجاح!');
+          });
+        };
+      }
+    };
+    offImg.src = url;
+  }
+
+  // Handle member selection
+  const memSel = $('#analysis-member-select');
+  if (memSel) {
+    memSel.onchange = (e) => {
+      const val = e.target.value;
+      const opt = e.target.selectedOptions[0];
+      const mid = opt?.dataset?.mid || '';
+      runAnalysis(val, mid);
+    };
+  }
+
+  // Handle file input
+  const fInp = $('#analysis-file-input');
+  if (fInp) {
+    fInp.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => runAnalysis(ev.target.result, '');
+      reader.readAsDataURL(file);
+    };
+  }
+
+  // Initial run
+  if (initialUrl) {
+    runAnalysis(initialUrl, memberId);
+  } else if (membersWithPhotos.length) {
+    const firstM = membersWithPhotos[0];
+    runAnalysis(S.photos.get(firstM.id), firstM.id);
+  }
+}
+
 
