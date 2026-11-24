@@ -4169,6 +4169,7 @@ $('#m-ai-photo-restore').onclick = menuClose(() => openAiPhotoRestoreModal());
 $('#m-photo-analysis').onclick = menuClose(() => openPhotoAnalysisModal());
 $('#m-exif-map').onclick = menuClose(() => openPhotoExifMapModal());
 $('#m-transcribe').onclick = menuClose(() => openTranscribeModal());
+$('#m-cemeteries').onclick = menuClose(() => openCemeteriesModal());
 
 /* ---------- 54) البحث بالصوت في الشجرة (فرع تجربة) ---------- */
 let voiceRecognizer = null;
@@ -10463,6 +10464,247 @@ function openTranscribeModal(initialTab = 'docs') {
 
   renderModal();
 }
+
+/* ---------- 85) قبور ومدافن العائلة - المواقع فقط (فرع تجربة) ---------- */
+function openCemeteriesModal() {
+  const DEFAULT_CEMETERIES = [
+    {
+      id: 'cem_1',
+      name: 'مقبرة آل مطارد القديمة بالنماص',
+      city: 'النماص',
+      region: 'منطقة عسير (الموطن التاريخي للأسرة)',
+      description: 'المقبرة التاريخية القديمة لأسرة آل مطارد في وادي السراة ببلاد بني عمرو.',
+      lat: 19.1182,
+      lng: 42.1325,
+      isHistorical: true
+    },
+    {
+      id: 'cem_2',
+      name: 'مقبرة النسيم',
+      city: 'الرياض',
+      region: 'منطقة الرياض',
+      description: 'شرق مدينة الرياض، مدفن عدد من متوفي الأسرة المقيمين بالرياض.',
+      lat: 24.7335,
+      lng: 46.8402,
+      isHistorical: false
+    },
+    {
+      id: 'cem_3',
+      name: 'مقبرة المنصورية / الحائر',
+      city: 'الرياض',
+      region: 'منطقة الرياض',
+      description: 'جنوب مدينة الرياض، مدافن ومقابر العاصمة.',
+      lat: 24.5120,
+      lng: 46.8504,
+      isHistorical: false
+    },
+    {
+      id: 'cem_4',
+      name: 'مقبرة الصالحية',
+      city: 'جدة',
+      region: 'منطقة مكة المكرمة',
+      description: 'شمال شرق محافظة جدة، مدفن أبناء العمومة في الساحل الغربي.',
+      lat: 21.6305,
+      lng: 39.2201,
+      isHistorical: false
+    },
+    {
+      id: 'cem_5',
+      name: 'مقابر المعلاة والشرائع',
+      city: 'مكة المكرمة',
+      region: 'العاصمة المقدسة',
+      description: 'مدافن المشاعر ومكة المكرمة لمن توفاه الله مجاوراً للبيت العتيق.',
+      lat: 21.4360,
+      lng: 39.8290,
+      isHistorical: true
+    },
+    {
+      id: 'cem_6',
+      name: 'مقبرة مروح وبني عمرو',
+      city: 'النماص',
+      region: 'منطقة عسير',
+      description: 'من المدافن القديمة المعتمدة لقرى وأعيان بني عمرو.',
+      lat: 19.1950,
+      lng: 42.1550,
+      isHistorical: true
+    }
+  ];
+
+  const localCustom = JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]');
+  const allCemeteries = [...localCustom, ...DEFAULT_CEMETERIES];
+
+  // Map deceased members
+  const deceasedMembers = S.members.filter(m => !m.is_alive);
+
+  let selectedCity = 'all';
+  let searchQuery = '';
+
+  function renderModal() {
+    const cities = Array.from(new Set(allCemeteries.map(c => c.city)));
+
+    const filtered = allCemeteries.filter(c => {
+      if (selectedCity !== 'all' && c.city !== selectedCity) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return c.name.toLowerCase().includes(q) ||
+          c.city.toLowerCase().includes(q) ||
+          c.description.toLowerCase().includes(q);
+      }
+      return true;
+    });
+
+    const html = `
+      <div class="cemetery-wrap" style="max-width:780px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>🌿</span> قبور ومدافن العائلة (المواقع فقط)
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <!-- Prophetic Visitation Supplication -->
+        <div class="cemetery-dua-banner">
+          <b style="display:block;margin-bottom:4px">🤲 دعاء زيارة القبور المأثور عن النبي ﷺ:</b>
+          «السَّلَامُ عَلَيْكُمْ أَهْلَ الدِّيَارِ مِنَ الْمُؤْمِنِينَ وَالْمُسْلِمِينَ، وَإِنَّا إِنْ شَاءَ اللهُ بِكُمْ لَلَاحِقُونَ، نَسْأَلُ اللهَ لَنَا وَلَكُمُ الْعَافِيَةَ، يَرْحَمُ اللهُ الْمُسْتَقْدِمِينَ مِنَّا وَالْمُسْتَأْخِرِينَ»
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(15,23,42,.7);padding:8px 14px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--mut)">المدينة:</span>
+            <button type="button" class="fstats-btn ${selectedCity === 'all' ? 'active' : ''}" id="cem-filter-all" style="padding:4px 10px;font-size:.76rem">الكل</button>
+            ${cities.map(c => `
+              <button type="button" class="fstats-btn ${selectedCity === c ? 'active' : ''}" data-cem-city="${esc(c)}" style="padding:4px 10px;font-size:.76rem">
+                ${esc(c)}
+              </button>
+            `).join('')}
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="cem-search-inp" value="${esc(searchQuery)}" placeholder="بحث باسم المقبرة أو المدينة..." style="background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:.78rem">
+            ${canEdit() ? `
+              <button type="button" class="fstats-btn" id="btn-add-cemetery" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:4px 10px">
+                ➕ إضافة موقع مقبرة
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Cemeteries List -->
+        <div style="display:flex;flex-direction:column;gap:10px;max-height:450px;overflow-y:auto;padding-left:4px">
+          ${filtered.map(cem => {
+            // Associated deceased matching this city/origin
+            const relatedDeceased = deceasedMembers.filter(m => (m.cemetery_id === cem.id) || (m.city === cem.city) || (cem.isHistorical && (!m.city || m.city === 'النماص'))).slice(0, 6);
+            return `
+              <div class="cemetery-card">
+                <div class="cemetery-head">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:1.2rem">🌿</span>
+                    <div>
+                      <h3 style="margin:0;font-size:.95rem;color:var(--gold)">${esc(cem.name)}</h3>
+                      <div style="font-size:.74rem;color:var(--mut)">📍 ${esc(cem.city)} · ${esc(cem.region)}</div>
+                    </div>
+                  </div>
+
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <a href="https://www.google.com/maps/dir/?api=1&destination=${cem.lat},${cem.lng}" target="_blank" class="fstats-btn" style="text-decoration:none;background:rgba(245,158,11,.15);color:var(--gold);border-color:var(--gold);font-weight:700;font-size:.76rem;padding:4px 10px;display:flex;align-items:center;gap:4px">
+                      <span>🗺️ الاتجاهات والموقع (خرائط Google) ↗</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div style="font-size:.8rem;color:var(--txt);line-height:1.5">
+                  ${esc(cem.description)}
+                </div>
+
+                <div style="font-size:.73rem;color:var(--mut);display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px">
+                  <span>🌐 الإحداثيات: <b>${cem.lat.toFixed(4)}° N, ${cem.lng.toFixed(4)}° E</b></span>
+                  ${cem.isHistorical ? '<span style="color:var(--gold)">🏛️ مقبرة تاريخية قديمة</span>' : ''}
+                </div>
+
+                ${relatedDeceased.length ? `
+                  <div style="border-top:1px dashed var(--line);padding-top:6px;margin-top:2px">
+                    <div style="font-size:.74rem;color:var(--mut);margin-bottom:4px">من الراقدين هنا من أفراد العائلة (رحمهم الله):</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                      ${relatedDeceased.map(m => `
+                        <button type="button" class="x" style="font-size:.76rem;color:var(--gold);font-weight:700;background:rgba(245,158,11,.08);padding:2px 8px;border-radius:4px" onclick="profile('${m.id}')">
+                          🤲 ${esc(m.full_name)}
+                        </button>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
+          <span style="font-size:.76rem;color:var(--mut)">
+            * يُعرض فقط الموقع الجغرافي للمقبرة للتسهيل على الراغبين بالزيارة الشرعية والدعاء للأموات.
+          </span>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Filter bindings
+    const bAll = $('#cem-filter-all');
+    if (bAll) bAll.onclick = () => { selectedCity = 'all'; renderModal(); };
+
+    document.querySelectorAll('[data-cem-city]').forEach(btn => {
+      btn.onclick = () => {
+        selectedCity = btn.dataset.cemCity;
+        renderModal();
+      };
+    });
+
+    const sInp = $('#cem-search-inp');
+    if (sInp) {
+      sInp.oninput = (e) => {
+        searchQuery = e.target.value;
+        renderModal();
+      };
+    }
+
+    // Add cemetery binding
+    const addBtn = $('#btn-add-cemetery');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const name = prompt('اسم المقبرة:');
+        if (!name) return;
+        const city = prompt('المدينة (مثال: النماص، الرياض، جدة):') || 'النماص';
+        const desc = prompt('وصف المقبرة أو معلم قريب:') || '';
+        const latStr = prompt('خط العرض (Latitude) أو اضغط موافق للافتراضي:') || '19.118';
+        const lngStr = prompt('خط الطول (Longitude) أو اضغط موافق للافتراضي:') || '42.132';
+
+        const newCem = {
+          id: 'cem_user_' + Date.now(),
+          name,
+          city,
+          region: 'المملكة العربية السعودية',
+          description: desc,
+          lat: parseFloat(latStr) || 19.118,
+          lng: parseFloat(lngStr) || 42.132,
+          isHistorical: false
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]');
+        stored.push(newCem);
+        localStorage.setItem('almatarid_cemeteries', JSON.stringify(stored));
+        allCemeteries.unshift(newCem);
+        toast('✅ تمت إضافة المقبرة بنجاح!');
+        renderModal();
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 
