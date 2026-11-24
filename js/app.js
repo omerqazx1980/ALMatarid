@@ -95,6 +95,10 @@ function index() {
   S.roots = S.members.filter(m => !m.father_id || !S.byId.has(m.father_id));
 }
 const gen = m => { if (m._g) return m._g; let n = 1, p = S.byId.get(m.father_id); while (p && n < 30) { n++; p = S.byId.get(p.father_id); } return m._g = n; };
+/* getSubtree: كل أفراد فرع تحت جذر (الجذر أولاً ثم النسل بترتيب BFS) — تستخدمها التقارير (43) والتصدير (44) */
+const getSubtree = id => { const root = S.byId.get(id); if (!root) return []; const out = [root]; const q = [root.id]; const seen = new Set([root.id]); while (q.length) { const cur = q.shift(); for (const k of (S.kids.get(cur) || [])) { if (!seen.has(k.id)) { seen.add(k.id); out.push(k); q.push(k.id); } } } return out; };
+/* printHtml: طباعة محتوى نافذة منبثقة عبر نافذة طباعة مخصصة — لأن CSS الطباعة العام يخفي الـ dialog فيخفي محتواها */
+function printHtml(title, bodyHtml) { const w = window.open('', '_blank'); if (!w) { toast('اسمح بالنوافذ المنبثقة للطباعة'); return; } w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:sans-serif;padding:16px;color:#000;background:#fff}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:6px 8px;text-align:right;font-size:13px}h1,h2,h3{color:#92400e}svg{max-width:100%;height:auto}</style></head><body>${bodyHtml}</body></html>`); w.document.close(); w.focus(); setTimeout(() => w.print(), 300); }
 /* اسم البطاقة: الجيلان الأول والثاني بالاسم الكامل، ومن الثالث فأحدث الاسم الأول فقط (بلا سلسلة الأب) */
 const shortName = m => {
   const f = S.byId.get(m.father_id); if (!f) return m.full_name;
