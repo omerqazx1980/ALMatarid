@@ -5422,6 +5422,64 @@ function checkDailyAutoBackup() {
   }
 }
 
+function confirmRestoreBackup(bk) {
+  if (!bk || !bk.data) return;
+  const count = bk.stats?.members || (bk.data.members || []).length;
+  const dateStr = new Date(bk.date).toLocaleString('ar-SA');
+
+  const html = `
+    <div style="display:flex;flex-direction:column;gap:12px;padding:4px 0">
+      <div class="fstats-head">
+        <h2 style="color:#ef4444">⚠️ تأكيد استعادة النسخة الاحتياطية</h2>
+        <p class="sub">سيتم استبدال البيانات الحالية بالبيانات المحفوظة في هذه النسخة</p>
+      </div>
+
+      <div style="background:rgba(239,68,68,.1);border:1.5px solid #ef4444;border-radius:10px;padding:14px;color:#fca5a5;font-size:.85rem;line-height:1.7">
+        <b>تفاصيل النسخة المختارة:</b><br>
+        📅 تاريخ النسخة: <b>${dateStr}</b><br>
+        👥 عدد أفراد الأسرة: <b>${count} فرد</b><br>
+        💍 عدد الزوجات: <b>${bk.stats?.wives || (bk.data.wives || []).length}</b><br>
+        🎉 عدد المناسبات: <b>${bk.stats?.events || (bk.data.events || []).length}</b><br>
+        <div style="margin-top:8px;border-top:1px dashed rgba(239,68,68,.4);padding-top:6px;font-size:.78rem">
+          تنبيه: يُنصح بالتأكد قبل الاسترجاع. سيتم حفظ الحالة الحالية كنسخة تلقائية قبل التبديل.
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button type="button" id="btn-do-restore" style="flex:1;background:#ef4444;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:800;font-size:.9rem;cursor:pointer">
+          ↺ تأكيد الاستعادة والرجوع للبيانات
+        </button>
+        <button type="button" class="btn ghost" id="btn-cancel-restore" style="padding:10px 16px">
+          إلغاء
+        </button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const doBtn = $('#btn-do-restore');
+  if (doBtn) {
+    doBtn.onclick = () => {
+      saveAutoBackup(true);
+      S.members = JSON.parse(JSON.stringify(bk.data.members || []));
+      S.wives = JSON.parse(JSON.stringify(bk.data.wives || []));
+      S.events = JSON.parse(JSON.stringify(bk.data.events || []));
+      if (bk.data.branches) S.branches = JSON.parse(JSON.stringify(bk.data.branches));
+      index();
+      render();
+      showEvent();
+      toast('✓ تم استعادة النسخة الاحتياطية وتحديث الشجرة بنجاح!');
+      $('#profile').close();
+    };
+  }
+
+  const cancelBtn = $('#btn-cancel-restore');
+  if (cancelBtn) {
+    cancelBtn.onclick = () => openBackupsManager();
+  }
+}
+
 function openBackupsManager() {
   const list = getAutoBackups();
 
@@ -5451,6 +5509,9 @@ function openBackupsManager() {
               </div>
             </div>
             <div style="display:flex;gap:6px">
+              <button type="button" class="btn" data-restore-bk="${bk.id}" style="background:#0284c7;color:#fff;padding:4px 10px;font-size:.75rem;border-radius:6px;font-weight:700">
+                ↺ استعادة
+              </button>
               <button type="button" class="btn ghost" data-dl-bk="${bk.id}" style="padding:4px 8px;font-size:.75rem">
                 📥 تحميل JSON
               </button>
@@ -5473,6 +5534,14 @@ function openBackupsManager() {
       }
     };
   }
+
+  document.querySelectorAll('[data-restore-bk]').forEach(btn => {
+    btn.onclick = () => {
+      const bk = list.find(x => x.id === btn.dataset.restoreBk);
+      if (!bk) return;
+      confirmRestoreBackup(bk);
+    };
+  });
 
   document.querySelectorAll('[data-dl-bk]').forEach(btn => {
     btn.onclick = () => {
