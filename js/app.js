@@ -8252,3 +8252,174 @@ if (qFilter) qFilter.onclick = openAdvancedSearchModal;
 
 const mAdvSearch = $('#m-adv-search');
 if (mAdvSearch) mAdvSearch.onclick = menuClose(() => openAdvancedSearchModal());
+
+/* ============================================================
+   75) خريطة أحداث العائلة مع فلترة بالخط الزمني
+   ============================================================ */
+let _evMapTimer = null;
+
+function openEventsTimelineMap(targetYear = null, cumulative = true) {
+  if (_evMapTimer) { clearInterval(_evMapTimer); _evMapTimer = null; }
+
+  const allEvs = (S.events || []).map(e => {
+    let year = 2024;
+    if (e.event_date) {
+      const parsed = parseInt(String(e.event_date).slice(0, 4), 10);
+      if (!isNaN(parsed) && parsed > 1900 && parsed < 2100) year = parsed;
+    }
+    const city = (e.location || e.city || 'النماص').trim();
+    return {
+      ...e,
+      year,
+      city: CITY_COORDS[city] ? city : 'النماص'
+    };
+  });
+
+  const years = allEvs.map(e => e.year);
+  const minYear = years.length ? Math.min(...years, 1970) : 1970;
+  const maxYear = 2026;
+  const selectedYear = targetYear || maxYear;
+
+  const activeEvents = allEvs.filter(e => cumulative ? (e.year <= selectedYear) : (e.year === selectedYear));
+
+  const cityEventMap = new Map();
+  activeEvents.forEach(e => {
+    if (!cityEventMap.has(e.city)) cityEventMap.set(e.city, []);
+    cityEventMap.get(e.city).push(e);
+  });
+
+  let mapPins = '';
+  for (const [c, list] of cityEventMap.entries()) {
+    const coord = CITY_COORDS[c] || CITY_COORDS['النماص'];
+    const r = Math.min(22, Math.max(9, 8 + Math.sqrt(list.length) * 3));
+    mapPins += `
+      <g class="city-pin-group active" data-ev-city="${esc(c)}" style="cursor:pointer">
+        <circle class="pin-pulse" cx="${coord.x}" cy="${coord.y}" r="${r + 8}" fill="none" stroke="#f59e0b" stroke-width="1.5"></circle>
+        <circle class="pin-dot" cx="${coord.x}" cy="${coord.y}" r="${r}" fill="#b45309" stroke="#f59e0b" stroke-width="2"></circle>
+        <text class="pin-count" x="${coord.x}" y="${coord.y + 4}" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">${list.length}</text>
+        <text class="pin-label" x="${coord.x}" y="${coord.y - r - 4}" fill="#fbbf24" font-size="11" font-weight="bold" text-anchor="middle">📍 ${esc(c)}</text>
+      </g>
+    `;
+  }
+
+  const html = `
+    <div style="max-width:580px">
+      <div class="fstats-head">
+        <h2>🗺️ خريطة أحداث ومناسبات العائلة</h2>
+        <p class="sub">تتبع مواقع وأماكن اجتماعات ومناسبات الأسرة عبر الخط الزمني التاريخي</p>
+      </div>
+
+      <div class="evmap-slider-wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+          <span style="font-weight:700;color:var(--gold)">⏱️ تحريك الخط الزمني:</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--txt)">
+            <input type="checkbox" id="evmap-cum-chk" ${cumulative ? 'checked' : ''}>
+            <span>عرض تراكمي حتى هذا العام</span>
+          </label>
+        </div>
+
+        <div class="evmap-slider-row">
+          <button type="button" id="evmap-play-btn" class="evmap-play-btn">▶️ تشغيل زمني</button>
+          <input type="range" id="evmap-year-slider" class="evmap-slider" min="${minYear}" max="${maxYear}" value="${selectedYear}">
+          <span class="evmap-year-display" id="evmap-year-label">${selectedYear} م</span>
+        </div>
+      </div>
+
+      <div class="city-map-container" style="background:#050914;border:1.5px solid var(--gold);border-radius:12px;overflow:hidden">
+        <svg class="city-map-svg" viewBox="0 0 540 500" style="width:100%;height:auto;display:block">
+          <rect width="100%" height="100%" fill="#070c18"></rect>
+          <path fill="#0f172a" stroke="#1e293b" stroke-width="1.5" d="
+            M 45,75 L 75,50 L 85,30 L 140,32 L 195,42 L 260,65 L 325,80 L 375,95 L 395,110
+            Q 425,145 425,160 Q 448,175 445,185 Q 430,225 435,240 Q 470,295 475,305
+            L 460,420 L 360,435 L 276,448 L 232,470
+            Q 215,440 195,400 Q 180,380 170,365 Q 155,340 140,322 Q 130,305 136,285
+            Q 120,265 111,247 Q 100,230 90,220 Q 80,200 70,185 Q 55,165 50,150 Z
+          "></path>
+          <text x="346" y="248" fill="rgba(255,255,255,0.12)" font-size="12">الوسطى</text>
+          <text x="145" y="295" fill="rgba(255,255,255,0.12)" font-size="12">الغربية</text>
+          <text x="215" y="415" fill="rgba(255,255,255,0.12)" font-size="12">عسير</text>
+          <text x="430" y="200" fill="rgba(255,255,255,0.12)" font-size="12">الشرقية</text>
+          ${mapPins}
+        </svg>
+      </div>
+
+      <div style="margin-top:10px">
+        <div style="font-weight:700;color:var(--gold);font-size:.85rem">
+          📋 مناسبات العام (${activeEvents.length} مناسبة موثقة):
+        </div>
+        <div class="evmap-cards-list" id="evmap-list-box">
+          ${activeEvents.length ? activeEvents.map(e => `
+            <div class="evmap-card">
+              <div>
+                <b style="color:#f8fafc;font-size:.88rem">${esc(e.title)}</b>
+                <div style="font-size:.73rem;color:var(--mut);margin-top:2px">
+                  📍 ${esc(e.city)} · 📅 ${e.event_date ? String(e.event_date).slice(0, 10) : e.year}
+                </div>
+              </div>
+              <span style="background:rgba(245,158,11,.15);color:var(--gold);border-radius:12px;padding:3px 8px;font-size:.75rem">
+                ${(e.attendees || []).length || (e._attendees || []).length || 0} حضور
+              </span>
+            </div>
+          `).join('') : '<p class="sub" style="text-align:center;padding:12px">لا توجد مناسبات مسجلة في هذا العام</p>'}
+        </div>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const slider = $('#evmap-year-slider');
+  const label = $('#evmap-year-label');
+  const cumChk = $('#evmap-cum-chk');
+  const playBtn = $('#evmap-play-btn');
+
+  if (slider && label) {
+    slider.oninput = () => {
+      label.textContent = slider.value + ' م';
+    };
+    slider.onchange = () => {
+      openEventsTimelineMap(parseInt(slider.value, 10), cumChk?.checked);
+    };
+  }
+
+  if (cumChk) {
+    cumChk.onchange = () => {
+      openEventsTimelineMap(parseInt(slider?.value || selectedYear, 10), cumChk.checked);
+    };
+  }
+
+  let isPlaying = false;
+  if (playBtn) {
+    playBtn.onclick = () => {
+      if (isPlaying) {
+        clearInterval(_evMapTimer);
+        _evMapTimer = null;
+        isPlaying = false;
+        playBtn.textContent = '▶️ تشغيل زمني';
+      } else {
+        isPlaying = true;
+        playBtn.textContent = '⏸️ إيقاف مؤقت';
+        let yr = parseInt(slider.value, 10);
+        if (yr >= maxYear) yr = minYear;
+        _evMapTimer = setInterval(() => {
+          if (yr >= maxYear) {
+            clearInterval(_evMapTimer);
+            _evMapTimer = null;
+            isPlaying = false;
+            playBtn.textContent = '▶️ تشغيل زمني';
+            return;
+          }
+          yr += 2;
+          slider.value = yr;
+          label.textContent = yr + ' م';
+          openEventsTimelineMap(yr, cumChk?.checked);
+        }, 1200);
+      }
+    };
+  }
+}
+
+const mEventsMap = $('#m-events-map');
+if (mEventsMap) {
+  mEventsMap.onclick = menuClose(() => openEventsTimelineMap());
+}
