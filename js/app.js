@@ -657,9 +657,9 @@ $('#pick-x').onclick = () => $('#pick').close();
 
 async function saveMember(m, fid, d) {
   const v = { full_name: d.full_name.trim(), nickname: d.nickname.trim() || null, gender: d.gender, is_alive: d.alive === '1',
-    /* ann91: السنة النصية تُشتق من منتقي التاريخ الهجري؛ وإن كان المنتقي فارغًا يُحفظ النص القديم إن وُجد حتى لا يضيع */
-    birth_year_text: d.bd_y ? String(d.bd_y) : (m?.birth_year_text ?? null),
-    death_year_text: d.alive === '1' ? null : (d.dd_y ? String(d.dd_y) : (m?.death_year_text ?? null)), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, badge_is_job: d.badge.trim() ? d.bkind === 'job' : false, phone: d.phone.trim() || null,
+    /* ann91: السنة النصية تُشتق من منتقي التاريخ الهجري أو الصيغة التقريبية (نحو، قبل، بين عامين) */
+    birth_year_text: d.approx_text?.trim() ? d.approx_text.trim() : (d.bd_y ? String(d.bd_y) : (m?.birth_year_text ?? null)),
+    death_year_text: d.alive === '1' ? null : (d.approx_death?.trim() ? d.approx_death.trim() : (d.dd_y ? String(d.dd_y) : (m?.death_year_text ?? null))), city: (d.city === '__other' ? (d.city2 || '') : d.city).trim() || null, achievement_badge: d.badge.trim() || null, badge_is_job: d.badge.trim() ? d.bkind === 'job' : false, phone: d.phone.trim() || null,
     birth_order: +d.order || 1, wife_mother_id: d.mother || null, biography_story: d.story.trim() || null, name_public: d.gender === 'female' && d.namepub === '1', name_hidden: d.gender === 'female' && d.namehid === '1' };
   /* ann82: التواريخ الكاملة — هجري من المنتقي → ميلادي ISO؛ التحقق قبل أي حفظ */
   const hdate = p => {
@@ -709,6 +709,15 @@ function memberForm(m, parentId) {
     { type: 'raw', html: `<div class="pairrow"><label class="fl">الجنس<select name="gender"><option value="male"${(m?.gender || 'male') === 'male' ? ' selected' : ''}>ذكر</option><option value="female"${m?.gender === 'female' ? ' selected' : ''}>أنثى</option></select></label><label class="fl">الحالة<select name="alive"><option value="1"${m?.is_alive === false ? '' : ' selected'}>حي</option><option value="0"${m?.is_alive === false ? ' selected' : ''}>متوفى</option></select></label></div>` },
     { type: 'raw', html: hdateRow('bd', 'تاريخ الميلاد', m?.birth_date) },
     { type: 'raw', html: hdateRow('dd', 'تاريخ الوفاة', m?.death_date) },
+    { type: 'raw', html: `<div style="background:rgba(245,158,11,.06);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+      <label class="fl" style="margin-bottom:0">
+        صيغة التاريخ التقريبي للأجداد القدامى (نحو / قبل / بين عامين)
+        <div class="pairrow" style="margin-top:4px">
+          <input name="approx_text" type="text" placeholder="الميلاد: مثلاً: نحو 1320 هـ أو بين 1310-1325" value="${esc(m?.birth_year_text || '')}" autocomplete="off">
+          <input name="approx_death" type="text" placeholder="الوفاة: مثلاً: نحو 1380 هـ أو قبل 1400" value="${esc(m?.death_year_text || '')}" autocomplete="off">
+        </div>
+      </label>
+    </div>` },
     f('city', 'المدينة', m?.city || '', 'select', { opts: [['', '—'], ['__other', 'أخرى — مدينة جديدة'], ...CITIES.map(c => [c, c]), ...(m?.city && !CITIES.includes(m.city) ? [[m.city, m.city]] : [])] }),
     f('city2', 'المدينة الجديدة (تُستخدم عند اختيار «أخرى»)', ''),
     { type: 'raw', html: `<div class="pairrow"><label class="fl">الهاتف<input name="phone" type="tel" value="${esc(m?.phone ?? '')}" autocomplete="off"></label><label class="fl">الشارة<input name="badge" type="text" value="${esc(m?.achievement_badge ?? '')}" autocomplete="off"></label></div>` },
