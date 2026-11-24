@@ -5239,13 +5239,13 @@ function openWomenPortal() {
           </div>
 
           <div>
-            <label>تاريخ أو سنة الميلاد:</label>
-            <input type="text" id="wg-birth" placeholder="مثال: 1418 هـ أو 1997 م" required autocomplete="off">
+            <label>تاريخ أو سنة الميلاد (اختياري):</label>
+            <input type="text" id="wg-birth" placeholder="مثال: 1418 هـ أو 1997 م (اختياري)" autocomplete="off">
           </div>
 
           <div>
-            <label>كود التحقق الخاص (المرسل من المالك أو مسؤول الفرع):</label>
-            <input type="password" id="wg-code" placeholder="أدخلي كود الدخول الخاص" required autocomplete="off">
+            <label>كود التحقق الخاص (إلزامي - مرسل من المالك أو مسؤول الفرع):</label>
+            <input type="password" id="wg-code" placeholder="أدخلي كود الدخول الخاص (إلزامي)" required autocomplete="off">
           </div>
 
           <div>
@@ -5289,8 +5289,20 @@ function openWomenPortal() {
       return;
     }
 
-    if (!name || !birth || !code || !ans) {
-      errEl.textContent = 'يرجى إكمال جميع الحقول المطلوبة.';
+    if (!name) {
+      errEl.textContent = 'يرجى كتابة الاسم الكريم.';
+      errEl.hidden = false;
+      return;
+    }
+
+    if (!code) {
+      errEl.textContent = 'كود التحقق الخاص إلزامي للدخول — يرجى إدخال الكود.';
+      errEl.hidden = false;
+      return;
+    }
+
+    if (!ans) {
+      errEl.textContent = 'يرجى كتابة إجابة سؤال التحقق الإضافي.';
       errEl.hidden = false;
       return;
     }
