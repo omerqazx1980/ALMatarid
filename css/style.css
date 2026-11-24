@@ -974,3 +974,9 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .hint-card{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s}
 .hint-card:hover{border-color:var(--gold)}
 .hint-badge{padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700}
+
+/* ---------- 65) استيراد الأعضاء من إكسل و CSV (فرع تجربة) ---------- */
+.import-wrap{display:flex;flex-direction:column;gap:12px;padding:2px 0}
+.import-dropzone{border:2px dashed var(--gold);border-radius:12px;padding:22px;text-align:center;background:rgba(245,158,11,.04);cursor:pointer;transition:.2s}
+.import-dropzone:hover{background:rgba(245,158,11,.08)}
+.import-table-box{max-height:280px;overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px}

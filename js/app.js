@@ -5999,3 +5999,223 @@ function openTreeCompletionHints() {
 }
 
 $('#m-completion-hints').onclick = menuClose(() => openTreeCompletionHints());
+
+/* ---------- 65) استيراد الأعضاء من إكسل و CSV (فرع تجربة) ---------- */
+function parseCsvRows(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (!lines.length) return [];
+  const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(/[,\t;]/).map(s => s.trim().replace(/^["']|["']$/g, ''));
+    if (parts.length >= 2) rows.push(parts);
+  }
+  return rows;
+}
+
+function openCsvImportModal() {
+  let parsedCandidates = [];
+
+  const html = `
+    <div class="import-wrap">
+      <div class="fstats-head">
+        <h2>📥 استيراد الأعضاء دفعة واحدة (إكسل / CSV)</h2>
+        <p class="sub">استيراد مجموعة من الأفراد دفعة واحدة مع المعاينة والتدقيق قبل الحفظ ودون حذف أي فرد مسجل</p>
+      </div>
+
+      <div class="import-dropzone" id="csv-drop-zone">
+        <span style="font-size:2rem">📁</span>
+        <div style="font-weight:700;color:#fff;margin-top:6px">اسحب وأفلت ملف CSV هنا أو اضغط للاختيار</div>
+        <div style="font-size:.76rem;color:var(--mut);margin-top:4px">يدعم صيغ .csv و .txt وملفات الإكسل المصدرة كـ CSV</div>
+        <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0">
+        <button type="button" class="btn ghost" id="btn-dl-template" style="font-size:.75rem;padding:4px 10px">
+          📄 تحميل قالب CSV النموذجي
+        </button>
+        <button type="button" class="btn ghost" id="btn-paste-csv" style="font-size:.75rem;padding:4px 10px">
+          📋 لصق نص CSV يدويًا
+        </button>
+      </div>
+
+      <div id="import-preview-area" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+          <b style="font-size:.85rem;color:var(--gold)" id="import-count-lbl">معاينة الأفراد الجدد (0):</b>
+          <button type="button" class="btn" id="btn-do-import" style="background:#10b981;color:#fff;font-size:.8rem;padding:6px 16px;border-radius:6px;font-weight:700">
+            ✓ تأكيد استيراد الأفراد المحددين
+          </button>
+        </div>
+        <div class="import-table-box">
+          <table class="fbook-table" id="import-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="import-check-all" checked></th>
+                <th>الاسم الكامل</th>
+                <th>اسم الأب</th>
+                <th>الجنس</th>
+                <th>المدينة</th>
+                <th>الميلاد</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody id="import-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const dropZone = $('#csv-drop-zone');
+  const fileInput = $('#csv-file-input');
+  const previewArea = $('#import-preview-area');
+  const tbody = $('#import-table-body');
+  const countLbl = $('#import-count-lbl');
+  const doImportBtn = $('#btn-do-import');
+  const checkAll = $('#import-check-all');
+
+  const processText = (text) => {
+    const rawRows = parseCsvRows(text);
+    if (!rawRows.length) {
+      toast('الملف فارغ أو لا يحتوي على بيانات صالحة');
+      return;
+    }
+
+    let startIndex = 0;
+    if (rawRows[0][0].includes('اسم') || rawRows[0][0].toLowerCase().includes('name')) {
+      startIndex = 1;
+    }
+
+    parsedCandidates = [];
+    const existingNames = new Set(S.members.map(m => m.full_name.trim().toLowerCase()));
+
+    for (let i = startIndex; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      const fullName = r[0] || '';
+      const fatherName = r[1] || '';
+      const gender = (r[2] || '').includes('أنث') || (r[2] || '').toLowerCase() === 'female' ? 'female' : 'male';
+      const city = r[3] || 'الجنوب';
+      const birth = r[4] || '';
+      const isAlive = !((r[5] || '').includes('متوف') || (r[5] || '').includes('dead'));
+
+      if (fullName) {
+        let fid = null;
+        if (fatherName) {
+          const matchFather = S.members.find(m => m.full_name.includes(fatherName) || fatherName.includes(m.full_name));
+          if (matchFather) fid = matchFather.id;
+        }
+
+        parsedCandidates.push({
+          full_name: fullName,
+          father_name: fatherName,
+          father_id: fid,
+          gender: gender,
+          city: city,
+          birth_year_text: birth,
+          is_alive: isAlive,
+          is_duplicate: existingNames.has(fullName.trim().toLowerCase()),
+          selected: true
+        });
+      }
+    }
+
+    if (!parsedCandidates.length) {
+      toast('لم يتم العثور على أفراد صالحين للاستيراد');
+      return;
+    }
+
+    renderTable();
+  };
+
+  const renderTable = () => {
+    previewArea.style.display = 'block';
+    const selectedCount = parsedCandidates.filter(c => c.selected).length;
+    countLbl.textContent = `معاينة الأفراد الجدد (${selectedCount} محدد من إجمالي ${parsedCandidates.length}):`;
+
+    tbody.innerHTML = parsedCandidates.map((c, idx) => `
+      <tr style="${c.is_duplicate ? 'opacity:.7;background:rgba(239,68,68,.08)' : ''}">
+        <td><input type="checkbox" data-c-idx="${idx}" ${c.selected ? 'checked' : ''}></td>
+        <td><b>${esc(c.full_name)}</b> ${c.is_duplicate ? '<span style="color:#f87171;font-size:.7rem">(اسم مسجل مسبقاً)</span>' : ''}</td>
+        <td>${esc(c.father_name || 'غير محدد')}</td>
+        <td>${c.gender === 'female' ? 'أنثى' : 'ذكر'}</td>
+        <td>${esc(c.city)}</td>
+        <td>${esc(c.birth_year_text || '—')}</td>
+        <td>${c.is_alive ? 'حي' : 'متوفى'}</td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-c-idx]').forEach(chk => {
+      chk.onchange = () => {
+        parsedCandidates[chk.dataset.cIdx].selected = chk.checked;
+        const n = parsedCandidates.filter(c => c.selected).length;
+        countLbl.textContent = `معاينة الأفراد الجدد (${n} محدد من إجمالي ${parsedCandidates.length}):`;
+      };
+    });
+  };
+
+  dropZone.onclick = () => fileInput.click();
+  fileInput.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => processText(ev.target.result);
+    reader.readAsText(file, 'utf-8');
+  };
+
+  if (checkAll) {
+    checkAll.onchange = () => {
+      parsedCandidates.forEach(c => c.selected = checkAll.checked);
+      renderTable();
+    };
+  }
+
+  $('#btn-paste-csv').onclick = () => {
+    const txt = prompt('الصق نص ملف CSV هنا:');
+    if (txt) processText(txt);
+  };
+
+  $('#btn-dl-template').onclick = () => {
+    const sample = `الاسم الكامل,اسم الأب,الجنس,المدينة,سنة الميلاد,الحالة\nسعيد بن محمد بن علي,محمد بن علي,ذكر,النماص,1395,حي\nنورة بنت سعد بن محمد,سعد بن محمد,أنثى,أبها,1420,حي`;
+    const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: 'almatarid-import-template.csv'
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  if (doImportBtn) {
+    doImportBtn.onclick = () => {
+      const toAdd = parsedCandidates.filter(c => c.selected);
+      if (!toAdd.length) {
+        toast('يرجى تحديد فرد واحد على الأقل للاستيراد');
+        return;
+      }
+
+      toAdd.forEach(c => {
+        const newMember = {
+          id: 'n_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          full_name: c.full_name,
+          first: c.full_name.split(' ')[0],
+          father_id: c.father_id,
+          gender: c.gender,
+          city: c.city,
+          birth_year_text: c.birth_year_text || null,
+          is_alive: c.is_alive,
+          created_at: Date.now()
+        };
+        S.members.push(newMember);
+      });
+
+      index();
+      render();
+      saveAutoBackup(true);
+      toast(`✓ تم استيراد ${toAdd.length} فرد بنجاح إلى شجرة العائلة دون حذف أحد!`);
+      $('#profile').close();
+    };
+  }
+}
+
+$('#m-csv-import').onclick = menuClose(() => openCsvImportModal());
