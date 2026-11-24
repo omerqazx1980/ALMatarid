@@ -671,7 +671,7 @@ function profile(id) {
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm"><button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button><button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -930,6 +930,7 @@ $('#profile-body').addEventListener('click', e => {
      photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); },
      lcard: () => { openLineageCard(m.id); },
      'qr-card': () => { openQrShareModal(m.id); },
+     'life-story': () => { openLifeStoryModal(m.id); },
      descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
      ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); },
      reorder: () => { $('#profile').close(); openSiblingReorderModal(m.id); },
@@ -3276,6 +3277,7 @@ $('#m-family-vote').onclick = menuClose(() => openFamilyVoteModal());
 $('#m-careers-dir').onclick = menuClose(() => openCareersDirectoryModal());
 $('#m-time-capsule').onclick = menuClose(() => openTimeCapsuleModal());
 $('#m-anniversaries').onclick = menuClose(() => openAnniversariesModal());
+$('#m-life-story').onclick = menuClose(() => openLifeStoryModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -12454,6 +12456,255 @@ function openAnniversariesModal(filterMode = 'all') {
 
   renderModal();
 }
+
+/* ---------- 93) صفحة «قصة حياة» ومحطات العمر لكل فرد (فرع تجربة) ---------- */
+function openLifeStoryModal(targetMemberId = null) {
+  let activeId = targetMemberId || (S.members[0] ? S.members[0].id : '');
+
+  function renderModal() {
+    const m = S.byId.get(activeId) || S.members[0];
+    if (!m) return;
+
+    const father = m.father_id ? S.byId.get(m.father_id) : null;
+    const mother = m.wife_mother_id ? (S.wives.find(w => w.id === m.wife_mother_id) || S.byId.get(m.wife_mother_id)) : null;
+    const wives = (S.wives || []).filter(w => w.husband_id === m.id);
+    const kids = S.kids.get(m.id) || [];
+    const birthYear = m.birth_date ? new Date(m.birth_date).getFullYear() : (m.birth_year_text || 'غير محدد بدقة');
+    const deathYear = m.death_date ? new Date(m.death_date).getFullYear() : (m.death_year_text || null);
+    const photoUrl = S.photos.get(m.id);
+
+    // Build timeline milestones
+    const defaultMilestones = [
+      {
+        icon: '👶',
+        title: 'الميلاد والنشأة الأولى',
+        periodText: `نحو عام ${birthYear}م`,
+        location: m.city || 'النماص وبلاد السراة (عسير)',
+        desc: `وُلد ${m.full_name} في كنف أسرته الكريمة${father ? '، والده هو ' + father.full_name : ''}${mother ? ' ووالدته ' + (mother.full_name || '') : ''}، ونشأ في بيئة سادها التدين والمروءة وتقاليد آل مطارد الأصيلة.`
+      },
+      {
+        icon: '🎓',
+        title: 'التعليم والنشأة والشباب',
+        periodText: 'مرحلة الشباب',
+        location: m.city || 'النماص / المنطقة الجنوبية',
+        desc: `تلقى تعليمه الأولي وحفظ أجزاء من القرآن الكريم ومبادئ القراءة والكتابة، واكتسب من مجالس كبار الأسرة الحكمة والوفاء وحسن الجوار.`
+      }
+    ];
+
+    if (wives.length || kids.length) {
+      defaultMilestones.push({
+        icon: '💍',
+        title: 'تأسيس الأسرة والذرية المباركة',
+        periodText: 'مرحلة بناء الأسرة',
+        location: m.city || 'المملكة العربية السعودية',
+        desc: `تزوج ${wives.length ? 'من ' + wives.map(w => w.full_name + (w.family_name ? ' (' + w.family_name + ')' : '')).join('، ') : 'وبنى بيته الأسري المبارك'}، ورزقه الله بذرية صالحة وعددهم (${kids.length} من الأبناء والبنات)${kids.length ? ' وهم: ' + kids.map(k => k.full_name).slice(0, 6).join('، ') + (kids.length > 6 ? ' وغيرهم' : '') : ''}.`
+      });
+    }
+
+    if (m.biography_story || m.bio) {
+      defaultMilestones.push({
+        icon: '💼',
+        title: 'المسيرة العملية ومحطات العطاء',
+        periodText: 'سنوات العطاء والإنجاز',
+        location: m.city || 'مناطق المملكة',
+        desc: m.biography_story || m.bio
+      });
+    } else {
+      defaultMilestones.push({
+        icon: '💼',
+        title: 'المسيرة العملية وخدمة المجتمع',
+        periodText: 'سنوات العطاء',
+        location: m.city || 'مناطق المملكة',
+        desc: `عُرف بحسن السيرة والسعي في وجوه الخير وخدمة أسرته ووطنه، والمشاركة في شؤون واجتماعات أسرة آل مطارد.`
+      });
+    }
+
+    // Historical memories
+    defaultMilestones.push({
+      icon: '📜',
+      title: 'المواقف المأثورة وشهادات الأقارب',
+      periodText: 'الأثر والذكرى الطيبة',
+      location: 'ديوان العائلة',
+      desc: `يشهد له المعاصرون والأقارب بدماثة الخلق، والحرص على صلة الرحم والتواصل، وإكرام الضيف وإصلاح ذات البين.`
+    });
+
+    if (!m.is_alive) {
+      defaultMilestones.push({
+        icon: '🤲',
+        title: 'الوفاة والأثر الخالد (رحمه الله)',
+        periodText: deathYear ? `توفي عام ${deathYear}م` : 'تغمده الله بواسع رحمته',
+        location: m.city || 'المقبرة العامة',
+        desc: `انتقل إلى رحمة الله تعالى تاركاً وراءه ذكراً عطراً وذرية صالحة تدعو له، نسأل الله أن يجمعنا به في جنات النعيم ويثقل موازينه بالحسنات.`
+      });
+    } else {
+      defaultMilestones.push({
+        icon: '🌟',
+        title: 'حفظه الله وبارك في عمره',
+        periodText: 'الحاضر المبارك',
+        location: m.city || 'المملكة',
+        desc: `يمتع الله به في أتم الصحة والعافية، مكرماً بين أهله وذويه، ونسأل الله له دوام التوفيق والبركة في العمر والعمل والذرية.`
+      });
+    }
+
+    // Custom user added milestones for this member
+    const userMilestones = JSON.parse(localStorage.getItem('almatarid_milestones_' + m.id) || '[]');
+    const allMilestones = [...defaultMilestones, ...userMilestones];
+
+    const html = `
+      <div class="lstory-wrap" style="max-width:780px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📖</span> صفحة «قصة حياة» ومحطات العمر لكل فرد
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          عرض زمني سردي متكامل يجمع محطات العمر والنشأة، والأحداث الكبرى، وتأسيس الأسرة، ومسيرة العمل والعطاء لكل فرد من أفراد العائلة في خط زمني موحد.
+        </p>
+
+        <!-- Member Picker & Controls -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:220px">
+            <span style="font-size:.78rem;color:var(--gold);font-weight:700">اختر العضو:</span>
+            <select id="lstory-member-sel" class="fstats-btn" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
+              ${S.members.slice().sort(byName).map(mem => `
+                <option value="${mem.id}" ${mem.id === activeId ? 'selected' : ''}>
+                  ${esc(mem.full_name)} (${esc(mem.city || 'العائلة')})
+                </option>
+              `).join('')}
+            </select>
+          </div>
+
+          <div style="display:flex;gap:6px">
+            <button type="button" class="fstats-btn" id="btn-add-milestone" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              ➕ إضافة محطة حياة جديدة
+            </button>
+            <button type="button" class="fstats-btn" onclick="profile('${m.id}')" style="padding:5px 10px;font-size:.78rem">
+              👤 الملف الشخصي
+            </button>
+          </div>
+        </div>
+
+        <!-- Person Hero Header -->
+        <div style="background:linear-gradient(135deg, rgba(245,158,11,.15) 0%, rgba(15,23,42,.95) 100%);border:1.5px solid var(--gold);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px">
+          ${photoUrl ? `
+            <img src="${esc(photoUrl)}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)">
+          ` : `
+            <div style="width:64px;height:64px;border-radius:50%;background:rgba(245,158,11,.2);border:2px solid var(--gold);color:var(--gold);font-weight:700;font-size:1.5rem;display:flex;align-items:center;justify-content:center">
+              ${esc(m.full_name.charAt(0))}
+            </div>
+          `}
+          <div>
+            <h3 style="margin:0 0 4px 0;font-size:1.15rem;color:var(--gold)">${esc(m.full_name)}</h3>
+            <div style="font-size:.8rem;color:var(--txt)">
+              📍 ${esc(m.city || 'النماص')} · 📅 الميلاد: ${esc(birthYear)}م ${deathYear ? '· 🤲 الوفاة: ' + deathYear + 'م' : '· 🌿 حفظه الله'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Chronological Milestones Timeline -->
+        <div class="lstory-timeline" style="max-height:450px;overflow-y:auto;padding-left:4px">
+          ${allMilestones.map((ms, idx) => `
+            <div class="lstory-node">
+              <div class="lstory-dot"></div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-size:1.2rem">${ms.icon}</span>
+                  <b style="color:var(--gold);font-size:.92rem">${esc(ms.title)}</b>
+                </div>
+                <span class="career-badge" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3)">
+                  ${esc(ms.periodText)}
+                </span>
+              </div>
+
+              <div style="font-size:.74rem;color:var(--mut)">📍 ${esc(ms.location)}</div>
+              <div style="font-size:.83rem;color:var(--txt);line-height:1.65;white-space:pre-line;margin-top:2px">
+                ${esc(ms.desc)}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Footer Actions -->
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn" id="btn-share-lstory" style="background:#25d366;color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              📲 مشاركة السيرة بالواتساب
+            </button>
+            <button type="button" class="fstats-btn" id="btn-copy-lstory" style="padding:5px 12px;font-size:.78rem">
+              📋 نسخ قصة الحياة
+            </button>
+          </div>
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Selection
+    const sel = $('#lstory-member-sel');
+    if (sel) {
+      sel.onchange = () => {
+        activeId = sel.value;
+        renderModal();
+      };
+    }
+
+    // Add milestone
+    const addBtn = $('#btn-add-milestone');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const title = prompt('عنوان المحطة (مثال: رحلة الحج عام 1395هـ / الانتقال إلى الرياض):');
+        if (!title) return;
+        const periodText = prompt('الفترة أو السنة (مثال: عام 1400هـ / 1980م):') || 'محطة تاريخية';
+        const location = prompt('المكان:') || 'المملكة';
+        const desc = prompt('تفاصيل المحطة أو الحدث:') || '';
+        const icon = prompt('رمز تعبيري (أيقونة):', '🌟') || '🌟';
+
+        const newMs = { icon, title, periodText, location, desc };
+        const stored = JSON.parse(localStorage.getItem('almatarid_milestones_' + m.id) || '[]');
+        stored.push(newMs);
+        localStorage.setItem('almatarid_milestones_' + m.id, JSON.stringify(stored));
+        toast('✅ تمت إضافة محطة الحياة بنجاح!');
+        renderModal();
+      };
+    }
+
+    // WhatsApp share
+    const waBtn = $('#btn-share-lstory');
+    if (waBtn) {
+      waBtn.onclick = () => {
+        let text = `📖 *قصة ومحطات حياة: ${m.full_name}*\n📍 مسقط الرأس: ${m.city || 'النماص'}\n\n`;
+        allMilestones.forEach(ms => {
+          text += `• *${ms.title}* (${ms.periodText}):\n${ms.desc}\n\n`;
+        });
+        text += `— عبر شجرة وتاريخ عائلة آل مطارد:\n${window.location.href}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+      };
+    }
+
+    // Copy story
+    const copyBtn = $('#btn-copy-lstory');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        let text = `📖 قصة ومحطات حياة: ${m.full_name}\n\n`;
+        allMilestones.forEach(ms => {
+          text += `[${ms.periodText}] ${ms.title}:\n${ms.desc}\n\n`;
+        });
+        navigator.clipboard.writeText(text).then(() => {
+          toast('✅ تم نسخ نص السيرة ومحطات الحياة بنجاح!');
+        });
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 
