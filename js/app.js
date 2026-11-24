@@ -113,6 +113,7 @@ const cardName = m => gen(m) <= 2 ? m.full_name : shortName(m);
 /* الترحم والحالة حسب الجنس: رحمها الله / حية ترزق للأنثى، رحمه الله / حي يرزق للذكر (ann102) */
 const ripText = m => m.gender === 'female' ? 'رحمها الله' : 'رحمه الله';
 const aliveText = m => m.gender === 'female' ? 'حية ترزق' : 'حي يرزق';
+const isFemale = m => m.gender === 'female'; /* كانت تُستدعى في 11 و14 و21 دون تعريف إطلاقاً — فيرمي خطأ عند كل تحميل للصفحة (updateAlertsBadge) */
 /* اسم بطاقات التهاني والتعازي وإعلاناتها: ثلاثي أو رباعي — الاسم الأول + الأب + الجد + أبو الجد عبر سلسلة الآباء (طلب المالك 2026-10-22) */
 const cardLongName = m => {
   if (!m) return '';
@@ -3930,114 +3931,14 @@ $('#m-invites').onclick = menuClose(() => openInvites());
 $('#m-personal-invites').onclick = menuClose(() => openPersonalInvitesModal());
 
 /* ---------- 53) أرشيف وثائق وصور العائلة القديمة (فرع تجربة) ---------- */
-const DEFAULT_ARCHIVE_ITEMS = [
-  {
-    id: 'arch-1',
-    title: 'صك وقف وحيازة زراعية قديم لأملاك الأسرة',
-    type: 'doc',
-    typeName: 'صك ومخطوط شرعي',
-    typeIcon: '📜',
-    year_hijri: 1318,
-    year_greg: 1900,
-    era: 'pre1350',
-    eraLabel: 'ما قبل 1350 هـ',
-    image_url: 'logo.jpg',
-    description: 'صك حيازة ووقف شرعي قديم يوثق حدود أراضي ومزارع الأسرة في بني عمرو، موقّع بختم قاضي الناحية وشاهدين من كبار القبيلة.',
-    transcription: 'بسم الله الرحمن الرحيم، هذا ما اتّفق عليه وحازه وأوقفه رجالات آل مطارد في ديار بني عمرو... حدود الأرض المذكورة شمالاً مسيل الوادي وجنوباً الجبل وشرقاً ملك فلان وغرباً الطريق العام... شهد على ذلك أعيان الفروع.',
-    source: 'أرشيف كبار الأسرة المتوارث',
-    members_linked: 'أعلام الجيل الأول والمؤسسون'
-  },
-  {
-    id: 'arch-2',
-    title: 'صورة تاريخية نادرة لكبار وأعيان آل مطارد',
-    type: 'photo',
-    typeName: 'صورة تاريخية',
-    typeIcon: '📷',
-    year_hijri: 1374,
-    year_greg: 1955,
-    era: '1350_1380',
-    eraLabel: '1350 - 1380 هـ',
-    image_url: 'logo.jpg',
-    description: 'لقاء تاريخي جمع شيوخ وكبار فروع الأسرة في مناسبة لقاء سنوي عام بعد موسم الحصاد.',
-    transcription: 'تظهر الصورة كبار أعيان الأسرة وأصحاب الرأي والحكمة، يرتدون الزي التراثي والمجالد، وقد تم التقاطها بحضور جمع كريم من أبناء العمومة.',
-    source: 'إهداء من أحفاد الجيل الثاني',
-    members_linked: 'كبار فروع آل مطارد'
-  },
-  {
-    id: 'arch-3',
-    title: 'رسالة تراحم ومكاتبة ودية بين فروع العائلة',
-    type: 'letter',
-    typeName: 'رسالة ومراسلة',
-    typeIcon: '✉️',
-    year_hijri: 1342,
-    year_greg: 1923,
-    era: 'pre1350',
-    eraLabel: 'ما قبل 1350 هـ',
-    image_url: 'logo.jpg',
-    description: 'خطاب خطي تاريخي بمداد عربي تقليدي يحث على صلة الرحم والتناصر والتكاتف في رعاية الأيتام وكبار السن.',
-    transcription: 'سلام الله عليكم ورحمته وبركاته، أما بعد يا بني عمنا وإخواننا فإن رابطة الدم والدين توجب دوام التزاور والتفقد... ونوصيكم بالتعاون والوفاق.',
-    source: 'مخطوطة محفوظة لدى مسؤول الفرع',
-    members_linked: 'أعيان فروع الأسرة'
-  },
-  {
-    id: 'arch-4',
-    title: 'وثيقة مبايعة وسجل أملاك تاريخي بختم رسمي',
-    type: 'doc',
-    typeName: 'وثيقة وسجل مبايعة',
-    typeIcon: '📜',
-    year_hijri: 1358,
-    year_greg: 1939,
-    era: '1350_1380',
-    eraLabel: '1350 - 1380 هـ',
-    image_url: 'logo.jpg',
-    description: 'وثيقة شراء بئر ماء وبستان نخيل وزيتون مشترك لأبناء العائلة ومؤرخة باليوم والشهر مع شهادة الشهود.',
-    transcription: 'الحمد لله وحده، اشترى بالثمن المسمى فلان بن فلان من آل مطارد نصيب الشركاء في البئر المسماة... سالمة من كل عيب وموجبة للحق الشرعي.',
-    source: 'صندوق وثائق العائلة',
-    members_linked: 'ملاك المزارع والأوقاف'
-  },
-  {
-    id: 'arch-5',
-    title: 'صورة ملتقطة أثناء إعمار مجلس العائلة الجامع',
-    type: 'photo',
-    typeName: 'صورة تاريخية',
-    typeIcon: '📷',
-    year_hijri: 1388,
-    year_greg: 1968,
-    era: '1380_1410',
-    eraLabel: '1380 - 1410 هـ',
-    image_url: 'logo.jpg',
-    description: 'توثيق فوتوغرافي لبناء وتجديد مقر اللقاءات والمجلس التراثي لآل مطارد بمشاركة شباب وكبار العائلة.',
-    transcription: 'مشهد يجسد روح الفزعة والتعاون القبلي في نقل الحجارة وعوارض الخشب لبناء بيت الأسرة الكبير.',
-    source: 'ألبوم صور كبار السن',
-    members_linked: 'رجالات الجيل الثالث'
-  },
-  {
-    id: 'arch-6',
-    title: 'سجل مواريث وتوزيع تركة شرعية بخط اليد',
-    type: 'doc',
-    typeName: 'مخطوط شرعي',
-    typeIcon: '📜',
-    year_hijri: 1335,
-    year_greg: 1916,
-    era: 'pre1350',
-    eraLabel: 'ما قبل 1350 هـ',
-    image_url: 'logo.jpg',
-    description: 'قسمة تركة شرعية عادلة بالتراضي بين الورثة والأبناء مؤرخة في عهد الأشراف والدولة العثمانية.',
-    transcription: 'بحضور القاضي والعدول جرى تقسيم ما تركه المتوفى رحمه الله تعالى بالعدل والإنصاف بين أصحاب الفروض والعصبات.',
-    source: 'مخطوط أصلي محفوظ',
-    members_linked: 'الجد المؤسس وفروعه'
-  }
-];
+/* بلا وثائق أرشيف افتراضية مختلقة — الوثائق الحقيقية يضيفها المالك/المحرر فقط */
 
 function getArchiveItems() {
   try {
     const raw = localStorage.getItem('almatarid_archive_items');
-    if (raw) {
-      const custom = JSON.parse(raw);
-      return [...DEFAULT_ARCHIVE_ITEMS, ...custom];
-    }
+    if (raw) return JSON.parse(raw);
   } catch (_) {}
-  return DEFAULT_ARCHIVE_ITEMS;
+  return [];
 }
 
 function openArchiveItemDetail(item) {
@@ -4050,7 +3951,7 @@ function openArchiveItemDetail(item) {
           </span>
           <h2 style="font-size:1.15rem;color:#fff;margin:6px 0">${esc(item.title)}</h2>
           <div style="font-size:.8rem;color:var(--mut)">
-            📅 ${item.year_hijri} هـ (${item.year_greg} م) · ${esc(item.eraLabel)}
+            📅 ${item.year_hijri ? item.year_hijri + ' هـ' : 'بلا تاريخ'}${item.year_greg ? ' (' + item.year_greg + ' م)' : ''} · ${esc(item.eraLabel)}
           </div>
         </div>
       </div>
@@ -4089,7 +3990,7 @@ function openArchiveItemDetail(item) {
     shareBtn.onclick = () => {
       const txt = `📜 *وثيقة تاريخية من أرشيف أسرة آل مطارد (بنو عمرو)* 📜\n\n` +
         `🔖 *العنوان:* ${item.title}\n` +
-        `📅 *التاريخ:* ${item.year_hijri} هـ (${item.year_greg} م)\n` +
+        `📅 *التاريخ:* ${item.year_hijri ? item.year_hijri + ' هـ' : 'بلا تاريخ'}${item.year_greg ? ' (' + item.year_greg + ' م)' : ''}\n` +
         `📑 *النوع:* ${item.typeName}\n` +
         `📝 *النبذة:* ${item.description}\n\n` +
         `📖 *النص المفرغ:* «${item.transcription}»\n\n` +
@@ -4116,13 +4017,13 @@ function openFamilyArchive() {
         <div class="arch-thumb-box">
           <img src="${esc(it.image_url)}" alt="${esc(it.title)}" class="arch-thumb" loading="lazy">
           <span class="arch-pill-type">${it.typeIcon} ${esc(it.typeName)}</span>
-          <span class="arch-pill-date">${it.year_hijri} هـ</span>
+          <span class="arch-pill-date">${it.year_hijri ? it.year_hijri + ' هـ' : 'بلا تاريخ'}</span>
         </div>
         <div class="arch-content">
           <div class="arch-title">${esc(it.title)}</div>
           <div class="arch-desc">${esc(it.description)}</div>
           <div class="arch-meta">
-            <span>📅 ${it.year_hijri} هـ (${it.year_greg} م)</span>
+            <span>📅 ${it.year_hijri ? it.year_hijri + ' هـ' : 'بلا تاريخ'}${it.year_greg ? ' (' + it.year_greg + ' م)' : ''}</span>
             <span style="color:var(--gold)">عرض التفاصيل ←</span>
           </div>
         </div>
@@ -4161,6 +4062,10 @@ function openFamilyArchive() {
       <div class="archive-grid" id="arch-grid-box">
         ${renderGrid(allItems)}
       </div>
+      ${canEdit() ? `
+      <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <button type="button" class="fstats-btn" id="btn-add-archive" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.8rem">➕ إضافة وثيقة أو صورة للأرشيف</button>
+      </div>` : ''}
     </div>
   `;
 
@@ -4208,6 +4113,43 @@ function openFamilyArchive() {
   eraSel.onchange = updateList;
   typeSel.onchange = updateList;
   sortSel.onchange = updateList;
+
+  // إضافة وثيقة حقيقية (مالك/محرر فقط) — بلا عناصر افتراضية
+  const addBtn = $('#btn-add-archive');
+  if (addBtn) {
+    addBtn.onclick = () => {
+      const title = prompt('عنوان الوثيقة أو الصورة:');
+      if (!title) return;
+      const type = prompt('النوع: (doc=صك/مخطوط، photo=صورة، letter=رسالة)') || 'doc';
+      const yearH = parseInt(prompt('السنة الهجرية (مثال: 1342):') || '', 10);
+      const desc = prompt('وصف موجز للوثيقة:') || '';
+      const source = prompt('المصدر أو الحافظ (مثال: محفوظة لدى فلان):') || '';
+      const newItem = {
+        id: 'arch_user_' + Date.now(),
+        title,
+        type: ['doc', 'photo', 'letter'].includes(type) ? type : 'doc',
+        typeName: type === 'photo' ? 'صورة تاريخية' : type === 'letter' ? 'رسالة ومراسلة' : 'صك ومخطوط شرعي',
+        typeIcon: type === 'photo' ? '📷' : type === 'letter' ? '✉️' : '📜',
+        year_hijri: !isNaN(yearH) ? yearH : null,
+        year_greg: null,
+        era: !isNaN(yearH) ? (yearH < 1350 ? 'pre1350' : yearH < 1380 ? '1350_1380' : yearH < 1410 ? '1380_1410' : 'post1410') : 'post1410',
+        eraLabel: !isNaN(yearH) ? (yearH < 1350 ? 'ما قبل 1350 هـ' : yearH < 1380 ? '1350 - 1380 هـ' : yearH < 1410 ? '1380 - 1410 هـ' : '1410 هـ فصاعداً') : 'غير محددة',
+        image_url: 'logo.jpg',
+        description: desc,
+        transcription: '',
+        source,
+        members_linked: ''
+      };
+      try {
+        const raw = localStorage.getItem('almatarid_archive_items');
+        const stored = raw ? JSON.parse(raw) : [];
+        stored.unshift(newItem);
+        localStorage.setItem('almatarid_archive_items', JSON.stringify(stored));
+      } catch (_) { /* تجاهل خطأ التخزين المحلي */ }
+      toast('✅ أُضيفت الوثيقة إلى الأرشيف');
+      openFamilyArchive();
+    };
+  }
 
   bindCardClicks();
 }
@@ -8616,7 +8558,8 @@ function getBranchAlerts() {
   const me = meId ? S.byId.get(meId) : null;
   const userBranchRootId = me ? (typeof getAncestryChain === 'function' ? getAncestryChain(me)[1]?.id : null) : (S.branch?.root_id || null);
 
-  const readAlertIds = new Set(JSON.parse(localStorage.getItem('almatarid_read_alerts') || '[]'));
+  let readAlertIds = new Set();
+  try { readAlertIds = new Set(JSON.parse(localStorage.getItem('almatarid_read_alerts') || '[]')); } catch (_) { readAlertIds = new Set(); }
   const alerts = [];
 
   const recentKids = S.members.filter(m => gen(m) >= 5 || !m.father_id).slice(-6);
@@ -8644,7 +8587,7 @@ function getBranchAlerts() {
       type: 'event',
       icon: '🎉',
       title: `مناسبة قادمة: «${ev.title}»`,
-      desc: `📍 ${ev.location || ev.city || 'النماص'} · ${ev.event_date ? String(ev.event_date).slice(0, 10) : ''}`,
+      desc: `📍 ${ev.location || ev.city || 'بلا موقع محدد'} · ${ev.event_date ? String(ev.event_date).slice(0, 10) : ''}`,
       isMyBranch: true,
       date: 'نشط',
       unread: !readAlertIds.has(alertId)
@@ -10034,19 +9977,18 @@ function openPhotoExifMapModal() {
   let photos = [];
   const membersWithPhotos = S.members.filter(m => S.photos.get(m.id)).slice(0, 15);
   membersWithPhotos.forEach(m => {
-    const city = m.city || 'النماص';
-    const cCoord = CITY_COORDS[city] || CITY_COORDS['النماص'];
+    // صور الأعضاء بلا GPS — مدينتهم مدينة إقامة العضو لا موقع التقاط الصورة، فلا تُرسم على الخريطة
     photos.push({
       id: 'mem_' + m.id,
       title: m.full_name,
       url: S.photos.get(m.id),
-      city: city,
-      x: cCoord.x,
-      y: cCoord.y,
+      city: m.city || 'غير محددة',
+      x: null,
+      y: null,
       dateTaken: m.birth_date ? m.birth_date.substring(0, 4) + 'م' : 'تاريخ عائلي',
       camera: 'أرشيف العائلة',
-      lat: 19.117,
-      lng: 42.133,
+      lat: null,
+      lng: null,
       isExifLive: false,
       memberId: m.id
     });
@@ -10065,7 +10007,7 @@ function openPhotoExifMapModal() {
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          تقرأ الأداة بيانات التقاط الصور (إحداثيات GPS، تاريخ الالتقاط، وطراز الكاميرا/الهاتف) وترسم كل صورة على موقع التقاطها الجغرافي على خريطة المملكة مباشرة.
+          تقرأ الأداة بيانات التقاط الصور (إحداثيات GPS، تاريخ الالتقاط، وطراز الكاميرا/الهاتف) وترسم على خريطة المملكة الصور التي تحمل إحداثيات GPS فقط؛ والصور بلا GPS تظهر في القائمة دون موقع.
         </p>
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:rgba(15,23,42,.7);padding:10px 14px;border-radius:8px;border:1px solid var(--line)">
@@ -10073,7 +10015,7 @@ function openPhotoExifMapModal() {
             📷 رفع صور لقراءة إحداثياتها (GPS)
             <input type="file" id="exif-upload-input" accept="image/*" multiple style="display:none">
           </label>
-          <span style="font-size:.78rem;color:var(--mut)">يمكنك رفع عدة صور دفعة واحدة ليتم تحديد مواقعها فوراً</span>
+          <span style="font-size:.78rem;color:var(--mut)">يمكنك رفع عدة صور دفعة واحدة — تُرسم على الخريطة فقط الصور التي تحمل إحداثيات GPS</span>
         </div>
 
         <div class="exif-photo-list" id="exif-list-container">
@@ -10081,7 +10023,7 @@ function openPhotoExifMapModal() {
             <div class="exif-photo-item ${p === activePhoto ? 'active' : ''}" data-exif-idx="${idx}">
               <img src="${esc(p.url)}" class="exif-photo-thumb" alt="${esc(p.title)}" loading="lazy">
               <div style="font-size:.72rem;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.title)}</div>
-              <div class="exif-meta-pill">${p.isExifLive ? '🛰️ GPS دقيق' : '📍 ' + esc(p.city)}</div>
+              <div class="exif-meta-pill">${p.isExifLive ? '🛰️ GPS دقيق' : (p.memberId ? '👤 مدينة العضو: ' + esc(p.city) : '📍 بلا إحداثيات GPS')}</div>
             </div>
           `).join('')}
         </div>
@@ -10107,6 +10049,8 @@ function openPhotoExifMapModal() {
 
             <!-- Render photo markers on map -->
             ${photos.map((p, idx) => {
+              // على الخريطة الصور ذات GPS الحقيقي فقط — بلا إحداثيات مختلقة
+              if (!p.isExifLive || p.x == null) return '';
               const isSel = (p === activePhoto);
               const r = isSel ? 16 : 10;
               return `
@@ -10128,13 +10072,14 @@ function openPhotoExifMapModal() {
               <img src="${esc(activePhoto.url)}" style="width:65px;height:65px;object-fit:cover;border-radius:8px;border:1px solid var(--gold)">
               <div style="flex:1;min-width:0;font-size:.8rem;line-height:1.5">
                 <b style="color:var(--gold);font-size:.9rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(activePhoto.title)}</b>
-                <div style="color:var(--txt)">📍 الموقع: <b>${esc(activePhoto.city)}</b> (${activePhoto.lat.toFixed(3)}° N, ${activePhoto.lng.toFixed(3)}° E)</div>
+                <div style="color:var(--txt)">${activePhoto.isExifLive && activePhoto.lat != null ? `📍 الموقع: <b>${esc(activePhoto.city)}</b> (${activePhoto.lat.toFixed(3)}° N, ${activePhoto.lng.toFixed(3)}° E)` : '📍 بلا إحداثيات GPS في هذه الصورة'}</div>
                 <div style="color:var(--mut);font-size:.74rem">📅 التاريخ: ${esc(activePhoto.dateTaken)} · 📷 الجهاز: ${esc(activePhoto.camera)}</div>
               </div>
               <div style="display:flex;flex-direction:column;gap:4px">
+                ${activePhoto.isExifLive && activePhoto.lat != null ? `
                 <a href="https://www.google.com/maps?q=${activePhoto.lat},${activePhoto.lng}" target="_blank" class="fstats-btn" style="text-decoration:none;font-size:.72rem;padding:4px 8px;background:rgba(245,158,11,.15);color:var(--gold);border-color:var(--gold);white-space:nowrap">
                   🗺️ خرائط Google ↗
-                </a>
+                </a>` : ''}
                 ${activePhoto.memberId ? `<button type="button" class="fstats-btn" style="font-size:.72rem;padding:4px 8px" onclick="profile('${activePhoto.memberId}')">ملف العضو</button>` : ''}
               </div>
             </div>
@@ -10169,6 +10114,7 @@ function openPhotoExifMapModal() {
         const files = Array.from(e.target.files);
         if (!files.length) return;
         let processed = 0;
+        let gpsAdded = 0;
         files.forEach(file => {
           const reader = new FileReader();
           reader.onload = (ev) => {
@@ -10176,11 +10122,12 @@ function openPhotoExifMapModal() {
             const exif = parseExifDataFromBuffer(buffer);
             const dataUrlReader = new FileReader();
             dataUrlReader.onload = (eUrl) => {
-              let photoLat = 19.117;
-              let photoLng = 42.133;
-              let photoCity = 'النماص (الموطن الأصلي)';
+              // بلا GPS في الصورة فلا إحداثيات ولا موقع على الخريطة إطلاقاً (لا افتراض للنماص)
+              let photoLat = null;
+              let photoLng = null;
+              let photoCity = 'بلا إحداثيات GPS';
               let isLive = false;
-              let coords = { x: 222, y: 394 };
+              let coords = null;
 
               if (exif && exif.hasGPS) {
                 photoLat = exif.lat;
@@ -10195,19 +10142,20 @@ function openPhotoExifMapModal() {
                 title: file.name.replace(/\.[^/.]+$/, ""),
                 url: eUrl.target.result,
                 city: photoCity,
-                x: coords.x,
-                y: coords.y,
+                x: coords ? coords.x : null,
+                y: coords ? coords.y : null,
                 dateTaken: exif?.dateTaken || 'اليوم',
                 camera: (exif?.make || '') + ' ' + (exif?.model || 'هاتف ذكي'),
                 lat: photoLat,
                 lng: photoLng,
                 isExifLive: isLive
               });
+              if (isLive) gpsAdded++;
 
               processed++;
               if (processed === files.length) {
                 activePhoto = photos[0];
-                toast(`✅ تم تحليل وقراءة بيانات ${files.length} صورة وعرضها على الخريطة!`);
+                toast(gpsAdded ? `✅ تم تحليل ${files.length} صورة — ${gpsAdded} منها بإحداثيات GPS ظهرت على الخريطة` : `✅ تم تحليل ${files.length} صورة — ولا واحدة منها تحمل إحداثيات GPS`);
                 renderMapModal();
               }
             };
@@ -10225,42 +10173,12 @@ function openPhotoExifMapModal() {
 /* ---------- 84) نسخ الوثائق الخطية والتسجيلات إلى نص قابل للبحث (فرع تجربة) ---------- */
 function openTranscribeModal(initialTab = 'docs') {
   // Built-in initial sample historical documents and transcripts
-  const DEFAULT_DOC_TRANSCRIPTS = [
-    {
-      id: 'doc_1',
-      type: 'doc',
-      title: 'وثيقة حجة ومبايعة عقار بالنماص (1342هـ)',
-      dateText: '15 رجب 1342هـ',
-      category: 'وثائق ومخطوطات',
-      originalImg: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80',
-      extractedText: `بسم الله الرحمن الرحيم\nالحمد لله وحده، والصلاة والسلام على من لا نبي بعده.\nحضر لدي في مجلس الشرع المطهر بالنماص من بلاد بني عمرو، فلان بن فلان من آل مطارد، وباع قطيع الأرض المسماة "حوطة المروة" الكائنة بشعب السراة، بحدودها الأربعة المعروفة، بثمن قدره ستون ريالاً فضة تسلمها البائع كاملة دون نقص.\nوشهد على ذلك: علي بن مسفر، ومحمد بن صالح المطارد، وكتبه العبد الفقير لله قاضي الناحية.`,
-      tags: ['النماص', 'آل مطارد', '1342هـ', 'مبايعة', 'حوطة المروة']
-    },
-    {
-      id: 'doc_2',
-      type: 'doc',
-      title: 'وثيقة تراضٍ وقسمة أوقاف ومزارع (1368هـ)',
-      dateText: '22 شوال 1368هـ',
-      category: 'وثائق ومخطوطات',
-      originalImg: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=400&q=80',
-      extractedText: `الحمد لله، اتفق الإخوة والورثة من أسرة آل مطارد على تثبيت قسمة البساتين الواقعة في وادي النماص، وجعل ريع بئر العفجة صدقة جارية على ميتهم ومحتاج العائلة، لا يُباع ولا يُوهب حتى يرث الله الأرض ومن عليها.\nالشهود: أعيان القرية وحضور الفرع. وتاريخه 22 شوال 1368هـ.`,
-      tags: ['أوقاف', 'النماص', 'قسمة', 'بئر العفجة', '1368هـ']
-    },
-    {
-      id: 'audio_1',
-      type: 'audio',
-      title: 'تسجيل صوتي: ذكريات رحلة الحج والسفر القديم (1392هـ)',
-      dateText: 'تسجيل شريط كاسيت 1392هـ',
-      category: 'تسجيلات صوتية',
-      speaker: 'كبير الأسرة رحمه الله',
-      extractedText: `[00:00] كنا نتحرك مع القوافل من السراة بعد طلوع الفجر، ونسلك عقبة سنان متجهين نحو الحجاز.\n[00:45] الطريق كان يستغرق قرابة عشرين يوماً على الركاب والدواب، ونتوقف عند محطات السقيا والمناهل المعروفة.\n[01:30] وعندما وصلنا مشارف مكة المكرمة كبر الناس وحمدوا الله على السلامة ولقاء الإخوان من أبناء العمومة.\n[02:15] كانت الرحلة شاقة لكن البركة وحسن الجوار كان يملأ القلوب.`,
-      tags: ['رحلة الحج', 'عقبة سنان', 'السراة', 'الحجاز', 'ذكريات']
-    }
-  ];
+  /* بلا نسخ افتراضية مختلقة — النسخ من إدخال المستخدم فقط (يرفع وثيقته ويكتب نسخها بنفسه) */
 
   // Retrieve any user added transcripts from localStorage
-  const savedTranscripts = JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]');
-  const allTranscripts = [...savedTranscripts, ...DEFAULT_DOC_TRANSCRIPTS];
+  const readTranscripts = () => { try { return JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]'); } catch (_) { return []; } };
+  const savedTranscripts = readTranscripts();
+  const allTranscripts = [...savedTranscripts];
 
   let currentTab = initialTab; // 'docs', 'audio', 'search'
   let activeItem = allTranscripts.find(t => t.type === (currentTab === 'audio' ? 'audio' : 'doc')) || allTranscripts[0];
@@ -10270,10 +10188,10 @@ function openTranscribeModal(initialTab = 'docs') {
     const filteredList = allTranscripts.filter(t => {
       if (currentTab === 'search') {
         if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        return t.title.toLowerCase().includes(q) ||
-          t.extractedText.toLowerCase().includes(q) ||
-          (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)));
+        const q = stripKin(normAr(searchQuery));
+        return stripKin(normAr(t.title)).includes(q) ||
+          stripKin(normAr(t.extractedText || '')).includes(q) ||
+          (t.tags && t.tags.some(tag => stripKin(normAr(tag)).includes(q)));
       }
       return t.type === (currentTab === 'audio' ? 'audio' : 'doc');
     });
@@ -10288,16 +10206,16 @@ function openTranscribeModal(initialTab = 'docs') {
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          محرك نسخ رقمي وذكاء اصطناعي يحوّل المخطوطات والوثائق القديمة بخط اليد وصكوك الأجداد والتسجيلات الصوتية النادرة إلى نصوص رقمية مدققة وقابلة للبحث الفوري والنسخ.
+          أرشيف رقمي للنسخ: ارفع الوثيقة أو التسجيل ثم اكتب نسخها بنفسك في حقل التحرير، وتُحفظ نصاً قابلاً للبحث والنسخ.
         </p>
 
         <!-- Navigation Tabs -->
         <div class="transcribe-tabs">
           <button type="button" class="transcribe-tab-btn ${currentTab === 'docs' ? 'active' : ''}" id="tab-btn-docs">
-            📜 نسخ الوثائق والمخطوطات الخطية (OCR)
+            📜 نسخ الوثائق والمخطوطات الخطية
           </button>
           <button type="button" class="transcribe-tab-btn ${currentTab === 'audio' ? 'active' : ''}" id="tab-btn-audio">
-            🎙️ تفريغ التسجيلات الصوتية (Voice-to-Text)
+            🎙️ تفريغ التسجيلات الصوتية
           </button>
           <button type="button" class="transcribe-tab-btn ${currentTab === 'search' ? 'active' : ''}" id="tab-btn-search">
             🔍 البحث في كافة النصوص المنسوخة
@@ -10314,7 +10232,7 @@ function openTranscribeModal(initialTab = 'docs') {
               <input type="file" id="transcribe-upload-input" accept="${currentTab === 'docs' ? 'image/*,.pdf' : 'audio/*,.mp3,.m4a,.wav'}" style="display:none">
             </label>
             <span style="font-size:.78rem;color:var(--mut)">
-              ${currentTab === 'docs' ? 'يقوم النظام بقراءة خط الرقعة والنسخ والخطوط القديمة واستخراج النص فوراً' : 'يقوم النظام بالتعرف على لهجة السراة وكلام كبار العائلة مع إضافة الطوابع الزمنية'}
+              ${currentTab === 'docs' ? 'ارفع الوثيقة ثم اكتب نسخها بنفسك في حقل التحرير واحفظها' : 'ارفع التسجيل ثم اكتب تفريغه بنفسك في حقل التحرير واحفظه'}
             </span>
           `}
         </div>
@@ -10405,14 +10323,18 @@ function openTranscribeModal(initialTab = 'docs') {
     if (sInp) {
       sInp.oninput = (e) => {
         searchQuery = e.target.value;
+        const caret = e.target.selectionStart;
         const matched = allTranscripts.filter(t => {
-          const q = searchQuery.toLowerCase();
-          return t.title.toLowerCase().includes(q) ||
-            t.extractedText.toLowerCase().includes(q) ||
-            (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)));
+          const q = stripKin(normAr(searchQuery));
+          return stripKin(normAr(t.title)).includes(q) ||
+            stripKin(normAr(t.extractedText || '')).includes(q) ||
+            (t.tags && t.tags.some(tag => stripKin(normAr(tag)).includes(q)));
         });
         if (matched.length) activeItem = matched[0];
         renderModal();
+        // إعادة التركيز بعد إعادة الرسم حتى لا ينقطع الكتابة
+        const inp2 = $('#transcribe-search-inp');
+        if (inp2) { inp2.focus(); try { inp2.setSelectionRange(caret, caret); } catch (_) {} }
       };
     }
 
@@ -10459,7 +10381,7 @@ function openTranscribeModal(initialTab = 'docs') {
         const newText = $('#transcribe-edit-text')?.value || '';
         activeItem.extractedText = newText;
         // Save to localStorage
-        const stored = JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]');
+        const stored = readTranscripts();
         const idx = stored.findIndex(s => s.id === activeItem.id);
         if (idx >= 0) {
           stored[idx].extractedText = newText;
@@ -10479,28 +10401,26 @@ function openTranscribeModal(initialTab = 'docs') {
       upInp.onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        toast('⏳ جاري فحص الملف ونسخ المحتوى بواسطة الذكاء الاصطناعي...');
-        setTimeout(() => {
-          const isAudio = currentTab === 'audio';
-          const newDoc = {
-            id: 'tr_user_' + Date.now(),
-            type: isAudio ? 'audio' : 'doc',
-            title: file.name.replace(/\.[^/.]+$/, ""),
-            dateText: 'تاريخ الإدراج: ' + new Date().toLocaleDateString('ar-SA'),
-            category: isAudio ? 'تسجيلات صوتية' : 'وثائق ومخطوطات',
-            extractedText: isAudio ?
-              `[00:00] (تفريغ صوتي آلي من تسجيل: ${file.name})\n[00:18] الحديث عن اجتماع أعيان العائلة وحضور المناسبة المباركة.\n[00:55] والحمد لله اجتمعت الكلمة وساد الألفة والمحبة بين أبناء العمومة.` :
-              `بسم الله الرحمن الرحيم\n(نص منسوخ آلياً من الوثيقة: ${file.name})\nبتاريخ المحضر الحاضر، حضر من أسرة آل مطارد المعنيون بالأمر، وتم توثيق ما تضمنه الصك بأكمله وصحة التوقيعات والشهادات.\nكتبه وشهد به الحاضرون.`,
-            tags: ['وثيقة مضافة', 'نسخ آلي', isAudio ? 'صوت' : 'مخطوط']
-          };
-          const stored = JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]');
+        // لا نسخ آلي هنا — ينشئ مسودة فارغة يكتب المستخدم نسخها بنفسه في حقل التحرير
+        const isAudio = currentTab === 'audio';
+        const newDoc = {
+          id: 'tr_user_' + Date.now(),
+          type: isAudio ? 'audio' : 'doc',
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          dateText: 'تاريخ الإدراج: ' + new Date().toLocaleDateString('ar-SA'),
+          category: isAudio ? 'تسجيلات صوتية' : 'وثائق ومخطوطات',
+          extractedText: '',
+          tags: ['وثيقة مضافة', isAudio ? 'صوت' : 'مخطوط']
+        };
+        try {
+          const stored = readTranscripts();
           stored.unshift(newDoc);
           localStorage.setItem('almatarid_transcripts', JSON.stringify(stored));
-          allTranscripts.unshift(newDoc);
-          activeItem = newDoc;
-          toast('✅ تم نسخ واستخراج النص بنجاح!');
-          renderModal();
-        }, 800);
+        } catch (_) { /* تجاهل خطأ التخزين المحلي */ }
+        allTranscripts.unshift(newDoc);
+        activeItem = newDoc;
+        toast('📄 أُضيفت الوثيقة — اكتب نسخها في حقل التحرير ثم احفظها');
+        renderModal();
       };
     }
   }
@@ -10510,71 +10430,11 @@ function openTranscribeModal(initialTab = 'docs') {
 
 /* ---------- 85) قبور ومدافن العائلة - المواقع فقط (فرع تجربة) ---------- */
 function openCemeteriesModal() {
-  const DEFAULT_CEMETERIES = [
-    {
-      id: 'cem_1',
-      name: 'مقبرة آل مطارد القديمة بالنماص',
-      city: 'النماص',
-      region: 'منطقة عسير (الموطن التاريخي للأسرة)',
-      description: 'المقبرة التاريخية القديمة لأسرة آل مطارد في وادي السراة ببلاد بني عمرو.',
-      lat: 19.1182,
-      lng: 42.1325,
-      isHistorical: true
-    },
-    {
-      id: 'cem_2',
-      name: 'مقبرة النسيم',
-      city: 'الرياض',
-      region: 'منطقة الرياض',
-      description: 'شرق مدينة الرياض، مدفن عدد من متوفي الأسرة المقيمين بالرياض.',
-      lat: 24.7335,
-      lng: 46.8402,
-      isHistorical: false
-    },
-    {
-      id: 'cem_3',
-      name: 'مقبرة المنصورية / الحائر',
-      city: 'الرياض',
-      region: 'منطقة الرياض',
-      description: 'جنوب مدينة الرياض، مدافن ومقابر العاصمة.',
-      lat: 24.5120,
-      lng: 46.8504,
-      isHistorical: false
-    },
-    {
-      id: 'cem_4',
-      name: 'مقبرة الصالحية',
-      city: 'جدة',
-      region: 'منطقة مكة المكرمة',
-      description: 'شمال شرق محافظة جدة، مدفن أبناء العمومة في الساحل الغربي.',
-      lat: 21.6305,
-      lng: 39.2201,
-      isHistorical: false
-    },
-    {
-      id: 'cem_5',
-      name: 'مقابر المعلاة والشرائع',
-      city: 'مكة المكرمة',
-      region: 'العاصمة المقدسة',
-      description: 'مدافن المشاعر ومكة المكرمة لمن توفاه الله مجاوراً للبيت العتيق.',
-      lat: 21.4360,
-      lng: 39.8290,
-      isHistorical: true
-    },
-    {
-      id: 'cem_6',
-      name: 'مقبرة مروح وبني عمرو',
-      city: 'النماص',
-      region: 'منطقة عسير',
-      description: 'من المدافن القديمة المعتمدة لقرى وأعيان بني عمرو.',
-      lat: 19.1950,
-      lng: 42.1550,
-      isHistorical: true
-    }
-  ];
+  /* بلا مقابر افتراضية — المواقع الحقيقية يضيفها المالك/المحرر فقط */
 
-  const localCustom = JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]');
-  const allCemeteries = [...localCustom, ...DEFAULT_CEMETERIES];
+  const readCemeteries = () => { try { return JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]'); } catch (_) { return []; } };
+  const localCustom = readCemeteries();
+  const allCemeteries = [...localCustom];
 
   // Map deceased members
   const deceasedMembers = S.members.filter(m => !m.is_alive);
@@ -10588,10 +10448,10 @@ function openCemeteriesModal() {
     const filtered = allCemeteries.filter(c => {
       if (selectedCity !== 'all' && c.city !== selectedCity) return false;
       if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return c.name.toLowerCase().includes(q) ||
-          c.city.toLowerCase().includes(q) ||
-          c.description.toLowerCase().includes(q);
+        const q = stripKin(normAr(searchQuery));
+        return stripKin(normAr(c.name)).includes(q) ||
+          stripKin(normAr(c.city)).includes(q) ||
+          stripKin(normAr(c.description || '')).includes(q);
       }
       return true;
     });
@@ -10634,7 +10494,7 @@ function openCemeteriesModal() {
 
         <!-- Cemeteries List -->
         <div style="display:flex;flex-direction:column;gap:10px;max-height:450px;overflow-y:auto;padding-left:4px">
-          ${filtered.map(cem => {
+          ${filtered.length ? filtered.map(cem => {
             // Associated deceased matching this city/origin
             const relatedDeceased = deceasedMembers.filter(m => (m.cemetery_id === cem.id) || (m.city === cem.city) || (cem.isHistorical && (!m.city || m.city === 'النماص'))).slice(0, 6);
             return `
@@ -10649,9 +10509,10 @@ function openCemeteriesModal() {
                   </div>
 
                   <div style="display:flex;gap:8px;align-items:center">
+                    ${(cem.lat != null && cem.lng != null) ? `
                     <a href="https://www.google.com/maps/dir/?api=1&destination=${cem.lat},${cem.lng}" target="_blank" class="fstats-btn" style="text-decoration:none;background:rgba(245,158,11,.15);color:var(--gold);border-color:var(--gold);font-weight:700;font-size:.76rem;padding:4px 10px;display:flex;align-items:center;gap:4px">
                       <span>🗺️ الاتجاهات والموقع (خرائط Google) ↗</span>
-                    </a>
+                    </a>` : '<span style="font-size:.74rem;color:var(--mut)">الإحداثيات غير مسجلة</span>'}
                   </div>
                 </div>
 
@@ -10660,7 +10521,7 @@ function openCemeteriesModal() {
                 </div>
 
                 <div style="font-size:.73rem;color:var(--mut);display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px">
-                  <span>🌐 الإحداثيات: <b>${cem.lat.toFixed(4)}° N, ${cem.lng.toFixed(4)}° E</b></span>
+                  ${(cem.lat != null && cem.lng != null) ? `<span>🌐 الإحداثيات: <b>${cem.lat.toFixed(4)}° N, ${cem.lng.toFixed(4)}° E</b></span>` : '<span>🌐 الإحداثيات: غير مسجلة</span>'}
                   ${cem.isHistorical ? '<span style="color:var(--gold)">🏛️ مقبرة تاريخية قديمة</span>' : ''}
                 </div>
 
@@ -10678,7 +10539,11 @@ function openCemeteriesModal() {
                 ` : ''}
               </div>
             `;
-          }).join('')}
+          }).join('') : `
+            <div style="text-align:center;padding:36px 10px;color:var(--mut)">
+              <div style="font-size:2rem;margin-bottom:8px">🌿</div>
+              <div>لا توجد مقابر مسجلة بعد — يضيف المالك أو المحرر المواقع الحقيقية من زر «إضافة موقع مقبرة».</div>
+            </div>`}
         </div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
@@ -10709,7 +10574,10 @@ function openCemeteriesModal() {
     if (sInp) {
       sInp.oninput = (e) => {
         searchQuery = e.target.value;
+        const caret = e.target.selectionStart;
         renderModal();
+        const inp2 = $('#cem-search-inp');
+        if (inp2) { inp2.focus(); try { inp2.setSelectionRange(caret, caret); } catch (_) {} }
       };
     }
 
@@ -10719,25 +10587,31 @@ function openCemeteriesModal() {
       addBtn.onclick = () => {
         const name = prompt('اسم المقبرة:');
         if (!name) return;
-        const city = prompt('المدينة (مثال: النماص، الرياض، جدة):') || 'النماص';
+        const city = prompt('المدينة (مثال: النماص، الرياض، جدة):');
+        if (!city) { toast('⚠️ المدينة مطلوبة — أعد المحاولة واكتب المدينة'); return; }
         const desc = prompt('وصف المقبرة أو معلم قريب:') || '';
-        const latStr = prompt('خط العرض (Latitude) أو اضغط موافق للافتراضي:') || '19.118';
-        const lngStr = prompt('خط الطول (Longitude) أو اضغط موافق للافتراضي:') || '42.132';
+        // الإحداثيات اختيارية — فارغة تعني بلا إحداثيات (لا افتراض لأي مدينة)
+        const latStr = prompt('خط العرض (Latitude) — اتركه فارغاً إن لم تعرفه:') || '';
+        const lngStr = prompt('خط الطول (Longitude) — اتركه فارغاً إن لم تعرفه:') || '';
 
+        const lat = latStr.trim() ? parseFloat(latStr) : null;
+        const lng = lngStr.trim() ? parseFloat(lngStr) : null;
         const newCem = {
           id: 'cem_user_' + Date.now(),
           name,
           city,
           region: 'المملكة العربية السعودية',
           description: desc,
-          lat: parseFloat(latStr) || 19.118,
-          lng: parseFloat(lngStr) || 42.132,
+          lat: (lat != null && !isNaN(lat)) ? lat : null,
+          lng: (lng != null && !isNaN(lng)) ? lng : null,
           isHistorical: false
         };
 
-        const stored = JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]');
-        stored.push(newCem);
-        localStorage.setItem('almatarid_cemeteries', JSON.stringify(stored));
+        try {
+          const stored = readCemeteries();
+          stored.push(newCem);
+          localStorage.setItem('almatarid_cemeteries', JSON.stringify(stored));
+        } catch (_) { /* تجاهل خطأ التخزين المحلي */ }
         allCemeteries.unshift(newCem);
         toast('✅ تمت إضافة المقبرة بنجاح!');
         renderModal();
@@ -11330,57 +11204,11 @@ function openPersonalInvitesModal() {
 
 /* ---------- 88) لوحة أخبار العائلة ومنشورات الأقارب (فرع تجربة) ---------- */
 function openFamilyNewsModal(filterCat = 'all') {
-  const DEFAULT_POSTS = [
-    {
-      id: 'post_1',
-      author: 'مجلس شباب آل مطارد',
-      authorBranch: 'فرع النماص',
-      category: 'grad',
-      categoryLabel: '🎓 إنجازات وتخرج',
-      title: 'تهنئة بحصول الدكتور فهد المطارد على البورد الطبي',
-      body: 'ببالغ الفخر والاعتزاز، يبارك عموم أفراد أسرة آل مطارد لابن العم الدكتور فهد بن محمد المطارد بمناسبة اجتيازه البورد الطبي بتفوق مع مرتبة الشرف، سائلين الله له دوام التوفيق لخدمة دينه ووطنه وأهله.',
-      imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=600&q=80',
-      dateText: 'منذ يومين',
-      reactions: { congrats: 28, proud: 19, dua: 34 },
-      comments: [
-        { name: 'أبو علي', text: 'ألف ترليون مبروك ومنها للأعلى إن شاء الله تستاهل كل خير يا دكتور.' },
-        { name: 'سعد المطارد', text: 'ما شاء الله تبارك الله، فخر للعائلة كلها ورفع الله قدرك.' }
-      ]
-    },
-    {
-      id: 'post_2',
-      author: 'عبدالرحمن بن صالح',
-      authorBranch: 'فرع الرياض',
-      category: 'baby',
-      categoryLabel: '👶 مواليد جدد',
-      title: 'قدوم المولود الجديد «سعود» جعله الله من مواليد السعادة',
-      body: 'الحمد لله الذي بنعمته تتم الصالحات، رُزق ابن العم عبدالرحمن بن صالح المطارد بمولود جديد اتفق وحرمه على تسميته «سعود»، بارك الله له في الموهوب وشكر الواهب ورزقه بره وبلغ أشده.',
-      imageUrl: 'https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&w=600&q=80',
-      dateText: 'منذ 4 أيام',
-      reactions: { congrats: 42, proud: 8, dua: 55 },
-      comments: [
-        { name: 'محمد بن علي', text: 'جعله الله قرة عين لوالديه ومن حفظة كتابه الكريم.' }
-      ]
-    },
-    {
-      id: 'post_3',
-      author: 'لجنة الفعاليات والمناسبات',
-      authorBranch: 'فرع السراة',
-      category: 'meet',
-      categoryLabel: '🤝 لقاءات واجتماعات',
-      title: 'تغطية اجتماع الأسرة الصيفي بمنتجع السراة في النماص',
-      body: 'أقيم مساء الجمعة المباركة الاجتماع السنوي لأسرة آل مطارد في أجواء سادتها الألفة وصلة الرحم وتبادل الذكريات وتكريم المتميزين من الطلاب والطالبات من أبناء العائلة، بحضور كريم من أعيان وكبار الأسرة.',
-      imageUrl: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=600&q=80',
-      dateText: 'الأسبوع الماضي',
-      reactions: { congrats: 51, proud: 38, dua: 46 },
-      comments: [
-        { name: 'صالح بن مسفر', text: 'الله يديم المحبة والجمعة الطيبة ولا يفرق شملنا جميعاً.' }
-      ]
-    }
-  ];
+  /* بلا منشورات افتراضية مختلقة — الأخبار الحقيقية ينشرها أفراد العائلة فقط */
 
-  const localPosts = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
-  const allPosts = [...localPosts, ...DEFAULT_POSTS];
+  const readPosts = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]'); } catch (_) { return []; } };
+  const localPosts = readPosts();
+  const allPosts = [...localPosts];
 
   let activeCat = filterCat;
 
@@ -11417,7 +11245,7 @@ function openFamilyNewsModal(filterCat = 'all') {
 
         <!-- Posts Feed -->
         <div style="display:flex;flex-direction:column;gap:14px;max-height:500px;overflow-y:auto;padding-left:4px">
-          ${filtered.map(post => `
+          ${filtered.length ? filtered.map(post => `
             <div class="fnews-post" data-post-id="${post.id}">
               <div class="fnews-post-header">
                 <div style="display:flex;align-items:center;gap:10px">
@@ -11478,7 +11306,11 @@ function openFamilyNewsModal(filterCat = 'all') {
                 </div>
               </div>
             </div>
-          `).join('')}
+          `).join('') : `
+            <div style="text-align:center;padding:36px 10px;color:var(--mut)">
+              <div style="font-size:2rem;margin-bottom:8px">📰</div>
+              <div>لا توجد أخبار منشورة بعد — انشر أول خبر عائلي من زر «إضافة خبر أو منشور جديد».</div>
+            </div>`}
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
@@ -11509,7 +11341,7 @@ function openFamilyNewsModal(filterCat = 'all') {
           if (!post.reactions) post.reactions = {};
           post.reactions[type] = (post.reactions[type] || 0) + 1;
           // Persist in localStorage
-          const stored = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+          const stored = readPosts();
           const idx = stored.findIndex(s => s.id === pid);
           if (idx >= 0) stored[idx] = post; else stored.push(post);
           localStorage.setItem('almatarid_family_posts', JSON.stringify(stored));
@@ -11531,7 +11363,7 @@ function openFamilyNewsModal(filterCat = 'all') {
           if (!post.comments) post.comments = [];
           const name = prompt('اكتب اسمك ليظهر مع التهنئة:', S.role === 'visitor' ? 'ابن العم' : 'قريب من العائلة') || 'أحد أفراد العائلة';
           post.comments.push({ name, text });
-          const stored = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+          const stored = readPosts();
           const idx = stored.findIndex(s => s.id === pid);
           if (idx >= 0) stored[idx] = post; else stored.push(post);
           localStorage.setItem('almatarid_family_posts', JSON.stringify(stored));
@@ -11580,7 +11412,7 @@ function openFamilyNewsModal(filterCat = 'all') {
           comments: []
         };
 
-        const stored = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+        const stored = readPosts();
         stored.unshift(newPost);
         localStorage.setItem('almatarid_family_posts', JSON.stringify(stored));
         allPosts.unshift(newPost);
@@ -11595,36 +11427,13 @@ function openFamilyNewsModal(filterCat = 'all') {
 
 /* ---------- 89) تصويت العائلة على القرارات (فرع تجربة) ---------- */
 function openFamilyVoteModal() {
-  const DEFAULT_POLLS = [
-    {
-      id: 'poll_1',
-      title: 'موعد ومقر اجتماع عائلة آل مطارد السنوي القادم',
-      description: 'يسر مجلس الأسرة استطلاع آراء عموم أبناء وبنات العائلة الكرام حول الموعد والمكان المفضل للاجتماع السنوي القادم لتعزيز صلة الرحم وأعلى نسبة حضور.',
-      endDateText: 'متبقي 5 أيام',
-      status: 'active',
-      options: [
-        { id: 'opt_1', text: 'مدينة النماص (الموطن الأصلي بالسراة - ثالث أيام عيد الفطر)', votes: 41 },
-        { id: 'opt_2', text: 'مدينة الرياض (مقر تجمع العاصمة - خامس أيام عيد الفطر)', votes: 29 },
-        { id: 'opt_3', text: 'منطقة عسير (أبها وخميس مشيط - ثاني أيام عيد الأضحى)', votes: 16 }
-      ]
-    },
-    {
-      id: 'poll_2',
-      title: 'مشروع جائزة التفوق العلمي وحفظ القرآن الكريم لأبناء الأسرة',
-      description: 'مقترح اعتماد جائزة سنوية لتكريم الطلاب والطالبات المتفوقين في التعليم العام والجامعي وحفظة كتاب الله الكريم.',
-      endDateText: 'متبقي أسبوعان',
-      status: 'active',
-      options: [
-        { id: 'opt_2_1', text: 'أوافق وبشدة وأدعم إطلاق الجائزة في الاجتماع القادم', votes: 68 },
-        { id: 'opt_2_2', text: 'أوافق مع قصرها على خريجي الجامعات والدراسات العليا', votes: 14 },
-        { id: 'opt_2_3', text: 'أقترح تكوين لجنة خاصة لوضع معايير الجائزة', votes: 22 }
-      ]
-    }
-  ];
+  /* بلا استطلاعات افتراضية مختلقة — التصويت الحقيقي ينشئه أفراد العائلة فقط */
 
-  const localPolls = JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]');
-  const allPolls = [...localPolls, ...DEFAULT_POLLS];
-  const userVotes = JSON.parse(localStorage.getItem('almatarid_user_votes') || '{}');
+  const readPolls = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]'); } catch (_) { return []; } };
+  const readVotes = () => { try { return JSON.parse(localStorage.getItem('almatarid_user_votes') || '{}'); } catch (_) { return {}; } };
+  const localPolls = readPolls();
+  const allPolls = [...localPolls];
+  const userVotes = readVotes();
 
   function renderVoteModal() {
     const html = `
@@ -11652,7 +11461,7 @@ function openFamilyVoteModal() {
 
         <!-- Polls List -->
         <div style="display:flex;flex-direction:column;gap:14px;max-height:500px;overflow-y:auto;padding-left:4px">
-          ${allPolls.map(poll => {
+          ${allPolls.length ? allPolls.map(poll => {
             const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
             const userChoice = userVotes[poll.id] || null;
 
@@ -11706,7 +11515,11 @@ function openFamilyVoteModal() {
                 </div>
               </div>
             `;
-          }).join('')}
+          }).join('') : `
+            <div style="text-align:center;padding:36px 10px;color:var(--mut)">
+              <div style="font-size:2rem;margin-bottom:8px">🗳️</div>
+              <div>لا توجد استطلاعات بعد — أنشئ أول تصويت عائلي من زر «إنشاء استطلاع جديد».</div>
+            </div>`}
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
@@ -11746,7 +11559,7 @@ function openFamilyVoteModal() {
         localStorage.setItem('almatarid_user_votes', JSON.stringify(userVotes));
 
         // Persist poll
-        const stored = JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]');
+        const stored = readPolls();
         const idx = stored.findIndex(s => s.id === pid);
         if (idx >= 0) stored[idx] = poll; else stored.push(poll);
         localStorage.setItem('almatarid_family_polls', JSON.stringify(stored));
@@ -11796,7 +11609,7 @@ function openFamilyVoteModal() {
           options
         };
 
-        const stored = JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]');
+        const stored = readPolls();
         stored.unshift(newPoll);
         localStorage.setItem('almatarid_family_polls', JSON.stringify(stored));
         allPolls.unshift(newPoll);
@@ -12028,41 +11841,11 @@ function openCareersDirectoryModal() {
 
 /* ---------- 91) رسائل موقوتة من كبار العائلة (فرع تجربة) ---------- */
 function openTimeCapsuleModal(activeFilter = 'all') {
-  const DEFAULT_CAPSULES = [
-    {
-      id: 'cap_1',
-      author: 'الجد صالح بن مسفر المطارد (رحمه الله)',
-      occasion: 'وصية جامعة للأبناء والأحفاد',
-      status: 'unlocked',
-      writtenDateText: 'عام 1412هـ',
-      unlockConditionText: 'متاحة لعموم الأجيال',
-      body: '«أوصيكم يا أبنائي ونصلتي ونصلة إخواني بتقوى الله في السر والعلن، وإقام الصلاة، وصلة أرحامكم، وتفقد ضعيفكم ومحتاجكم، وأن تكونوا يداً واحدة كالبنيان المرصوص يشد بعضه بعضاً، ولا يفرقكم طمع دنيا، وحافظوا على اسم أسرتكم وسمعتها الطيبة التي بناها الأجداد بالوفاء والمروءة والشرف.»',
-      hasAudio: false
-    },
-    {
-      id: 'cap_2',
-      author: 'الوالد مسفر بن علي المطارد (حفظه الله)',
-      occasion: 'مناسبة تخرج أول دفعة من الأطباء والمهندسين بالأسرة',
-      status: 'unlocked',
-      writtenDateText: 'عام 1435هـ',
-      unlockConditionText: 'تُفتح عند حفل التفوق العائلي',
-      body: '«الحمد لله الذي أقر أعيننا برؤية هذه الثمار الطيبة في أبنائنا وبناتنا.. أوصيكم ونفسي بأن تجعلوا هذا العلم خالصاً لوجه الله، وأن تكون عياداتكم ومكاتبكم عوناً للقريب والغريب، فما نفع العلم إن لم يُترجم إلى بر وإحسان وتواضع للخلق.»',
-      hasAudio: false
-    },
-    {
-      id: 'cap_3',
-      author: 'كبار وأعيان الأسرة',
-      occasion: 'اجتماع العائلة التاريخي لعام 1450هـ',
-      status: 'locked',
-      writtenDateText: 'عام 1445هـ',
-      unlockConditionText: '🔒 تُفتح وتُقرأ في اجتماع العائلة عام 1450هـ بإذن الله',
-      body: 'هذه الرسالة مغلقة في كبسولة الزمن، وتحتوي على رؤية وتوجيهات كبار العائلة للأجيال الشابة القادمة، وستُفتح بمشيئة الله وتُتلى في قاعة الاجتماع.',
-      hasAudio: true
-    }
-  ];
+  /* بلا كبسولات افتراضية مختلقة — الرسائل والوصايا الحقيقية يكتبها كبار العائلة فقط */
 
-  const localCapsules = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
-  const allCapsules = [...localCapsules, ...DEFAULT_CAPSULES];
+  const readCapsules = () => { try { return JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]'); } catch (_) { return []; } };
+  const localCapsules = readCapsules();
+  const allCapsules = [...localCapsules];
 
   let currentTab = activeFilter;
 
@@ -12101,7 +11884,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
 
         <!-- Messages List -->
         <div style="display:flex;flex-direction:column;gap:12px;max-height:480px;overflow-y:auto;padding-left:4px">
-          ${filtered.map(item => {
+          ${filtered.length ? filtered.map(item => {
             const isUnlocked = item.status === 'unlocked';
             return `
               <div class="capsule-card ${isUnlocked ? 'unlocked' : 'locked'}">
@@ -12144,7 +11927,11 @@ function openTimeCapsuleModal(activeFilter = 'all') {
                 </div>
               </div>
             `;
-          }).join('')}
+          }).join('') : `
+            <div style="text-align:center;padding:36px 10px;color:var(--mut)">
+              <div style="font-size:2rem;margin-bottom:8px">⏳</div>
+              <div>لا توجد رسائل موقوتة بعد — يدوّن كبار العائلة أول رسالة من زر «تدوين رسالة موقوتة جديدة».</div>
+            </div>`}
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
@@ -12186,7 +11973,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
             cap.status = 'unlocked';
             const realMsg = prompt('أدخل أو عدّل النص الكامل للوصية ليظهر للجميع:', cap.body);
             if (realMsg) cap.body = realMsg;
-            const stored = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
+            const stored = readCapsules();
             const idx = stored.findIndex(s => s.id === id);
             if (idx >= 0) stored[idx] = cap; else stored.push(cap);
             localStorage.setItem('almatarid_time_capsules', JSON.stringify(stored));
@@ -12223,7 +12010,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
           secretCode: secret
         };
 
-        const stored = JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]');
+        const stored = readCapsules();
         stored.unshift(newCap);
         localStorage.setItem('almatarid_time_capsules', JSON.stringify(stored));
         allCapsules.unshift(newCap);
