@@ -1062,3 +1062,10 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .antique-map-box{position:relative;background:#1a140d !important;border:2px solid var(--gold) !important;box-shadow:inset 0 0 40px rgba(0,0,0,.85), 0 0 20px rgba(245,158,11,.2)}
 .antique-ctrls{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(26,20,13,.95);border:1.5px solid var(--gold);border-radius:8px;padding:8px 14px;margin:8px 0;font-size:.82rem;flex-wrap:wrap}
 .antique-slider{accent-color:var(--gold);cursor:pointer}
+
+/* ---------- 77) تنبيهات الفرع والأقارب الجدد ---------- */
+.btn-alerts{position:relative;padding:4px 8px;font-size:1rem}
+.alerts-badge{position:absolute;top:0;right:0;background:#ef4444;color:#fff;border-radius:10px;padding:1px 5px;font-size:.68rem;font-weight:700;line-height:1}
+.alert-item{background:rgba(15,23,42,.85);border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:12px;margin-bottom:8px;transition:all .15s ease}
+.alert-item.unread{border-color:var(--gold);background:rgba(245,158,11,.08)}
+.alert-icon{font-size:1.3rem;line-height:1}

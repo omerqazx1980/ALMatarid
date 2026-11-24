@@ -8558,3 +8558,161 @@ const mAntiqueMap = $('#m-antique-map');
 if (mAntiqueMap) {
   mAntiqueMap.onclick = menuClose(() => openAntiqueMapLayerModal());
 }
+
+/* ============================================================
+   77) تنبيهات تعديل فرعك وإضافة قريب جديد
+   ============================================================ */
+function getBranchAlerts() {
+  const meId = localStorage.getItem('almatarid_me_id');
+  const me = meId ? S.byId.get(meId) : null;
+  const userBranchRootId = me ? (typeof getAncestryChain === 'function' ? getAncestryChain(me)[1]?.id : null) : (S.branch?.root_id || null);
+
+  const readAlertIds = new Set(JSON.parse(localStorage.getItem('almatarid_read_alerts') || '[]'));
+  const alerts = [];
+
+  const recentKids = S.members.filter(m => gen(m) >= 5 || !m.father_id).slice(-6);
+  recentKids.forEach(k => {
+    const isMyBranch = userBranchRootId ? (underRoot(k, userBranchRootId) || k.id === userBranchRootId) : true;
+    const parent = S.byId.get(k.father_id);
+    const alertId = 'alt_new_' + k.id;
+    alerts.push({
+      id: alertId,
+      type: 'new_member',
+      icon: isFemale(k) ? '👧' : '👶',
+      title: `إضافة قريب جديد: «${k.full_name}»`,
+      desc: parent ? `ابن لـ «${parent.full_name}» في الجيل ${gen(k)}` : `أُضيف إلى شجرة العائلة`,
+      isMyBranch,
+      date: 'حديثاً',
+      memberId: k.id,
+      unread: !readAlertIds.has(alertId)
+    });
+  });
+
+  (S.events || []).slice(-3).forEach(ev => {
+    const alertId = 'alt_ev_' + ev.id;
+    alerts.push({
+      id: alertId,
+      type: 'event',
+      icon: '🎉',
+      title: `مناسبة قادمة: «${ev.title}»`,
+      desc: `📍 ${ev.location || ev.city || 'النماص'} · ${ev.event_date ? String(ev.event_date).slice(0, 10) : ''}`,
+      isMyBranch: true,
+      date: 'نشط',
+      unread: !readAlertIds.has(alertId)
+    });
+  });
+
+  return { alerts, me, userBranchRootId };
+}
+
+function updateAlertsBadge() {
+  const { alerts } = getBranchAlerts();
+  const unreadCount = alerts.filter(a => a.unread).length;
+  const badge = $('#alerts-badge');
+  if (badge) {
+    if (unreadCount > 0) {
+      badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+function openBranchAlertsModal() {
+  const { alerts, me, userBranchRootId } = getBranchAlerts();
+  const branchName = userBranchRootId ? (S.byId.get(userBranchRootId)?.full_name || 'فرعك') : 'كامل العائلة';
+
+  const html = `
+    <div style="max-width:540px">
+      <div class="fstats-head">
+        <h2>🔔 تنبيهات الفرع وإضافات الأقارب</h2>
+        <p class="sub">إشعارات فورية عند إضافة قريب جديد لفرعك أو تعديل بيانات العائلة</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:10px;padding:10px 14px;margin:12px 0">
+        <div>
+          <span style="font-size:.78rem;color:var(--gold);font-weight:700">الفرع المتابع للتنبيهات:</span>
+          <b style="display:block;font-size:.95rem;color:#f8fafc">🌿 ${esc(branchName)}</b>
+          <div style="font-size:.72rem;color:var(--mut)">
+            ${me ? `مرتبط بحسابك: ${esc(me.full_name)}` : 'تلقائياً: جميع فروع الأسرة'}
+          </div>
+        </div>
+        <button type="button" id="alerts-mark-all" class="fstats-btn" style="padding:6px 10px;font-size:.75rem">
+          ✓ تعليم الكل كمقروء
+        </button>
+      </div>
+
+      <div style="max-height:420px;overflow-y:auto">
+        ${alerts.map(a => `
+          <div class="alert-item ${a.unread ? 'unread' : ''}" data-alert-mid="${a.memberId || ''}">
+            <span class="alert-icon">${a.icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                <b style="color:#f8fafc;font-size:.88rem">${esc(a.title)}</b>
+                ${a.isMyBranch ? `<span style="background:rgba(16,185,129,.2);color:#10b981;border-radius:10px;padding:1px 6px;font-size:.68rem">فرعك</span>` : ''}
+              </div>
+              <p style="font-size:.78rem;color:var(--mut);margin:3px 0 0 0">${esc(a.desc)}</p>
+              <div style="font-size:.7rem;color:var(--gold);margin-top:4px">
+                ${a.unread ? '🔵 غير مقروء · ' : ''}🕒 ${esc(a.date)}
+              </div>
+            </div>
+            ${a.memberId ? `<button type="button" class="fstats-btn" data-open-member="${a.memberId}" style="padding:4px 8px;font-size:.72rem">ملفه ←</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:10px;border-top:1px solid var(--line);font-size:.78rem">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--txt)">
+          <input type="checkbox" id="alerts-browser-push" ${typeof Notification !== 'undefined' && Notification?.permission === 'granted' ? 'checked' : ''}>
+          <span>تفعيل إشعارات المتصفح الفورية 🔔</span>
+        </label>
+        <button type="button" onclick="$('#profile').close();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">إغلاق</button>
+      </div>
+    </div>
+  `;
+
+  showInfo(html);
+
+  const markBtn = $('#alerts-mark-all');
+  if (markBtn) {
+    markBtn.onclick = () => {
+      const allIds = alerts.map(a => a.id);
+      localStorage.setItem('almatarid_read_alerts', JSON.stringify(allIds));
+      updateAlertsBadge();
+      openBranchAlertsModal();
+      toast('تم تعليم جميع الإشعارات كمقروءة');
+    };
+  }
+
+  document.querySelectorAll('[data-open-member]').forEach(btn => {
+    btn.onclick = () => {
+      $('#profile').close();
+      profile(btn.dataset.openMember);
+    };
+  });
+
+  const pushChk = $('#alerts-browser-push');
+  if (pushChk) {
+    pushChk.onchange = async () => {
+      if (pushChk.checked && typeof Notification !== 'undefined') {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          toast('✅ تم تفعيل إشعارات المتصفح بنجاح');
+          new Notification('شجرة آل مطارد', { body: 'تم تفعيل تنبيهات الفرع بنجاح!' });
+        } else {
+          pushChk.checked = false;
+          alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
+        }
+      }
+    };
+  }
+}
+
+const btnAlerts = $('#btn-alerts');
+if (btnAlerts) btnAlerts.onclick = openBranchAlertsModal;
+
+const mBranchAlerts = $('#m-branch-alerts');
+if (mBranchAlerts) mBranchAlerts.onclick = menuClose(() => openBranchAlertsModal());
+
+setTimeout(updateAlertsBadge, 500);
