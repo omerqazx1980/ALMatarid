@@ -3245,6 +3245,7 @@ $('#m-cards').onclick = menuClose(() => {
     const mm = S.byId.get(d.who); if (mm) { const ln = cardLongName(mm); const tb = d.kind === 'thanks' ? (d.txt || '').trim() : ''; openCard({ full_name: ln, gender: mm.gender, father_id: mm.father_id, phone: mm.phone, body: tb || undefined }, d.kind); postAnnouncement(d.kind, { ...mm, full_name: ln, body: tb || null }); }
   });
 });
+$('#m-family-news').onclick = menuClose(() => openFamilyNewsModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -11289,6 +11290,272 @@ function openPersonalInvitesModal() {
 
   renderModal();
 }
+
+/* ---------- 88) لوحة أخبار العائلة ومنشورات الأقارب (فرع تجربة) ---------- */
+function openFamilyNewsModal(filterCat = 'all') {
+  const DEFAULT_POSTS = [
+    {
+      id: 'post_1',
+      author: 'مجلس شباب آل مطارد',
+      authorBranch: 'فرع النماص',
+      category: 'grad',
+      categoryLabel: '🎓 إنجازات وتخرج',
+      title: 'تهنئة بحصول الدكتور فهد المطارد على البورد الطبي',
+      body: 'ببالغ الفخر والاعتزاز، يبارك عموم أفراد أسرة آل مطارد لابن العم الدكتور فهد بن محمد المطارد بمناسبة اجتيازه البورد الطبي بتفوق مع مرتبة الشرف، سائلين الله له دوام التوفيق لخدمة دينه ووطنه وأهله.',
+      imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=600&q=80',
+      dateText: 'منذ يومين',
+      reactions: { congrats: 28, proud: 19, dua: 34 },
+      comments: [
+        { name: 'أبو علي', text: 'ألف ترليون مبروك ومنها للأعلى إن شاء الله تستاهل كل خير يا دكتور.' },
+        { name: 'سعد المطارد', text: 'ما شاء الله تبارك الله، فخر للعائلة كلها ورفع الله قدرك.' }
+      ]
+    },
+    {
+      id: 'post_2',
+      author: 'عبدالرحمن بن صالح',
+      authorBranch: 'فرع الرياض',
+      category: 'baby',
+      categoryLabel: '👶 مواليد جدد',
+      title: 'قدوم المولود الجديد «سعود» جعله الله من مواليد السعادة',
+      body: 'الحمد لله الذي بنعمته تتم الصالحات، رُزق ابن العم عبدالرحمن بن صالح المطارد بمولود جديد اتفق وحرمه على تسميته «سعود»، بارك الله له في الموهوب وشكر الواهب ورزقه بره وبلغ أشده.',
+      imageUrl: 'https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&w=600&q=80',
+      dateText: 'منذ 4 أيام',
+      reactions: { congrats: 42, proud: 8, dua: 55 },
+      comments: [
+        { name: 'محمد بن علي', text: 'جعله الله قرة عين لوالديه ومن حفظة كتابه الكريم.' }
+      ]
+    },
+    {
+      id: 'post_3',
+      author: 'لجنة الفعاليات والمناسبات',
+      authorBranch: 'فرع السراة',
+      category: 'meet',
+      categoryLabel: '🤝 لقاءات واجتماعات',
+      title: 'تغطية اجتماع الأسرة الصيفي بمنتجع السراة في النماص',
+      body: 'أقيم مساء الجمعة المباركة الاجتماع السنوي لأسرة آل مطارد في أجواء سادتها الألفة وصلة الرحم وتبادل الذكريات وتكريم المتميزين من الطلاب والطالبات من أبناء العائلة، بحضور كريم من أعيان وكبار الأسرة.',
+      imageUrl: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=600&q=80',
+      dateText: 'الأسبوع الماضي',
+      reactions: { congrats: 51, proud: 38, dua: 46 },
+      comments: [
+        { name: 'صالح بن مسفر', text: 'الله يديم المحبة والجمعة الطيبة ولا يفرق شملنا جميعاً.' }
+      ]
+    }
+  ];
+
+  const localPosts = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+  const allPosts = [...localPosts, ...DEFAULT_POSTS];
+
+  let activeCat = filterCat;
+
+  function renderNewsModal() {
+    const filtered = allPosts.filter(p => activeCat === 'all' || p.category === activeCat);
+
+    const html = `
+      <div class="fnews-wrap" style="max-width:760px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>📰</span> لوحة أخبار العائلة ومنشورات الأقارب
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          المساحة الاجتماعية المشتركة لأفراد أسرة آل مطارد لمشاركة الأخبار السارة، وتبريكات التخرج والمواليد والأفراح، وتغطيات الاجتماعات العائلية مع تفاعل مباشر من الأقارب.
+        </p>
+
+        <!-- Category Filter & Add Button -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="fstats-btn ${activeCat === 'all' ? 'active' : ''}" id="cat-all" style="padding:4px 10px;font-size:.76rem">الكل</button>
+            <button type="button" class="fstats-btn ${activeCat === 'grad' ? 'active' : ''}" id="cat-grad" style="padding:4px 10px;font-size:.76rem">🎓 إنجازات وتخرج</button>
+            <button type="button" class="fstats-btn ${activeCat === 'baby' ? 'active' : ''}" id="cat-baby" style="padding:4px 10px;font-size:.76rem">👶 مواليد</button>
+            <button type="button" class="fstats-btn ${activeCat === 'wedding' ? 'active' : ''}" id="cat-wedding" style="padding:4px 10px;font-size:.76rem">💍 أفراح وزواجات</button>
+            <button type="button" class="fstats-btn ${activeCat === 'meet' ? 'active' : ''}" id="cat-meet" style="padding:4px 10px;font-size:.76rem">🤝 اجتماعات</button>
+          </div>
+
+          <button type="button" class="fstats-btn" id="btn-add-fnews" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+            ✍️ إضافة خبر أو منشور جديد
+          </button>
+        </div>
+
+        <!-- Posts Feed -->
+        <div style="display:flex;flex-direction:column;gap:14px;max-height:500px;overflow-y:auto;padding-left:4px">
+          ${filtered.map(post => `
+            <div class="fnews-post" data-post-id="${post.id}">
+              <div class="fnews-post-header">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div class="fnews-author-avatar">${esc(post.author.charAt(0))}</div>
+                  <div>
+                    <b style="color:var(--txt);font-size:.88rem">${esc(post.author)}</b>
+                    <div style="font-size:.72rem;color:var(--mut)">${esc(post.authorBranch || 'الأسرة')} · 🕒 ${esc(post.dateText)}</div>
+                  </div>
+                </div>
+
+                <span class="fnews-tag" style="background:rgba(245,158,11,.15);color:var(--gold);border:1px solid var(--gold)">
+                  ${esc(post.categoryLabel)}
+                </span>
+              </div>
+
+              <div>
+                <h3 style="margin:0 0 6px 0;color:var(--gold);font-size:.96rem">${esc(post.title)}</h3>
+                <p style="margin:0;font-size:.84rem;color:var(--txt);line-height:1.65;white-space:pre-line">${esc(post.body)}</p>
+              </div>
+
+              ${post.imageUrl ? `
+                <div style="border-radius:8px;overflow:hidden;border:1px solid var(--line);max-height:260px;background:#000">
+                  <img src="${esc(post.imageUrl)}" style="width:100%;height:auto;max-height:260px;object-fit:cover;display:block" loading="lazy">
+                </div>
+              ` : ''}
+
+              <!-- Reactions Toolbar -->
+              <div class="fnews-reactions">
+                <button type="button" class="fnews-react-btn" data-react="congrats" data-pid="${post.id}">
+                  ❤️ تهنئة وتبريك <b>${post.reactions?.congrats || 0}</b>
+                </button>
+                <button type="button" class="fnews-react-btn" data-react="proud" data-pid="${post.id}">
+                  👏 فخر واعتزاز <b>${post.reactions?.proud || 0}</b>
+                </button>
+                <button type="button" class="fnews-react-btn" data-react="dua" data-pid="${post.id}">
+                  🤲 دعاء بالبركة <b>${post.reactions?.dua || 0}</b>
+                </button>
+                <button type="button" class="fnews-react-btn" data-share-wa="${post.id}" style="margin-right:auto;border-color:rgba(37,211,102,.5);color:#25d366">
+                  📲 واتساب
+                </button>
+              </div>
+
+              <!-- Comments Section -->
+              <div style="background:rgba(0,0,0,.25);border-radius:8px;padding:8px 12px;margin-top:2px">
+                <div style="font-size:.74rem;color:var(--mut);margin-bottom:6px">تبريكات وتهاني الأقارب (${(post.comments || []).length}):</div>
+                <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">
+                  ${(post.comments || []).map(c => `
+                    <div style="font-size:.78rem;line-height:1.4">
+                      <b style="color:var(--gold)">${esc(c.name)}:</b>
+                      <span style="color:var(--txt)"> ${esc(c.text)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+
+                <div style="display:flex;gap:6px;margin-top:6px">
+                  <input type="text" placeholder="اكتب تهنئتك أو مباركتك..." data-comm-inp="${post.id}" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:.76rem">
+                  <button type="button" class="fstats-btn" data-comm-send="${post.id}" style="font-size:.76rem;padding:4px 10px;background:var(--gold);color:#0f172a;font-weight:700">إرسال</button>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Filter bindings
+    const setCat = (cat) => { activeCat = cat; renderNewsModal(); };
+    $('#cat-all').onclick = () => setCat('all');
+    $('#cat-grad').onclick = () => setCat('grad');
+    $('#cat-baby').onclick = () => setCat('baby');
+    $('#cat-wedding').onclick = () => setCat('wedding');
+    $('#cat-meet').onclick = () => setCat('meet');
+
+    // Reaction bindings
+    document.querySelectorAll('[data-react]').forEach(btn => {
+      btn.onclick = () => {
+        const type = btn.dataset.react;
+        const pid = btn.dataset.pid;
+        const post = allPosts.find(p => p.id === pid);
+        if (post) {
+          if (!post.reactions) post.reactions = {};
+          post.reactions[type] = (post.reactions[type] || 0) + 1;
+          // Persist in localStorage
+          const stored = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+          const idx = stored.findIndex(s => s.id === pid);
+          if (idx >= 0) stored[idx] = post; else stored.push(post);
+          localStorage.setItem('almatarid_family_posts', JSON.stringify(stored));
+          toast('❤️ تم تسجيل تفاعلك ومباركتك!');
+          renderNewsModal();
+        }
+      };
+    });
+
+    // Comment sending
+    document.querySelectorAll('[data-comm-send]').forEach(btn => {
+      btn.onclick = () => {
+        const pid = btn.dataset.commSend;
+        const inp = document.querySelector(`[data-comm-inp="${pid}"]`);
+        if (!inp || !inp.value.trim()) return;
+        const text = inp.value.trim();
+        const post = allPosts.find(p => p.id === pid);
+        if (post) {
+          if (!post.comments) post.comments = [];
+          const name = prompt('اكتب اسمك ليظهر مع التهنئة:', S.role === 'visitor' ? 'ابن العم' : 'قريب من العائلة') || 'أحد أفراد العائلة';
+          post.comments.push({ name, text });
+          const stored = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+          const idx = stored.findIndex(s => s.id === pid);
+          if (idx >= 0) stored[idx] = post; else stored.push(post);
+          localStorage.setItem('almatarid_family_posts', JSON.stringify(stored));
+          toast('✅ تم نشر تهنئتك ومباركتك بنجاح!');
+          renderNewsModal();
+        }
+      };
+    });
+
+    // WhatsApp share
+    document.querySelectorAll('[data-share-wa]').forEach(btn => {
+      btn.onclick = () => {
+        const pid = btn.dataset.shareWa;
+        const post = allPosts.find(p => p.id === pid);
+        if (post) {
+          const msg = `📰 *${post.title}*\n\n${post.body}\n\n— منشور عبر لوحة أخبار عائلة آل مطارد:\n${window.location.href}`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+
+    // Add new post
+    const addBtn = $('#btn-add-fnews');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const title = prompt('عنوان الخبر أو المناسبة (مثال: تخرج فلان / زواج فلان):');
+        if (!title) return;
+        const author = prompt('اسم الكاتب أو صاحب المنشور:') || 'أحد أفراد الأسرة';
+        const body = prompt('تفاصيل الخبر أو التهنئة:') || '';
+        const catKey = prompt('التصنيف: (grad=تخرج، baby=مولود، wedding=زواج، meet=اجتماع)') || 'meet';
+        const imgUrl = prompt('رابط صورة للخبر (اختياري - اتركه فارغاً إن لم يتوفر):') || '';
+
+        const catLabels = { grad: '🎓 إنجازات وتخرج', baby: '👶 مواليد', wedding: '💍 أفراح وزواجات', meet: '🤝 اجتماعات' };
+
+        const newPost = {
+          id: 'post_user_' + Date.now(),
+          author,
+          authorBranch: 'عائلة آل مطارد',
+          category: catKey,
+          categoryLabel: catLabels[catKey] || '📢 إعلانات عامة',
+          title,
+          body,
+          imageUrl: imgUrl,
+          dateText: 'الآن',
+          reactions: { congrats: 1, proud: 0, dua: 1 },
+          comments: []
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]');
+        stored.unshift(newPost);
+        localStorage.setItem('almatarid_family_posts', JSON.stringify(stored));
+        allPosts.unshift(newPost);
+        toast('✅ تم نشر الخبر على لوحة أخبار العائلة بنجاح!');
+        renderNewsModal();
+      };
+    }
+  }
+
+  renderNewsModal();
+}
+
 
 
 

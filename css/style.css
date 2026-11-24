@@ -1147,6 +1147,18 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .pinv-badge { background: rgba(245,158,11,.15); border: 1px solid var(--gold); color: var(--gold); padding: 3px 10px; border-radius: 12px; font-size: .76rem; font-weight: 700; }
 .pinv-welcome-banner { background: linear-gradient(135deg, rgba(245,158,11,.2) 0%, rgba(15,23,42,.98) 100%); border: 2px solid var(--gold); border-radius: 12px; padding: 14px 20px; text-align: center; margin-bottom: 12px; }
 
+/* ---------- 88) لوحة أخبار العائلة ومنشورات الأقارب ---------- */
+.fnews-wrap { display: flex; flex-direction: column; gap: 14px; }
+.fnews-post { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: all .15s ease; }
+.fnews-post:hover { border-color: var(--gold); }
+.fnews-post-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fnews-author-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--gold); color: #0f172a; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: .88rem; }
+.fnews-tag { border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700; }
+.fnews-reactions { display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 8px; flex-wrap: wrap; }
+.fnews-react-btn { background: rgba(15,23,42,.8); border: 1px solid var(--line); color: var(--txt); border-radius: 16px; padding: 3px 10px; font-size: .76rem; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all .15s ease; }
+.fnews-react-btn:hover, .fnews-react-btn.reacted { border-color: var(--gold); color: var(--gold); background: rgba(245,158,11,.1); }
+
+
 
 
 
