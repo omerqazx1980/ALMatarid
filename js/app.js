@@ -5569,17 +5569,12 @@ function openWomenPortal() {
       return;
     }
 
-    // Verify passcode against family code, editor code (27748111), active session code, or valid branch code
-    const validCodes = [
-      S.code,
-      '27748111',
-      'almatarid',
-      '123456',
-      'amr',
-      ...S.branches.map(b => b.code).filter(Boolean)
-    ];
-
-    const isCodeValid = validCodes.includes(code) || code.length >= 4;
+    // بوابة النساء مغلقة بانتظار أكواد المالك (قرار عمر 2026-11-24): لا يُقبل أي كود
+    // مكتوب ولا يوجد احتياطي طول — 123456 كود عام للعائلة وليس كود بوابة أبداً.
+    // يزوّد المالك/مسؤول الفرع كل داخلة بكودها، وحينها تُضاف الأكواد الصحيحة؛
+    // وحتى ذلك الحين يُرفض كل كود. لا تخترع أكواداً بديلة هنا.
+    const validCodes = [];
+    const isCodeValid = validCodes.includes(code);
 
     if (!isCodeValid) {
       errEl.textContent = 'كود التحقق غير صحيح — يرجى مراجعة مسؤول الفرع للحصول على الكود.';
