@@ -1894,6 +1894,169 @@ function openAiKinAssistant() {
 
 $('#m-ai-kin').onclick = menuClose(() => openAiKinAssistant());
 
+/* ---------- لعبة اعرف قريبك للأطفال (فرع تجربة) ---------- */
+let gameState = { score: 0, streak: 0, qIndex: 1 };
+function openFamilyGame() {
+  gameState = { score: 0, streak: 0, qIndex: 1 };
+
+  function getBadge(score) {
+    if (score >= 200) return '🥇 حافظ الشجرة';
+    if (score >= 120) return '🥈 خبير الأنساب الصغير';
+    if (score >= 60) return '🥉 حفيد بار';
+    return '🌱 باحث مبتدئ';
+  }
+
+  function generateQuestion() {
+    const aliveMembers = S.members.filter(m => !m.name_masked && S.byId.get(m.father_id));
+    if (aliveMembers.length < 5) return null;
+
+    const qTypes = ['father', 'kin', 'city', 'child'];
+    const type = qTypes[Math.floor(Math.random() * qTypes.length)];
+
+    if (type === 'father') {
+      const target = aliveMembers[Math.floor(Math.random() * aliveMembers.length)];
+      const father = S.byId.get(target.father_id);
+      if (!father) return generateQuestion();
+
+      const wrong = S.members.filter(m => m.id !== father.id && m.gender !== 'female' && gen(m) === gen(father));
+      const shuffledWrong = wrong.sort(() => 0.5 - Math.random()).slice(0, 3);
+      const opts = [father, ...shuffledWrong].sort(() => 0.5 - Math.random());
+
+      return {
+        question: `من هو والد <b>«${esc(target.full_name)}»</b>؟`,
+        correctId: father.id,
+        options: opts.map(o => ({ id: o.id, text: o.full_name })),
+        detail: `والد ${target.full_name} هو: ${father.full_name} (الجيل ${gen(father)})`
+      };
+    } else if (type === 'city') {
+      const withCity = S.members.filter(m => !m.name_masked && m.city && m.city !== 'غير محددة');
+      if (!withCity.length) return generateQuestion();
+      const target = withCity[Math.floor(Math.random() * withCity.length)];
+      const correctCity = target.city;
+
+      const otherCities = CITIES.filter(c => c !== correctCity && c !== 'خارج المملكة').sort(() => 0.5 - Math.random()).slice(0, 3);
+      const opts = [correctCity, ...otherCities].sort(() => 0.5 - Math.random());
+
+      return {
+        question: `في أي مدينة يقيم <b>«${esc(target.full_name)}»</b>؟`,
+        correctId: correctCity,
+        options: opts.map(c => ({ id: c, text: c })),
+        detail: `يقيم ${target.full_name} في: ${correctCity}`
+      };
+    } else if (type === 'child') {
+      const fathers = S.members.filter(m => (S.kids.get(m.id) || []).length > 0);
+      if (!fathers.length) return generateQuestion();
+      const father = fathers[Math.floor(Math.random() * fathers.length)];
+      const kids = S.kids.get(father.id) || [];
+      const correctKid = kids[Math.floor(Math.random() * kids.length)];
+
+      const wrongKids = S.members.filter(m => m.father_id !== father.id && gen(m) === gen(correctKid)).sort(() => 0.5 - Math.random()).slice(0, 3);
+      const opts = [correctKid, ...wrongKids].sort(() => 0.5 - Math.random());
+
+      return {
+        question: `من هو أحد أبناء <b>«${esc(father.full_name)}»</b>؟`,
+        correctId: correctKid.id,
+        options: opts.map(o => ({ id: o.id, text: o.full_name })),
+        detail: `أحد أبناء ${father.full_name} هو: ${correctKid.full_name}`
+      };
+    } else {
+      const m1 = aliveMembers[Math.floor(Math.random() * aliveMembers.length)];
+      const candidates = aliveMembers.filter(m => m.id !== m1.id);
+      const m2 = candidates[Math.floor(Math.random() * candidates.length)];
+      const r = relation(m1, m2);
+      if (!r || !r.term) return generateQuestion();
+
+      const KIN_TERMS = ['أخ', 'عم', 'ابن عم', 'جد', 'ابن أخ', 'ابن عم الأب'];
+      const wrongTerms = KIN_TERMS.filter(t => t !== r.term).sort(() => 0.5 - Math.random()).slice(0, 3);
+      const opts = [r.term, ...wrongTerms].sort(() => 0.5 - Math.random());
+
+      return {
+        question: `ما هي صلة القرابة؟ <b>«${esc(m1.full_name)}»</b> هو بالنسبة لـ <b>«${esc(m2.full_name)}»</b>:`,
+        correctId: r.term,
+        options: opts.map(t => ({ id: t, text: t })),
+        detail: `${m1.full_name} هو ${r.term} لـ ${m2.full_name}`
+      };
+    }
+  }
+
+  function renderGame() {
+    const q = generateQuestion();
+    if (!q) {
+      showInfo('<p class="sub">لا توجد بيانات كافية لتشغيل اللعبة.</p>');
+      return;
+    }
+
+    const html = `
+      <div class="game-wrap">
+        <div class="game-scoreboard">
+          <div class="game-score-box">⭐ النقاط: <b id="g-score">${gameState.score}</b></div>
+          <div class="game-score-box">🔥 التتابع: <b id="g-streak">${gameState.streak}</b></div>
+          <div class="game-badge" id="g-badge">${getBadge(gameState.score)}</div>
+        </div>
+
+        <div class="game-card">
+          <div class="game-q-num">السؤال رقم ${gameState.qIndex} 🎯</div>
+          <div class="game-question">${q.question}</div>
+
+          <div class="game-options-grid">
+            ${q.options.map(opt => `
+              <button type="button" class="game-opt-btn" data-opt-id="${esc(opt.id)}">${esc(opt.text)}</button>
+            `).join('')}
+          </div>
+
+          <div id="game-feedback" class="game-feedback"></div>
+          <button type="button" id="game-next-btn" class="game-next-btn" style="display:none">السؤال التالي ⬅️</button>
+        </div>
+      </div>`;
+
+    showInfo(html);
+
+    const pb = $('#profile-body');
+    if (!pb) return;
+
+    let answered = false;
+    pb.querySelectorAll('.game-opt-btn').forEach(btn => {
+      btn.onclick = () => {
+        if (answered) return;
+        answered = true;
+        const selectedId = btn.dataset.optId;
+        const fb = $('#game-feedback');
+        const nextBtn = $('#game-next-btn');
+
+        if (String(selectedId) === String(q.correctId)) {
+          btn.classList.add('correct');
+          gameState.score += 20;
+          gameState.streak += 1;
+          fb.className = 'game-feedback show correct';
+          fb.innerHTML = `🎉 إجابة صحيحة بارك الله فيك! (+20 نقطة)<br><small>${esc(q.detail)}</small>`;
+        } else {
+          btn.classList.add('wrong');
+          gameState.streak = 0;
+          pb.querySelectorAll('.game-opt-btn').forEach(b => {
+            if (String(b.dataset.optId) === String(q.correctId)) b.classList.add('correct');
+          });
+          fb.className = 'game-feedback show wrong';
+          fb.innerHTML = `❌ إجابة غير صحيحة، حاول في السؤال القادم!<br><small>الصحيح: ${esc(q.detail)}</small>`;
+        }
+
+        $('#g-score').textContent = gameState.score;
+        $('#g-streak').textContent = gameState.streak;
+        $('#g-badge').textContent = getBadge(gameState.score);
+        nextBtn.style.display = 'inline-block';
+      };
+    });
+
+    $('#game-next-btn').onclick = () => {
+      gameState.qIndex++;
+      renderGame();
+    };
+  }
+
+  renderGame();
+}
+
+$('#m-game').onclick = menuClose(() => openFamilyGame());
+
 /* ---------- تصدير الشجرة PDF والطباعة ومحرر المشجر الجداري (فرع تجربة) ---------- */
 function openPdfExport() {
   const roots = S.roots || [];
