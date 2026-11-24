@@ -3272,6 +3272,7 @@ $('#m-cards').onclick = menuClose(() => {
   });
 });
 $('#m-family-news').onclick = menuClose(() => openFamilyNewsModal());
+$('#m-family-vote').onclick = menuClose(() => openFamilyVoteModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
@@ -11576,6 +11577,223 @@ function openFamilyNewsModal(filterCat = 'all') {
 
   renderNewsModal();
 }
+
+/* ---------- 89) تصويت العائلة على القرارات (فرع تجربة) ---------- */
+function openFamilyVoteModal() {
+  const DEFAULT_POLLS = [
+    {
+      id: 'poll_1',
+      title: 'موعد ومقر اجتماع عائلة آل مطارد السنوي القادم',
+      description: 'يسر مجلس الأسرة استطلاع آراء عموم أبناء وبنات العائلة الكرام حول الموعد والمكان المفضل للاجتماع السنوي القادم لتعزيز صلة الرحم وأعلى نسبة حضور.',
+      endDateText: 'متبقي 5 أيام',
+      status: 'active',
+      options: [
+        { id: 'opt_1', text: 'مدينة النماص (الموطن الأصلي بالسراة - ثالث أيام عيد الفطر)', votes: 41 },
+        { id: 'opt_2', text: 'مدينة الرياض (مقر تجمع العاصمة - خامس أيام عيد الفطر)', votes: 29 },
+        { id: 'opt_3', text: 'منطقة عسير (أبها وخميس مشيط - ثاني أيام عيد الأضحى)', votes: 16 }
+      ]
+    },
+    {
+      id: 'poll_2',
+      title: 'مشروع جائزة التفوق العلمي وحفظ القرآن الكريم لأبناء الأسرة',
+      description: 'مقترح اعتماد جائزة سنوية لتكريم الطلاب والطالبات المتفوقين في التعليم العام والجامعي وحفظة كتاب الله الكريم.',
+      endDateText: 'متبقي أسبوعان',
+      status: 'active',
+      options: [
+        { id: 'opt_2_1', text: 'أوافق وبشدة وأدعم إطلاق الجائزة في الاجتماع القادم', votes: 68 },
+        { id: 'opt_2_2', text: 'أوافق مع قصرها على خريجي الجامعات والدراسات العليا', votes: 14 },
+        { id: 'opt_2_3', text: 'أقترح تكوين لجنة خاصة لوضع معايير الجائزة', votes: 22 }
+      ]
+    }
+  ];
+
+  const localPolls = JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]');
+  const allPolls = [...localPolls, ...DEFAULT_POLLS];
+  const userVotes = JSON.parse(localStorage.getItem('almatarid_user_votes') || '{}');
+
+  function renderVoteModal() {
+    const html = `
+      <div class="fvote-wrap" style="max-width:760px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>🗳️</span> تصويت واستطلاعات قرارات العائلة
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          منصة شورى وتصويت تفاعلية لأفراد أسرة آل مطارد للمشاركة في القرارات العائلية، وتحديد مواعيد الاجتماعات، واختيار المبادرات والمشاريع التكافلية بنزاهة وشفافية.
+        </p>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:.78rem;color:var(--txt)">
+            📊 الاستطلاعات المتاحة: <b>${allPolls.length} تصويتات</b>
+          </div>
+
+          <button type="button" class="fstats-btn" id="btn-create-poll" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+            ➕ إنشاء تصويت أو استطلاع جديد
+          </button>
+        </div>
+
+        <!-- Polls List -->
+        <div style="display:flex;flex-direction:column;gap:14px;max-height:500px;overflow-y:auto;padding-left:4px">
+          ${allPolls.map(poll => {
+            const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
+            const userChoice = userVotes[poll.id] || null;
+
+            return `
+              <div class="fvote-card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                  <div>
+                    <h3 style="margin:0 0 4px 0;color:var(--gold);font-size:.98rem">${esc(poll.title)}</h3>
+                    <div style="font-size:.74rem;color:var(--mut)">🕒 ${esc(poll.endDateText)} · إجمالي الأصوات: <b>${totalVotes}</b></div>
+                  </div>
+                  <span class="fnews-tag" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e">
+                    🟢 تصويت متاح
+                  </span>
+                </div>
+
+                <p style="margin:0;font-size:.82rem;color:var(--txt);line-height:1.6">${esc(poll.description)}</p>
+
+                <!-- Options -->
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  ${poll.options.map(opt => {
+                    const pct = totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
+                    const isVoted = userChoice === opt.id;
+
+                    return `
+                      <div class="fvote-option-row ${isVoted ? 'voted' : ''}" data-poll-id="${poll.id}" data-opt-id="${opt.id}">
+                        <div class="fvote-progress-fill" style="width:${pct}%"></div>
+
+                        <div style="position:relative;z-index:2;display:flex;align-items:center;gap:8px">
+                          <span style="font-size:.9rem">${isVoted ? '✅' : '🔘'}</span>
+                          <span style="font-size:.82rem;font-weight:${isVoted ? '700' : '400'};color:var(--txt)">${esc(opt.text)}</span>
+                        </div>
+
+                        <div style="position:relative;z-index:2;font-size:.78rem;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:8px">
+                          <span>${pct}%</span>
+                          <span style="font-size:.7rem;color:var(--mut)">(${opt.votes || 0})</span>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+
+                <!-- Footer & Share -->
+                <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px">
+                  <div style="font-size:.74rem;color:${userChoice ? '#22c55e' : 'var(--mut)'}">
+                    ${userChoice ? '✓ تم تسجيل صوتك بنجاح في هذا الاستطلاع' : 'انقر على أحد الخيارات أعلاه للتصويت مباشرة'}
+                  </div>
+
+                  <button type="button" class="fstats-btn" data-share-poll="${poll.id}" style="padding:3px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
+                    📲 دعوة الأقارب للتصويت
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Voting click handlers
+    document.querySelectorAll('[data-poll-id][data-opt-id]').forEach(row => {
+      row.onclick = () => {
+        const pid = row.dataset.pollId;
+        const oid = row.dataset.optId;
+        const poll = allPolls.find(p => p.id === pid);
+        if (!poll) return;
+
+        const prevChoice = userVotes[pid];
+        if (prevChoice === oid) {
+          toast('لقد صوّت بالفعل لهذا الخيار!');
+          return;
+        }
+
+        // Adjust counts
+        if (prevChoice) {
+          const oldOpt = poll.options.find(o => o.id === prevChoice);
+          if (oldOpt && oldOpt.votes > 0) oldOpt.votes--;
+        }
+
+        const newOpt = poll.options.find(o => o.id === oid);
+        if (newOpt) newOpt.votes = (newOpt.votes || 0) + 1;
+
+        userVotes[pid] = oid;
+        localStorage.setItem('almatarid_user_votes', JSON.stringify(userVotes));
+
+        // Persist poll
+        const stored = JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]');
+        const idx = stored.findIndex(s => s.id === pid);
+        if (idx >= 0) stored[idx] = poll; else stored.push(poll);
+        localStorage.setItem('almatarid_family_polls', JSON.stringify(stored));
+
+        toast('🗳️ تم تسجيل صوتك بنجاح، شكراً لمشاركتك!');
+        renderVoteModal();
+      };
+    });
+
+    // WhatsApp share
+    document.querySelectorAll('[data-share-poll]').forEach(btn => {
+      btn.onclick = () => {
+        const pid = btn.dataset.sharePoll;
+        const poll = allPolls.find(p => p.id === pid);
+        if (poll) {
+          const msg = `🗳️ *استطلاع وتصويت عائلي:*\n*${poll.title}*\n\n${poll.description}\n\nشاركونا رأيكم وصوتكم عبر شجرة آل مطارد:\n${window.location.href}`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+
+    // Create poll
+    const createBtn = $('#btn-create-poll');
+    if (createBtn) {
+      createBtn.onclick = () => {
+        const title = prompt('عنوان التصويت أو القرار المطروح:');
+        if (!title) return;
+        const desc = prompt('شرح موجز لموضوع الاستطلاع:') || '';
+        const opt1 = prompt('الخيار الأول:') || 'نعم، أوافق';
+        const opt2 = prompt('الخيار الثاني:') || 'لا أوافق';
+        const opt3 = prompt('الخيار الثالث (اختياري):');
+
+        const options = [
+          { id: 'opt_' + Date.now() + '_1', text: opt1, votes: 0 },
+          { id: 'opt_' + Date.now() + '_2', text: opt2, votes: 0 }
+        ];
+        if (opt3) {
+          options.push({ id: 'opt_' + Date.now() + '_3', text: opt3, votes: 0 });
+        }
+
+        const newPoll = {
+          id: 'poll_user_' + Date.now(),
+          title,
+          description: desc,
+          endDateText: 'متبقي 30 يوماً',
+          status: 'active',
+          options
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]');
+        stored.unshift(newPoll);
+        localStorage.setItem('almatarid_family_polls', JSON.stringify(stored));
+        allPolls.unshift(newPoll);
+        toast('✅ تم إنشاء الاستطلاع والتصويت العائلي بنجاح!');
+        renderVoteModal();
+      };
+    }
+  }
+
+  renderVoteModal();
+}
+
 
 
 
