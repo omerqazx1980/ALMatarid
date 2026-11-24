@@ -1710,6 +1710,190 @@ $('#m-kin').onclick = menuClose(() => {
 });
 $('#profile-body').addEventListener('change', e => { if (e.target.id === 'kin-a' || e.target.id === 'kin-b') kinView(); });
 
+/* ---------- مساعد الأنساب والقرابة الذكي (فرع تجربة) ---------- */
+function openAiKinAssistant() {
+  const html = `
+    <div class="ai-kin-wrap">
+      <div class="ai-kin-header">
+        <span style="font-size:1.4rem">🤖</span>
+        <div>
+          <h2>مساعد الأنساب والقرابة الذكي</h2>
+          <p class="sub" style="margin:0">اسألني بأي صياغة عربية وسأجيبك عن صلات القرابة، الأنساب، والذرية</p>
+        </div>
+      </div>
+
+      <div class="ai-quick-pills">
+        <button type="button" class="ai-pill" data-ask="من هو الجد الأكبر للأسرة؟">👑 من هو الجد الأكبر؟</button>
+        <button type="button" class="ai-pill" data-ask="من هم أصحاب الشارات والدكاترة بالأسرة؟">🏅 أصحاب الشارات</button>
+        <button type="button" class="ai-pill" data-ask="من هم أفراد الأسرة في النماص؟">📍 أفراد النماص</button>
+        <button type="button" class="ai-pill" data-ask="كم عدد أفراد الأسرة وعدد الأجيال؟">📊 عدد الأسرة والأجيال</button>
+      </div>
+
+      <div id="ai-chat-box" class="ai-kin-chat">
+        <div class="ai-msg bot">
+          <div>أهلاً بك يا ابن العم في <b>مساعد أنساب آل مطارد الذكي</b>! 🌿</div>
+          <div style="font-size:.82rem;color:var(--mut);margin-top:4px">
+            يمكنك سؤالي مثلاً:<br>
+            • «ما هي صلة القرابة بين سالم وفهد؟»<br>
+            • «من هم أبناء ذياب بن علي؟»<br>
+            • «ما هو نسب عبدالله حتى الجد الأكبر؟»<br>
+            • «من هم إخوان محمد بن خالد؟»
+          </div>
+        </div>
+      </div>
+
+      <form id="ai-input-form" class="ai-input-row" autocomplete="off">
+        <input type="text" id="ai-query-input" placeholder="اكتب سؤالك هنا بالعربية واضغط Enter…" />
+        <button type="submit">إرسال 🚀</button>
+      </form>
+    </div>`;
+
+  showInfo(html);
+
+  const form = $('#ai-input-form');
+  const input = $('#ai-query-input');
+  const chat = $('#ai-chat-box');
+  if (!form || !input || !chat) return;
+
+  function appendMsg(text, isUser = false, toolsHtml = '') {
+    const d = document.createElement('div');
+    d.className = `ai-msg ${isUser ? 'user' : 'bot'}`;
+    d.innerHTML = `<div>${text}</div>${toolsHtml ? `<div class="ai-msg-tools">${toolsHtml}</div>` : ''}`;
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function answerQuestion(query) {
+    const qRaw = query.trim();
+    if (!qRaw) return;
+    const qNorm = norm(qRaw);
+
+    const matched = [];
+    for (const m of S.members) {
+      if (m.name_masked) continue;
+      const fnNorm = norm(m.full_name);
+      const nickNorm = m.nickname ? norm(m.nickname) : '';
+      if (qNorm.includes(fnNorm)) {
+        matched.push(m);
+      } else if (nickNorm && qNorm.includes(nickNorm)) {
+        matched.push(m);
+      }
+    }
+    const uniqueMatched = [...new Map(matched.map(m => [m.id, m])).values()];
+
+    // 1. السؤال عن صلة القرابة بين شخصين
+    if (uniqueMatched.length >= 2 || (qNorm.includes('قراب') || qNorm.includes('يقرب') || qNorm.includes('صله') || qNorm.includes('بين'))) {
+      if (uniqueMatched.length >= 2) {
+        const a = uniqueMatched[0], b = uniqueMatched[1];
+        const r1 = relation(a, b);
+        const r2 = relation(b, a);
+        if (r1) {
+          const ancTxt = r1.L ? `<br>🔗 <b>الجد المشترك:</b> ${esc(r1.L.full_name)} (الجيل ${gen(r1.L)}).` : '';
+          const reply = `✨ <b>صلة القرابة:</b><br>• <b>${esc(a.full_name)}</b> هو <b>${esc(r1.term)}</b> لـ <b>${esc(b.full_name)}</b>.<br>• <b>${esc(b.full_name)}</b> هو <b>${esc(r2.term)}</b> لـ <b>${esc(a.full_name)}</b>.${ancTxt}`;
+          const tools = `${nameBtn(a)}${nameBtn(b)}`;
+          return appendMsg(reply, false, tools);
+        } else {
+          return appendMsg(`لم أجد جداً مشتركاً مباشراً في خط الآباء بين <b>${esc(a.full_name)}</b> و <b>${esc(b.full_name)}</b>.`);
+        }
+      }
+    }
+
+    // 2. السؤال عن الجد الأكبر أو المؤسس
+    if (qNorm.includes('جد الاكبر') || qNorm.includes('مؤسس') || qNorm.includes('اصل العائله') || qNorm.includes('مطارد')) {
+      const roots = S.roots || [];
+      const reply = `👑 <b>الجد الأكبر والأساس لشجرة الأسرة:</b><br>${roots.map(r => `• <b>${esc(r.full_name)}</b> (الجيل الأول) — ذريته تشكل ركيزة الأسرة في بني عمرو.`).join('<br>')}<br>تمتد الشجرة اليوم عبر <b>${Math.max(1, ...S.members.map(gen))} أجيال</b> موثقة.`;
+      return appendMsg(reply, false, roots.map(nameBtn).join(''));
+    }
+
+    // 3. السؤال عن أصحاب الشارات والدكاترة
+    if (qNorm.includes('شاره') || qNorm.includes('شارات') || qNorm.includes('دكتور') || qNorm.includes('مهندس') || qNorm.includes('شرف') || qNorm.includes('انجاز')) {
+      const badged = S.members.filter(m => m.achievement_badge && !m.badge_is_job);
+      if (badged.length) {
+        const reply = `🏅 <b>أصحاب الشارات التقديرية والإنجازات بالأسرة (${badged.length}):</b><br>تفتخر الأسرة بنخبة من المتميزين علمياً ومهنياً:`;
+        return appendMsg(reply, false, badged.map(nameBtn).join(''));
+      } else {
+        return appendMsg('لم تُسجل شارات بعد في لوحة الشرف.');
+      }
+    }
+
+    // 4. السؤال عن مدينة معينة (مثل النماص، بيشة، الرياض...)
+    for (const c of CITIES) {
+      if (qNorm.includes(norm(c))) {
+        const inCity = S.members.filter(m => (m.city || '').trim() === c);
+        const reply = `📍 <b>أفراد الأسرة المتواجدون في ${esc(c)} (${inCity.length} فرد):</b>`;
+        return appendMsg(reply, false, inCity.slice(0, 30).map(nameBtn).join('') + (inCity.length > 30 ? '<br><small class="sub">...تم عرض أول 30 اسماً</small>' : ''));
+      }
+    }
+
+    // 5. إذا كان هناك شخص واحد محدد في السؤال
+    if (uniqueMatched.length === 1) {
+      const m = uniqueMatched[0];
+
+      if (qNorm.includes('ابناء') || qNorm.includes('بنات') || qNorm.includes('ذريه') || qNorm.includes('عيال') || qNorm.includes('اولاد')) {
+        const kids = S.kids.get(m.id) || [];
+        if (kids.length) {
+          const reply = `👨‍👩‍👧‍👦 <b>أبناء وذرية ${esc(m.full_name)} (${kids.length}):</b>`;
+          return appendMsg(reply, false, kids.map(nameBtn).join(''));
+        } else {
+          return appendMsg(`لم يُسجل أبناء موثقون لـ <b>${esc(m.full_name)}</b> في الشجرة حالياً.`, false, nameBtn(m));
+        }
+      }
+
+      if (qNorm.includes('اخوان') || qNorm.includes('اخوه') || qNorm.includes('اخوات') || qNorm.includes('اخت')) {
+        if (m.father_id) {
+          const sibs = (S.kids.get(m.father_id) || []).filter(k => k.id !== m.id);
+          if (sibs.length) {
+            const reply = `👥 <b>إخوة وأخوات ${esc(m.full_name)} (${sibs.length}):</b>`;
+            return appendMsg(reply, false, sibs.map(nameBtn).join(''));
+          }
+        }
+        return appendMsg(`لم يُسجل إخوة لـ <b>${esc(m.full_name)}</b> من نفس الأب.`, false, nameBtn(m));
+      }
+
+      if (qNorm.includes('نسب') || qNorm.includes('سلسله') || qNorm.includes('والد') || qNorm.includes('اب') || qNorm.includes('جد')) {
+        const chain = [m];
+        let p = S.byId.get(m.father_id);
+        while (p) {
+          chain.push(p);
+          p = S.byId.get(p.father_id);
+        }
+        const reply = `📜 <b>سلسلة نسب ${esc(m.full_name)}:</b><br>${chain.map((x, i) => `${i === 0 ? '👤' : '↳'} ${esc(x.full_name)} (الجيل ${gen(x)})`).join('<br>')}`;
+        return appendMsg(reply, false, nameBtn(m));
+      }
+
+      const f = S.byId.get(m.father_id);
+      const kids = S.kids.get(m.id) || [];
+      const reply = `👤 <b>معلومات ${esc(m.full_name)}:</b><br>• <b>الجيل:</b> ${gen(m)}<br>• <b>الحالة:</b> ${m.is_alive !== false ? 'حي (حفظه الله)' : 'متوفى (رحمه الله)'}<br>• <b>الأب:</b> ${f ? esc(f.full_name) : 'الجد الأكبر'}<br>• <b>المدينة:</b> ${m.city || 'غير محددة'}<br>• <b>عدد الأبناء:</b> ${kids.length}`;
+      return appendMsg(reply, false, nameBtn(m));
+    }
+
+    if (qNorm.includes('كم عدد') || qNorm.includes('احصائيات') || qNorm.includes('اجمالي')) {
+      const reply = `📊 <b>ملخص أرقام الأسرة:</b><br>• إجمالي الأفراد: <b>${S.members.length} فرد</b>.<br>• الأجيال: <b>${Math.max(1, ...S.members.map(gen))} أجيال</b>.<br>• الأحياء: <b>${S.members.filter(m => m.is_alive !== false).length} فرد</b>.<br>• المتوفون: <b>${S.members.filter(m => m.is_alive === false).length} فرد</b>.`;
+      return appendMsg(reply);
+    }
+
+    appendMsg(`لم أستطع تحديد صلة القرابة بدقة من السؤال. حاول ذكر الاسم ثلاثياً أو رباعياً، مثل: «ما صلة القرابة بين أحمد بن سالم وفهد بن علي؟» أو «من هم أبناء فهد بن محمد؟».`);
+  }
+
+  form.onsubmit = e => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q) return;
+    appendMsg(esc(q), true);
+    input.value = '';
+    setTimeout(() => answerQuestion(q), 250);
+  };
+
+  chat.parentElement.querySelectorAll('.ai-pill').forEach(btn => {
+    btn.onclick = () => {
+      input.value = btn.dataset.ask;
+      form.dispatchEvent(new Event('submit'));
+    };
+  });
+}
+
+$('#m-ai-kin').onclick = menuClose(() => openAiKinAssistant());
+
 /* ---------- تصدير الشجرة PDF والطباعة ومحرر المشجر الجداري (فرع تجربة) ---------- */
 function openPdfExport() {
   const roots = S.roots || [];
