@@ -1919,6 +1919,7 @@ $('#m-honor').onclick = menuClose(() => {
   showInfo(`<h2>🏅 لوحة الشرف</h2>${[...g].map(([b, L]) => `<h3>${esc(b)} (${L.length})</h3>${L.sort(byName).map(nameBtn).join('')}`).join('') || '<p class="sub">لا توجد شارات بعد. تُضاف الشارة من نموذج تعديل الفرد.</p>'}`);
 });
 $('#m-rules-biographies').onclick = menuClose(() => openRulesAndBiographiesModal());
+$('#m-council-decrees').onclick = menuClose(() => openCouncilDecreesModal());
 
 /* مستكشف القرابة: عبر خط الآباء فقط */
 const KIN = { '0,1': ['أب', 'أب'], '0,2': ['جد', 'جد'], '0,3': ['جد الأب', 'جد الأب'], '1,0': ['ابن', 'بنت'], '2,0': ['حفيد', 'حفيدة'], '3,0': ['ابن حفيد', 'بنت حفيد'],
@@ -13200,6 +13201,254 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
 
   renderModal();
 }
+
+/* ---------- 96) مجلس العائلة - الأعضاء والقرارات (فرع تجربة) ---------- */
+function openCouncilDecreesModal(initialTab = 'decrees') {
+  const DEFAULT_DECREES = [
+    {
+      id: 'dec_1',
+      number: '1445/01',
+      title: 'اعتماد اللائحة التنفيذية لصندوق تكافل أسرة آل مطارد',
+      dateText: '15 ربيع الأول 1445هـ',
+      status: 'active',
+      statusLabel: '🟢 نافذ وسارٍ',
+      category: 'مالي وتكافلي',
+      signatories: 'رئيس المجلس، وممثلو فروع النماص والرياض والغربية',
+      summary: 'بناءً على اجتماع مجلس الأسرة المنعقد بتاريخ 15 ربيع الأول 1445هـ، تقرر بالإجماع اعتماد اللائحة التنظيمية لصندوق التكافل، وتحديد الحساب البنكي المعتمد، وتسمية أمين الصندوق والمشرفين الماليين، على أن تُصرف المعونات وفق المعايير والضوابط المعتمدة في اللائحة.'
+    },
+    {
+      id: 'dec_2',
+      number: '1445/02',
+      title: 'تحديد موعد ومقر الاجتماع السنوي العام لعام 1446هـ',
+      dateText: '10 رجب 1445هـ',
+      status: 'active',
+      statusLabel: '🟢 نافذ وسارٍ',
+      category: 'اجتماعات وفعاليات',
+      signatories: 'أمانة المجلس ولجنة الفعاليات',
+      summary: 'تقرر أن يُعقد ملتقى العائلة السنوي القادم في الموطن الأصلي بمدينة النماص (محافظة عسير) في ثالث أيام عيد الفطر المبارك، وتكليف لجنة الفعاليات بوضع البرنامج الثقافي وتكريم المتفوقين وتوجيه الدعوات لعموم أفراد الأسرة.'
+    },
+    {
+      id: 'dec_3',
+      number: '1444/04',
+      title: 'مبادرة رقمنة وتوثيق شجرة العائلة الموحدة',
+      dateText: '25 شوال 1444هـ',
+      status: 'done',
+      statusLabel: '✅ منجز ومعتمد',
+      category: 'أنساب وتوثيق',
+      signatories: 'هيئة المجلس ولجنة الأنساب',
+      summary: 'اعتماد بناء المنصة الرقمية التفاعلية لشجرة وتاريخ أسرة آل مطارد، وحصر الفروع وتدقيق الأسماء بالتنسيق المباشر مع مسؤولي الفروع لحفظ النسب وصيانة التاريخ من التحريف.'
+    }
+  ];
+
+  const DEFAULT_COUNCIL_MEMBERS = [
+    { role: 'رئيس مجلس الأسرة', name: 'الشيخ صالح بن مسفر المطارد', branch: 'المجلس العام', icon: '👑' },
+    { role: 'نائب الرئيس', name: 'المهندس علي بن محمد المطارد', branch: 'فرع الرياض', icon: '🏛️' },
+    { role: 'الأمين العام للمجلس', name: 'الأستاذ سعد بن صالح المطارد', branch: 'فرع النماص', icon: '📜' },
+    { role: 'مسؤول فرع النماص والسراة', name: 'أ. مسفر بن علي المطارد', branch: 'منطقة عسير', icon: '📍' },
+    { role: 'مسؤول فرع الرياض والوسطى', name: 'أ. فهد بن مسفر المطارد', branch: 'منطقة الرياض', icon: '📍' },
+    { role: 'مسؤول فرع الغربية (جدة ومكة)', name: 'أ. عبدالرحمن بن صالح', branch: 'منطقة مكة المكرمة', icon: '📍' },
+    { role: 'رئيس لجنة صندوق التكافل', name: 'د. محمد بن سعد المطارد', branch: 'اللجنة المالية', icon: '🤝' },
+    { role: 'رئيس لجنة الأنساب والتوثيق', name: 'أ.د. سعيد بن محمد المطارد', branch: 'لجنة التاريخ', icon: '🌳' }
+  ];
+
+  const localDecrees = JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]');
+  const allDecrees = [...localDecrees, ...DEFAULT_DECREES];
+
+  let currentTab = initialTab; // 'decrees', 'members'
+  let searchQuery = '';
+
+  function renderModal() {
+    const filteredDecrees = allDecrees.filter(d => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return d.title.toLowerCase().includes(q) ||
+        d.number.toLowerCase().includes(q) ||
+        d.summary.toLowerCase().includes(q) ||
+        d.category.toLowerCase().includes(q);
+    });
+
+    const html = `
+      <div class="council-wrap" style="max-width:820px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>🏛️</span> مجلس عائلة آل مطارد (الأعضاء والقرارات)
+          </h2>
+          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          المنصة الرسمية المعتمدة لمجلس عائلة آل مطارد: استعراض تشكيل هيئة المجلس واللجان المنبثقة، وسجل القرارات والتعاميم الصادرة المنظمة لمصالح واجتماعات الأسرة.
+        </p>
+
+        <!-- Navigation Tabs -->
+        <div class="transcribe-tabs">
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'decrees' ? 'active' : ''}" id="tab-btn-decrees">
+            📜 سجل القرارات والتعاميم المعتمدة (${allDecrees.length})
+          </button>
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'members' ? 'active' : ''}" id="tab-btn-members">
+            👥 أعضاء وهيئة المجلس واللجان (${DEFAULT_COUNCIL_MEMBERS.length})
+          </button>
+        </div>
+
+        <!-- Content Area -->
+        <div style="max-height:480px;overflow-y:auto;padding-left:4px">
+          ${currentTab === 'decrees' ? `
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
+                <input type="text" id="decree-search-inp" value="${esc(searchQuery)}" placeholder="ابحث برقم القرار، الموضوع، أو التصنيف..." style="flex:1;min-width:200px;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
+                ${canEdit() ? `
+                  <button type="button" class="fstats-btn" id="btn-add-decree" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:5px 12px">
+                    ➕ إصدار قرار مجلس جديد
+                  </button>
+                ` : ''}
+              </div>
+
+              ${filteredDecrees.map(d => `
+                <div class="council-decree-card">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+                    <div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <span style="font-size:1.1rem">📜</span>
+                        <h3 style="margin:0;font-size:.98rem;color:var(--gold)">${esc(d.title)}</h3>
+                      </div>
+                      <div style="font-size:.74rem;color:var(--mut);margin-top:3px">
+                        قرار رقم: <b style="color:var(--txt)">${esc(d.number)}</b> · 📅 التاريخ: ${esc(d.dateText)} · 🏷️ ${esc(d.category)}
+                      </div>
+                    </div>
+
+                    <span class="fnews-tag" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e">
+                      ${esc(d.statusLabel)}
+                    </span>
+                  </div>
+
+                  <div style="font-size:.84rem;color:var(--txt);line-height:1.7;background:rgba(0,0,0,.25);padding:12px 14px;border-radius:8px">
+                    ${esc(d.summary)}
+                  </div>
+
+                  <div style="font-size:.73rem;color:var(--mut)">
+                    ✍️ الموقعون والمعتمدون: <b>${esc(d.signatories)}</b>
+                  </div>
+
+                  <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px dashed var(--line);padding-top:8px">
+                    <button type="button" class="fstats-btn" data-share-dec="${d.id}" style="padding:4px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
+                      📲 مشاركة القرار بالواتساب
+                    </button>
+                    <button type="button" class="fstats-btn" data-copy-dec="${d.id}" style="padding:4px 10px;font-size:.74rem">
+                      📋 نسخ نص القرار
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : `
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
+                <b style="color:var(--gold);font-size:.95rem">هيئة مجلس أسرة آل مطارد لدورته الحالية</b>
+                <div style="font-size:.78rem;color:var(--txt);margin-top:3px">المجلس هو المرجع الرسمي لتمثيل الأسرة وإدارة شؤونها وأوقافها ورعاية لقاءاتها السنوية.</div>
+              </div>
+
+              <div class="council-grid">
+                ${DEFAULT_COUNCIL_MEMBERS.map(m => `
+                  <div class="council-member-card">
+                    <div style="font-size:1.6rem">${m.icon}</div>
+                    <div style="min-width:0;flex:1">
+                      <b style="color:var(--gold);font-size:.88rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</b>
+                      <div style="font-size:.76rem;color:var(--txt);font-weight:700">${esc(m.role)}</div>
+                      <div style="font-size:.7rem;color:var(--mut)">${esc(m.branch)}</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
+          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    `;
+
+    showInfo(html);
+
+    // Tab bindings
+    $('#tab-btn-decrees').onclick = () => { currentTab = 'decrees'; renderModal(); };
+    $('#tab-btn-members').onclick = () => { currentTab = 'members'; renderModal(); };
+
+    // Search binding
+    const sInp = $('#decree-search-inp');
+    if (sInp) {
+      sInp.oninput = (e) => {
+        searchQuery = e.target.value;
+        renderModal();
+      };
+    }
+
+    // WhatsApp share
+    document.querySelectorAll('[data-share-dec]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.shareDec;
+        const d = allDecrees.find(x => x.id === id);
+        if (d) {
+          const msg = `🏛️ *قرار صادر عن مجلس عائلة آل مطارد:*\n*قرار رقم ${d.number}*\nالموضوع: ${d.title}\nالتاريخ: ${d.dateText}\n\n${d.summary}\n\nالمعتمدون: ${d.signatories}\n\n— عبر موقع شجرة آل مطارد:\n${window.location.href}`;
+          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+      };
+    });
+
+    // Copy action
+    document.querySelectorAll('[data-copy-dec]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.copyDec;
+        const d = allDecrees.find(x => x.id === id);
+        if (d) {
+          const text = `قرار مجلس أسرة آل مطارد رقم ${d.number}\nالموضوع: ${d.title}\nالتاريخ: ${d.dateText}\n\n${d.summary}\n\nالمعتمدون: ${d.signatories}`;
+          navigator.clipboard.writeText(text).then(() => {
+            toast('✅ تم نسخ نص القرار بنجاح!');
+          });
+        }
+      };
+    });
+
+    // Add decree action
+    const addBtn = $('#btn-add-decree');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const number = prompt('رقم القرار (مثال: 1446/01):');
+        if (!number) return;
+        const title = prompt('موضوع القرار أو التعميم:');
+        if (!title) return;
+        const category = prompt('التصنيف (تنظيمي، مالي، اجتماعي، أنساب):') || 'عام';
+        const summary = prompt('نص القرار وموجزه التنفيذي:') || '';
+        const signatories = prompt('المعتمدون والموقعون:') || 'مجلس الأسرة';
+
+        const newDec = {
+          id: 'dec_user_' + Date.now(),
+          number,
+          title,
+          dateText: new Date().toLocaleDateString('ar-SA'),
+          status: 'active',
+          statusLabel: '🟢 نافذ وسارٍ',
+          category,
+          signatories,
+          summary
+        };
+
+        const stored = JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]');
+        stored.unshift(newDec);
+        localStorage.setItem('almatarid_council_decrees', JSON.stringify(stored));
+        allDecrees.unshift(newDec);
+        toast('✅ تم إصدار وتوثيق قرار المجلس بنجاح!');
+        renderModal();
+      };
+    }
+  }
+
+  renderModal();
+}
+
 
 
 

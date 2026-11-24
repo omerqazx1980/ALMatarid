@@ -1206,6 +1206,15 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .frules-rule-box:hover { border-color: var(--gold); }
 .frules-bio-card { background: linear-gradient(135deg, rgba(245,158,11,.08) 0%, rgba(15,23,42,.9) 100%); border: 1.5px solid var(--gold); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 
+/* ---------- 96) مجلس العائلة (الأعضاء والقرارات) ---------- */
+.council-wrap { display: flex; flex-direction: column; gap: 14px; }
+.council-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.council-member-card { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; transition: all .15s ease; }
+.council-member-card:hover { border-color: var(--gold); }
+.council-decree-card { background: rgba(15,23,42,.85); border: 1.5px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: all .15s ease; }
+.council-decree-card:hover { border-color: var(--gold); }
+
+
 
 
 
