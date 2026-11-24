@@ -3932,3 +3932,109 @@ function openFamilyArchive() {
 }
 
 $('#m-archive').onclick = menuClose(() => openFamilyArchive());
+
+/* ---------- 54) البحث بالصوت في الشجرة (فرع تجربة) ---------- */
+let voiceRecognizer = null;
+let isVoiceListening = false;
+
+function initVoiceSearch() {
+  const btnVoice = $('#q-voice');
+  const btnMenuVoice = $('#m-voice-search');
+  const qInp = $('#q');
+  if (!btnVoice || !qInp) return;
+
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function stopListening() {
+    isVoiceListening = false;
+    btnVoice.classList.remove('listening');
+    btnVoice.setAttribute('title', 'تحدث للبحث بالاسم');
+    qInp.placeholder = 'ابحث بالاسم أو الكنية';
+    if (voiceRecognizer) {
+      try { voiceRecognizer.stop(); } catch (_) {}
+    }
+  }
+
+  function startListening() {
+    if (!SpeechRec) {
+      toast('المتصفح الحالي لا يدعم ميزة التعرف على الصوت — استخدم Chrome أو Edge أو Safari');
+      return;
+    }
+
+    if (isVoiceListening) {
+      stopListening();
+      return;
+    }
+
+    try {
+      voiceRecognizer = new SpeechRec();
+      voiceRecognizer.lang = 'ar-SA';
+      voiceRecognizer.continuous = false;
+      voiceRecognizer.interimResults = false;
+
+      voiceRecognizer.onstart = () => {
+        isVoiceListening = true;
+        btnVoice.classList.add('listening');
+        btnVoice.setAttribute('title', 'جاري الاستماع... انقر للإيقاف');
+        qInp.placeholder = '🎙️ جاري الاستماع... تحدّث باسم القريب';
+        toast('🎙️ تحدّث الآن بالاسم...');
+      };
+
+      voiceRecognizer.onresult = event => {
+        const transcript = event.results[0][0].transcript;
+        if (!transcript) return;
+
+        let cleaned = transcript
+          .replace(/^(ابحث عن|أبحث عن|وين|أين|طلع لي|دور على|شف لي|من هو|من هي)\s*/i, '')
+          .replace(/[.,!?،؟]/g, '')
+          .trim();
+
+        if (cleaned) {
+          qInp.value = cleaned;
+          qInp.dispatchEvent(new Event('input', { bubbles: true }));
+          toast(`تم التعرف الصوتي: "${cleaned}" 🔍`);
+          const norm = normAr(cleaned);
+          const found = S.members.find(m => normAr(m.full_name).includes(norm) || normAr(m.first).includes(norm));
+          if (found) {
+            focusMember(found.id);
+          }
+        }
+      };
+
+      voiceRecognizer.onerror = event => {
+        console.warn('Voice recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          toast('يرجى السماح بالوصول للميكروفون في إعدادات المتصفح');
+        } else if (event.error !== 'no-speech') {
+          toast('تعذر التقاط الصوت، جرّب التحدث مجدداً');
+        }
+        stopListening();
+      };
+
+      voiceRecognizer.onend = () => {
+        stopListening();
+      };
+
+      voiceRecognizer.start();
+    } catch (err) {
+      console.warn(err);
+      toast('تعذر تشغيل الميكروفون');
+      stopListening();
+    }
+  }
+
+  btnVoice.onclick = (e) => {
+    e.stopPropagation();
+    startListening();
+  };
+
+  if (btnMenuVoice) {
+    btnMenuVoice.onclick = menuClose(() => {
+      const bar = document.querySelector('.bar');
+      if (bar) bar.classList.add('show');
+      startListening();
+    });
+  }
+}
+
+initVoiceSearch();
