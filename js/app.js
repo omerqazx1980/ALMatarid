@@ -13414,40 +13414,18 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
 
 /* ---------- 97) صندوق العائلة التكافلي والخيري (فرع تجربة) ---------- */
 function openFamilyFundModal() {
-  const DEFAULT_CAMPAIGNS = [
-    {
-      id: 'camp_1',
-      title: 'إعانة زواج وتيسير المهور لـ 4 شباب من العائلة',
-      targetAmount: 60000,
-      raisedAmount: 48500,
-      status: 'active',
-      desc: 'مبادرة تيسير الزواج وإعانة الشباب المقبلين على تأسيس أسر صالحة بمساهمة قدرها 15 ألف ريال لكل شاب.'
-    },
-    {
-      id: 'camp_2',
-      title: 'سداد التزامات ومساندة أسر متعثرة',
-      targetAmount: 35000,
-      raisedAmount: 29800,
-      status: 'active',
-      desc: 'تفريج كربة وسداد فواتير وإيجارات للأسر المتعثرة وكبار السن والأرامل المسجلين في كشوفات اللجنة الاجتماعية.'
-    },
-    {
-      id: 'camp_3',
-      title: 'صيانة وتأهيل بئر وأوقاف الجماعة بالسراة',
-      targetAmount: 20000,
-      raisedAmount: 20000,
-      status: 'completed',
-      desc: 'تنظيف قنوات الري وتجديد مضخات السقيا وترميم الجدران الاستنادية لبئر الوقف التاريخية بالنماص.'
-    }
-  ];
-
-  const localCampaigns = JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]');
-  const allCampaigns = [...localCampaigns, ...DEFAULT_CAMPAIGNS];
-
-  const totalRaised = allCampaigns.reduce((sum, c) => sum + (c.raisedAmount || 0), 0);
-  const totalTarget = allCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
+  /* حملات المستخدم فقط — بلا حملات افتراضية بمبالغ مختلقة؛ والحساب البنكي يحدده المالك/المحرر (بلا آيبان مكتوب) */
+  const readCampaigns = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]'); } catch (_) { return []; } };
+  const localCampaigns = readCampaigns();
+  const allCampaigns = [...localCampaigns];
+  const readAccount = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_account') || 'null'); } catch (_) { return null; } };
+  let fundAccount = readAccount();
 
   function renderModal() {
+    /* الإحصاءات تُحسب عند كل رسم — حتى تتحدث بعد تسجيل مساهمة أو إضافة مبادرة دون إعادة فتح النافذة */
+    const totalRaised = allCampaigns.reduce((sum, c) => sum + (c.raisedAmount || 0), 0);
+    const totalTarget = allCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
+    const completedCount = allCampaigns.filter(c => (c.targetAmount > 0 ? Math.min(100, Math.round(((c.raisedAmount || 0) / c.targetAmount) * 100)) : 100) >= 100).length;
     const html = `
       <div class="fund-wrap" style="max-width:800px;text-align:right">
         <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
@@ -13469,8 +13447,8 @@ function openFamilyFundModal() {
           </div>
 
           <div class="fund-stat-box">
-            <div style="font-size:1.2rem;font-weight:700;color:#22c55e">28 حالة</div>
-            <div style="font-size:.74rem;color:var(--mut);margin-top:2px">حالات مستفيدة ومساندة</div>
+            <div style="font-size:1.2rem;font-weight:700;color:#22c55e">${completedCount}</div>
+            <div style="font-size:.74rem;color:var(--mut);margin-top:2px">مبادرات مكتملة</div>
           </div>
 
           <div class="fund-stat-box">
@@ -13479,12 +13457,13 @@ function openFamilyFundModal() {
           </div>
         </div>
 
-        <!-- Bank Account Card -->
+        <!-- Bank Account Card — يظهر فقط بعد أن يحدد المالك/المحرر الحساب البنكي الحقيقي للصندوق -->
+        ${fundAccount ? `
         <div class="fund-bank-card">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div>
-              <b style="color:var(--gold);font-size:.95rem">🏛️ الحساب البنكي الرسمي المعتمد للصندوق:</b>
-              <div style="font-size:.8rem;color:var(--txt);margin-top:2px">مصرف الراجحي · اسم الحساب: <b>صندوق أسرة آل مطارد التكافلي</b></div>
+              <b style="color:var(--gold);font-size:.95rem">🏛️ الحساب البنكي المعتمد للصندوق:</b>
+              <div style="font-size:.8rem;color:var(--txt);margin-top:2px">${esc(fundAccount.bank)} · اسم الحساب: <b>${esc(fundAccount.name)}</b></div>
             </div>
             <button type="button" class="fstats-btn" id="btn-copy-iban" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
               📋 نسخ رقم الآيبان (IBAN)
@@ -13492,21 +13471,26 @@ function openFamilyFundModal() {
           </div>
 
           <div style="background:rgba(0,0,0,.35);padding:8px 12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;direction:ltr;font-family:monospace;font-size:.86rem;font-weight:700;color:var(--gold);border:1px dashed var(--gold);margin-top:4px">
-            <span>SA03 8000 0456 6080 1012 3456</span>
+            <span>${esc(fundAccount.iban.replace(/(.{4})/g, '$1 ').trim())}</span>
           </div>
         </div>
+        ` : `
+        <div class="fund-bank-card" style="text-align:center;color:var(--mut);font-size:.84rem">
+          لم يُحدَّد حساب الصندوق البنكي بعد — يحدده المالك أو المحرر من هنا.
+          ${canEdit() ? `<button type="button" class="fstats-btn" id="btn-set-account" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">🏛️ تحديد حساب الصندوق</button>` : ''}
+        </div>
+        `}
+        ${canEdit() && fundAccount ? `<div style="display:flex;justify-content:flex-end"><button type="button" class="fstats-btn" id="btn-set-account" style="padding:4px 10px;font-size:.74rem">تعديل حساب الصندوق</button></div>` : ''}
 
         <!-- Active Initiatives -->
         <div style="display:flex;flex-direction:column;gap:12px">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <b style="color:var(--gold);font-size:.9rem">🎯 مبادرات ومشاريع التكافل النشطة:</b>
-            <button type="button" class="fstats-btn" id="btn-request-aid" style="padding:4px 10px;font-size:.74rem;border-color:var(--gold);color:var(--gold)">
-              🔒 طلب مساندة أو إعانة (بسرية تامة)
-            </button>
+            ${canEdit() ? `<button type="button" class="fstats-btn" id="btn-add-campaign" style="background:var(--gold);color:#0f172a;font-weight:700;padding:4px 10px;font-size:.74rem">➕ إضافة مبادرة</button>` : ''}
           </div>
 
           <div style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;padding-left:4px">
-            ${allCampaigns.map(camp => {
+            ${allCampaigns.length ? allCampaigns.map(camp => {
               const pct = camp.targetAmount > 0 ? Math.min(100, Math.round((camp.raisedAmount / camp.targetAmount) * 100)) : 100;
               const isComp = pct >= 100;
 
@@ -13544,13 +13528,18 @@ function openFamilyFundModal() {
                   </div>
                 </div>
               `;
-            }).join('')}
+            }).join('') : `
+              <div style="text-align:center;padding:32px 10px;color:var(--mut)">
+                <div style="font-size:2rem;margin-bottom:8px">🤝</div>
+                <div>لا توجد مبادرات بعد — يضيف المالك أو المحرر أول مبادرة تكافلية.</div>
+              </div>
+            `}
           </div>
         </div>
 
         <!-- Footer Actions -->
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
-          <span style="font-size:.74rem;color:var(--mut)">* تصرف التبرعات والمساهمات بإشراف مجلس الأسرة وأمين الصندوق المعتمد.</span>
+          <span style="font-size:.74rem;color:var(--mut)">* تصرف التبرعات والمساهمات بإشراف مجلس الأسرة وأمين الصندوق بعد تعيينه.</span>
           <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
@@ -13560,25 +13549,56 @@ function openFamilyFundModal() {
 
     showInfo(html);
 
-    // Copy IBAN
+    // Copy IBAN — الحساب الحقيقي الذي حدده المالك/المحرر فقط
     const ibanBtn = $('#btn-copy-iban');
-    if (ibanBtn) {
+    if (ibanBtn && fundAccount) {
       ibanBtn.onclick = () => {
-        navigator.clipboard.writeText('SA0380000456608010123456').then(() => {
+        navigator.clipboard.writeText(fundAccount.iban).then(() => {
           toast('✅ تم نسخ رقم الآيبان (IBAN) بنجاح!');
         });
       };
     }
 
-    // Request Aid (Confidential)
-    const reqBtn = $('#btn-request-aid');
-    if (reqBtn) {
-      reqBtn.onclick = () => {
-        const name = prompt('الاسم الكريم لصاحب الطلب:');
-        if (!name) return;
-        const phone = prompt('رقم الجوال للتواصل السري مع أمين الصندوق:');
-        const details = prompt('طبيعة المساندة المطلوبة (علاج، زواج، ظرف طارئ):');
-        toast('🔒 تم استلام طلبك بسرية تامة وسيتم التواصل معك من قِبل أمين الصندوق.');
+    // Set/edit fund account (owner/editor only) — آيبان سعودي 24 خانة يبدأ بـ SA
+    const setAccBtn = $('#btn-set-account');
+    if (setAccBtn) {
+      setAccBtn.onclick = () => {
+        openForm('🏛️ تحديد حساب الصندوق البنكي', [
+          { k: 'bank', label: 'البنك', req: true, val: fundAccount ? fundAccount.bank : 'مصرف الراجحي' },
+          { k: 'name', label: 'اسم الحساب', req: true, val: fundAccount ? fundAccount.name : 'صندوق أسرة آل مطارد التكافلي' },
+          { k: 'iban', label: 'رقم الآيبان (24 خانة يبدأ بـ SA)', req: true, val: fundAccount ? fundAccount.iban : '' }
+        ], async d => {
+          const iban = (d.iban || '').replace(/\s+/g, '').toUpperCase();
+          if (!/^SA\d{22}$/.test(iban)) throw new Error('الآيبان السعودي 24 خانة: SA ثم 22 رقماً');
+          fundAccount = { bank: (d.bank || '').trim(), name: (d.name || '').trim(), iban };
+          localStorage.setItem('almatarid_fund_account', JSON.stringify(fundAccount));
+          toast('✅ تم حفظ حساب الصندوق بنجاح!');
+          renderModal();
+        });
+      };
+    }
+
+    // زر طلب المساندة أُزيل مؤقتاً: كان يجمع الاسم والجوال ثم يعرض «تم الاستلام» دون تخزين أو إرسال — يعود مع البناء المشترك حيث تصل الطلبات فعلاً إلى أمين الصندوق.
+
+    // Add campaign (owner/editor only)
+    const addCampBtn = $('#btn-add-campaign');
+    if (addCampBtn) {
+      addCampBtn.onclick = () => {
+        openForm('➕ إضافة مبادرة تكافلية', [
+          { k: 'title', label: 'عنوان المبادرة', req: true, val: '' },
+          { k: 'desc', label: 'وصف المبادرة', type: 'area', req: true, val: '' },
+          { k: 'targetAmount', label: 'الهدف (ريال سعودي)', type: 'number', req: true, val: '' }
+        ], async d => {
+          const target = parseFloat(d.targetAmount);
+          if (isNaN(target) || target <= 0) throw new Error('أدخل هدفاً صحيحاً أكبر من صفر');
+          const camp = { id: 'camp_user_' + Date.now(), title: (d.title || '').trim(), targetAmount: target, raisedAmount: 0, status: 'active', desc: (d.desc || '').trim() };
+          const stored = readCampaigns();
+          stored.unshift(camp);
+          localStorage.setItem('almatarid_fund_campaigns', JSON.stringify(stored));
+          allCampaigns.unshift(camp);
+          toast('✅ تمت إضافة المبادرة بنجاح!');
+          renderModal();
+        });
       };
     }
 
@@ -13598,7 +13618,7 @@ function openFamilyFundModal() {
         }
 
         camp.raisedAmount += amt;
-        const stored = JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]');
+        const stored = readCampaigns();
         const idx = stored.findIndex(s => s.id === cid);
         if (idx >= 0) stored[idx] = camp; else stored.push(camp);
         localStorage.setItem('almatarid_fund_campaigns', JSON.stringify(stored));
@@ -13614,7 +13634,7 @@ function openFamilyFundModal() {
         const cid = btn.dataset.shareCamp;
         const camp = allCampaigns.find(c => c.id === cid);
         if (camp) {
-          const msg = `🤝 *مبادرة صندوق أسرة آل مطارد التكافلي:*\n*${camp.title}*\n\n${camp.desc}\n\nالمحصل: ${camp.raisedAmount.toLocaleString('ar-SA')} ر.س من أصل ${camp.targetAmount.toLocaleString('ar-SA')} ر.س\n\nالحساب المعتمد (الراجحي):\nSA0380000456608010123456\n\n— عبر شجرة وتاريخ أسرة آل مطارد:\n${window.location.href}`;
+          const msg = `🤝 *مبادرة صندوق أسرة آل مطارد التكافلي:*\n*${camp.title}*\n\n${camp.desc}\n\nالمحصل: ${camp.raisedAmount.toLocaleString('ar-SA')} ر.س من أصل ${camp.targetAmount.toLocaleString('ar-SA')} ر.س\n\n— عبر شجرة أسرة آل مطارد:\n${window.location.href}`;
           window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
         }
       };
@@ -13757,8 +13777,17 @@ function generateBlankTreeSvg(depth = 4, style = 'tree', rootName = '') {
         const x4 = cx + rInner * Math.cos(a2);
         const y4 = cy - rInner * Math.sin(a2);
 
+        /* تسمية كل خلية وخط إرشاد منقّط للكتابة اليدوية — كانت خلايا المروحة فارغة تماماً */
+        const midA = (a1 + a2) / 2, midR = (rInner + rOuter) / 2;
+        const gx1 = cx + midR * Math.cos(a1), gy1 = cy - midR * Math.sin(a1);
+        const gx2 = cx + midR * Math.cos(a2), gy2 = cy - midR * Math.sin(a2);
+        const tx = cx + midR * Math.cos(midA), ty = cy - midR * Math.sin(midA);
+        const rot = (midA * 180 / Math.PI) - 90;
+        const cellLabel = (g === 0 && i === 0) ? rootName : `الجيل ${g + 1}`;
         elements += `
           <path d="M ${x1} ${y1} L ${x2} ${y2} A ${rOuter} ${rOuter} 0 0 1 ${x3} ${y3} L ${x4} ${y4} A ${rInner} ${rInner} 0 0 0 ${x1} ${y1}" fill="${g % 2 === 0 ? '#ffffff' : '#fffbeb'}" stroke="#b45309" stroke-width="1.2"/>
+          <path d="M ${gx1} ${gy1} A ${midR} ${midR} 0 0 1 ${gx2} ${gy2}" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2 2"/>
+          <text x="${tx}" y="${ty}" fill="#78350f" font-size="${g === 0 ? 12 : 10}" font-family="sans-serif" text-anchor="middle" font-weight="bold" transform="rotate(${rot} ${tx} ${ty})">${esc(cellLabel)}</text>
         `;
       }
     }
@@ -13780,7 +13809,7 @@ function generateBlankTreeSvg(depth = 4, style = 'tree', rootName = '') {
 function openBlankTreeModal() {
   let depth = 4;
   let style = 'tree'; // 'tree', 'fan'
-  let rootName = S.members[0] ? S.members[0].full_name : 'الجد الجامع لآل مطارد';
+  let rootName = S.roots[0] ? S.roots[0].full_name : (S.members[0] ? S.members[0].full_name : 'الجد الجامع لآل مطارد');
 
   function renderModal() {
     const svgCode = generateBlankTreeSvg(depth, style, rootName);
@@ -13849,9 +13878,9 @@ function openBlankTreeModal() {
     $('#btn-sty-tree').onclick = () => { style = 'tree'; renderModal(); };
     $('#btn-sty-fan').onclick = () => { style = 'fan'; renderModal(); };
 
-    // Print action
+    // Print action — عبر نافذة طباعة مخصصة تحمل الشجرة الفارغة (زر window.print() كان يطبع صفحة الشجرة خلف النافذة لأن CSS الطباعة يخفي الـ dialog)
     $('#btn-print-blank').onclick = () => {
-      window.print();
+      printHtml('شجرة فارغة — آل مطارد', generateBlankTreeSvg(depth, style, rootName));
     };
 
     // Download SVG
@@ -13896,6 +13925,10 @@ function openReadyReportsModal(initialReportType = 'branch') {
   let reportType = initialReportType; // 'branch', 'gen', 'places'
   let selectedBranchId = (S.branches[0] && S.branches[0].root_id) ? S.branches[0].root_id : (S.members[0] ? S.members[0].id : '');
   let selectedGen = 2;
+  /* إخفاء بيانات الأحياء عن الزوار في التقارير وCSV (livingHidden) + حالة الحي تُحسب بـ !== false كما في الملف الشخصي */
+  const repBirth = m => livingHidden(m) ? 'محمي 🔒' : (m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '—'));
+  const repCity = m => livingHidden(m) ? '—' : (m.city || 'غير محددة');
+  const repAlive = m => m.is_alive !== false;
 
   function renderModal() {
     let reportTitle = '';
@@ -13906,7 +13939,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
     if (reportType === 'branch') {
       const rootM = S.byId.get(selectedBranchId) || S.members[0];
       const branchMembers = getSubtree(rootM ? rootM.id : null);
-      const aliveCount = branchMembers.filter(m => m.is_alive).length;
+      const aliveCount = branchMembers.filter(m => repAlive(m)).length;
       const deceasedCount = branchMembers.length - aliveCount;
       const maleCount = branchMembers.filter(m => m.gender === 'male').length;
       const femaleCount = branchMembers.length - maleCount;
@@ -13943,10 +13976,10 @@ function openReadyReportsModal(initialReportType = 'branch') {
                   <td>${idx + 1}</td>
                   <td><b>${esc(m.full_name)}</b></td>
                   <td>${f ? esc(f.full_name) : '—'}</td>
-                  <td>الجيل ${m._gen || '—'}</td>
-                  <td>${m.is_alive ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
-                  <td>${esc(m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '—'))}</td>
-                  <td>${esc(m.city || 'النماص')}</td>
+                  <td>الجيل ${gen(m)}</td>
+                  <td>${repAlive(m) ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
+                  <td>${esc(repBirth(m))}</td>
+                  <td>${esc(repCity(m))}</td>
                 </tr>
               `;
             }).join('')}
@@ -13960,16 +13993,16 @@ function openReadyReportsModal(initialReportType = 'branch') {
           idx + 1,
           m.full_name,
           m.father_id ? (S.byId.get(m.father_id)?.full_name || '') : '',
-          m._gen || '',
-          m.is_alive ? 'حي' : 'متوفى',
-          m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || ''),
-          m.city || 'النماص'
+          gen(m),
+          repAlive(m) ? 'حي' : 'متوفى',
+          livingHidden(m) ? 'محمي' : (m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '')),
+          livingHidden(m) ? '' : (m.city || 'غير محددة')
         ])
       ];
 
     } else if (reportType === 'gen') {
-      const genMembers = S.members.filter(m => (m._gen === selectedGen) || (!m._gen && selectedGen === 2));
-      const aliveCount = genMembers.filter(m => m.is_alive).length;
+      const genMembers = S.members.filter(m => gen(m) === selectedGen);
+      const aliveCount = genMembers.filter(m => repAlive(m)).length;
 
       reportTitle = `قائمة وتعداد الجيل ${selectedGen}`;
       reportSummaryHtml = `
@@ -14000,9 +14033,9 @@ function openReadyReportsModal(initialReportType = 'branch') {
                   <td>${idx + 1}</td>
                   <td><b>${esc(m.full_name)}</b></td>
                   <td>${f ? esc(f.full_name) : '—'}</td>
-                  <td>${m.is_alive ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
-                  <td>${esc(m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '—'))}</td>
-                  <td>${esc(m.city || 'النماص')}</td>
+                  <td>${repAlive(m) ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
+                  <td>${esc(repBirth(m))}</td>
+                  <td>${esc(repCity(m))}</td>
                 </tr>
               `;
             }).join('')}
@@ -14017,9 +14050,9 @@ function openReadyReportsModal(initialReportType = 'branch') {
           m.full_name,
           m.father_id ? (S.byId.get(m.father_id)?.full_name || '') : '',
           selectedGen,
-          m.is_alive ? 'حي' : 'متوفى',
-          m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || ''),
-          m.city || 'النماص'
+          repAlive(m) ? 'حي' : 'متوفى',
+          livingHidden(m) ? 'محمي' : (m.birth_date ? m.birth_date.substring(0, 4) : (m.birth_year_text || '')),
+          livingHidden(m) ? '' : (m.city || 'غير محددة')
         ])
       ];
 
@@ -14027,11 +14060,11 @@ function openReadyReportsModal(initialReportType = 'branch') {
       // Places report
       const cityMap = new Map();
       S.members.forEach(m => {
-        const c = m.city || 'النماص (الموطن الأصلي)';
+        const c = livingHidden(m) ? 'محمية 🔒' : (m.city || 'غير محددة');
         if (!cityMap.has(c)) cityMap.set(c, { total: 0, alive: 0, deceased: 0 });
         const obj = cityMap.get(c);
         obj.total++;
-        if (m.is_alive) obj.alive++; else obj.deceased++;
+        if (repAlive(m)) obj.alive++; else obj.deceased++;
       });
 
       const cityList = Array.from(cityMap.entries()).sort((a, b) => b[1].total - a[1].total);
@@ -14197,9 +14230,10 @@ function openReadyReportsModal(initialReportType = 'branch') {
       };
     });
 
-    // Print action
+    // Print action — عبر نافذة طباعة مخصصة تحمل التقرير (زر window.print() كان يطبع صفحة الشجرة خلف النافذة لأن CSS الطباعة يخفي الـ dialog)
     $('#btn-print-rep').onclick = () => {
-      window.print();
+      const area = $('#ready-report-print-container');
+      printHtml(reportTitle, area ? area.innerHTML : reportTableHtml);
     };
 
     // CSV export
@@ -14318,7 +14352,8 @@ function buildTreeExportSvg(scope = 'all', theme = 'dark', showPhotos = true) {
     const pos = coords.get(m.id);
     const bx = pos.x - nodeW / 2;
     const by = pos.y - nodeH / 2;
-    const isAlive = m.is_alive;
+    const isAlive = m.is_alive !== false;
+    const hidden = livingHidden(m); /* الزائر لا يصدّر صور الأحياء ولا مدنهم ولا سنوات ميلادهم */
     const pUrl = S.photos.get(m.id);
 
     svgContent += `
@@ -14326,13 +14361,13 @@ function buildTreeExportSvg(scope = 'all', theme = 'dark', showPhotos = true) {
         <rect width="${nodeW}" height="${nodeH}" rx="8" fill="${cardBg}" stroke="${borderColor}" stroke-width="1.5"/>
         <rect width="6" height="${nodeH}" rx="4" fill="${isAlive ? '#22c55e' : '#64748b'}"/>
         
-        ${showPhotos && pUrl ? `
+        ${showPhotos && pUrl && !hidden ? `
           <image href="${esc(pUrl)}" x="8" y="8" width="38" height="38" clip-path="circle(19px at 19px 19px)"/>
           <text x="54" y="24" fill="${goldColor}" font-size="11" font-weight="bold" font-family="sans-serif">${esc(m.full_name)}</text>
-          <text x="54" y="40" fill="${textColor}" font-size="9" opacity="0.8" font-family="sans-serif">📍 ${esc(m.city || 'النماص')}</text>
+          <text x="54" y="40" fill="${textColor}" font-size="9" opacity="0.8" font-family="sans-serif">📍 ${esc(m.city || 'غير محددة')}${m.birth_year_text ? ' · ' + esc(m.birth_year_text) : ''}</text>
         ` : `
           <text x="${nodeW / 2 + 3}" y="25" fill="${goldColor}" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${esc(m.full_name)}</text>
-          <text x="${nodeW / 2 + 3}" y="42" fill="${textColor}" font-size="9.5" opacity="0.8" font-family="sans-serif" text-anchor="middle">📍 ${esc(m.city || 'النماص')}${m.birth_year_text ? ' · ' + esc(m.birth_year_text) : ''}</text>
+          ${hidden ? '' : `<text x="${nodeW / 2 + 3}" y="42" fill="${textColor}" font-size="9.5" opacity="0.8" font-family="sans-serif" text-anchor="middle">📍 ${esc(m.city || 'غير محددة')}${m.birth_year_text ? ' · ' + esc(m.birth_year_text) : ''}</text>`}
         `}
       </g>
     `;
@@ -14458,21 +14493,27 @@ function openExportTreeMediaModal() {
       toast('📄 جاري تنزيل ملف SVG المتجهي للشجرة...');
     };
 
-    // Download PNG
+    // Download PNG — مع حماية من فشل التحويل عند صور بعيدة (canvas ملوث) وبديل تنزيل SVG
     $('#btn-dl-tree-png').onclick = () => {
       const code = buildTreeExportSvg(activeScope, activeTheme, showPhotos);
       const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onerror = () => { toast('تعذّر تحويل الصورة إلى PNG — جرّب تنزيل ملف SVG بدلاً منه'); };
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width * 1.5;
-        canvas.height = img.height * 1.5;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const a = document.createElement('a');
-        a.href = canvas.toDataURL('image/png');
-        a.download = `almatarid-tree-${activeScope}-${activeTheme}.png`;
-        a.click();
-        toast('💾 جاري تنزيل صورة PNG عالية الدقة للشجرة...');
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width * 1.5;
+          canvas.height = img.height * 1.5;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const a = document.createElement('a');
+          a.href = canvas.toDataURL('image/png');
+          a.download = `almatarid-tree-${activeScope}-${activeTheme}.png`;
+          a.click();
+          toast('💾 جاري تنزيل صورة PNG عالية الدقة للشجرة...');
+        } catch (_) {
+          toast('تعذّر تحويل الصورة إلى PNG (صور بعيدة بلا إذن مشاركة) — جرّب تنزيل ملف SVG بدلاً منه');
+        }
       };
       img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(code)));
     };
