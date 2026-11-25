@@ -481,7 +481,7 @@ function matchesSearchAndFilter(m, query, filter) {
   if (filter?.aliveStatus === 'alive' && m.is_alive === false) return false;
   if (filter?.aliveStatus === 'deceased' && m.is_alive !== false) return false;
   if (filter?.gen && String(gen(m)) !== String(filter.gen)) return false;
-  if (filter?.city && (m.city || '').trim() !== filter.city.trim()) return false;
+  if (filter?.city && normAr((m.city || '').trim()) !== normAr(filter.city.trim())) return false;
   if (filter?.branchId && !underRoot(m, filter.branchId) && m.id !== filter.branchId) return false;
 
   if (query && query.trim()) {
@@ -671,6 +671,10 @@ function profile(id) {
   const born = isVisitor && isLiving ? (m.birth_year_text ? `${esc(m.birth_year_text)} (التاريخ التفصيلي محمي 🔒)` : 'محمي للأقارب المسجلين 🔒') : (m.birth_date ? datePair(m.birth_date) : (m.birth_year_text || ''));
   const died = m.is_alive === false ? (m.death_date ? datePair(m.death_date) : (m.death_year_text || 'غير معروف')) : '';
   $('#profile-body').dataset.id = id;
+  /* الجولة السادسة: أبناء بلا رابط أم (wife_mother_id فارغ) يُحسبون في «الأبناء» ولا يظهرون تحت أي زوجة —
+     تُعرض أسماؤهم في صف الزوجات حتى تتطابق الأعداد، وربطهم بأمهم يكون من نموذج تعديل العضو. */
+  const linkedKidIds = new Set(); wives.forEach(w => S.members.filter(x => x.wife_mother_id === w.id).forEach(k => linkedKidIds.add(k.id)));
+  const noMotherKids = (S.kids.get(m.id) || []).filter(k => !linkedKidIds.has(k.id));
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '', digits = waNum(m.phone);
   const phoneText = isVisitor && isLiving && digits ? '<span style="color:var(--mut)">محمي — للأقارب المسجلين فقط 🔒</span>' : (digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '');
   const livingNotice = isVisitor && isLiving ? `<div style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:.76rem;color:var(--gold);display:flex;justify-content:space-between;align-items:center"><span>🔒 بيانات الأحياء الشخصية محمية وتظهر للأقارب المسجلين فقط.</span><button type="button" class="x" onclick="$('#profile').close();$('#btn-login').click();" style="color:var(--gold);font-weight:700">دخول الأقارب ←</button></div>` : '';
@@ -682,7 +686,7 @@ function profile(id) {
     ${m.achievement_badge ? (m.badge_is_job ? `<p class="sub">الوظيفة: ${esc(m.achievement_badge)}</p>` : `<p><span class="bd">${esc(m.achievement_badge)}</span></p>`) : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? (isVisitor ? 'محمية 🔒' : esc(mother.full_name)) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
-      ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، '))}
+      ${row('الزوجات', wives.map(w => { const wkids = S.members.filter(x => x.wife_mother_id === w.id); const div = w.marriage_status === 'divorced'; return esc(w.full_name) + (w.family_name ? ' (' + esc(w.family_name) + ')' : '') + (div ? ' · <b>زوجة سابقة</b>' : '') + (wkids.length ? ' · أبناؤها: ' + wkids.map(k => esc(k.full_name)).join('، ') : '') + (w.member_id ? ' · من الأسرة' + (S.byId.get(w.member_id)?.name_masked ? '' : ' <button class="x" data-so="' + esc(w.member_id) + '">ملفها</button>') : '') + (canMember(m) ? `<button class="x" data-we="${esc(w.id)}" aria-label="تعديل بيانات الزوجة">✏️</button><button class="x" data-ws="${esc(w.id)}" data-wst="${div ? 'current' : 'divorced'}">${div ? '↩ إعادة كزوجة حالية' : '💔 إنهاء الزواج (طلاق)'}</button><button class="x" data-wd="${esc(w.id)}" aria-label="حذف زوجة">✕</button>` : ''); }).join('، ') + (noMotherKids.length ? (wives.length ? ' · ' : '') + 'أبناء بلا أم مسجلة: ' + noMotherKids.map(k => esc(k.full_name)).join('، ') : ''))}
       ${row('مسؤول الفرع', esc(delegateName(S.branches.find(x => x.root_id === m.id))))}${row('الأبناء', (S.kids.get(m.id) || []).length || '')}${row('الميلاد', esc(born))}${row('الوفاة', esc(died))}${lh ? '' : row('المدينة', esc(m.city))}${featOn('photo-album') ? row('ألبوم الصور', `<span style="display:inline-flex;align-items:center;gap:6px"><span>${tagCountText(id) || 'صور ومناسبات'}</span><button type="button" class="x" data-act="open-album" style="color:var(--gold);font-weight:700">🖼️ فتح الألبوم ←</button></span>`) : ''}${row('المشاركات', partText(id))}
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
@@ -716,6 +720,9 @@ async function refresh() {
 }
 /* بحث داخل قوائم الأسماء (ann97): تطبيع عربي (أ/إ/آ، ة/ه، ى/ي، التشكيل) + عدم فقدان الاختيار الحالي عند التصفية + منع إرسال النموذج بالإنتر */
 const normAr = s => String(s ?? '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[\u064B-\u0652\u0670ـ]/g, '');
+/* تجميع المدن من نصوص خام (بيانات الأعضاء): قصّ الفراغات وتوحيد الهمزات والتاء المربوطة والألف المقصورة
+   قبل إزالة التكرار — وإلا ظهرت «خميس مشيط» مرتين برسمين مختلفين، وتشتت أعدادها بينهما. */
+const uniqCities = list => { const seen = new Map(); for (const c of list) { const t = String(c ?? '').trim(); if (!t) continue; const k = normAr(t); if (!seen.has(k)) seen.set(k, t); } return [...seen.values()].sort((a, b) => a.localeCompare(b, 'ar')); };
 // تجريد كلمات النسب (بنت/ابن/بن/ابنة) من النص المطبَّع قبل مقارنة الأسماء — البحث لا يشترطها (قاعدة عمر 2026-11-24)؛ بحدود كلمات عربية صحيحة، لأن \b الإنجليزي لا يعمل مع العربية إطلاقاً.
 const stripKin = s => String(s ?? '').replace(/(^|\s)(بنت|ابنه|ابن|بن)(?=\s|$)/g, '$1').replace(/\s+/g, ' ').trim();
 function bindSelectSearch(sel, inp) {
@@ -958,6 +965,7 @@ $('#m-export').onclick = () => {
   const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), members: S.members, wives: S.wives, events: S.events }, null, 1)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `al-matarid-backup-${new Date().toISOString().slice(0, 10)}.json` });
   a.click(); URL.revokeObjectURL(a.href); $('.more').open = false;
+  toast(`📦 تم تنزيل النسخة الاحتياطية (${S.members.length} فرد) — تحقق من مجلد التنزيلات`);
 };
 /* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
 /* إصلاح أمني: الرمز يُحفظ كبصمة SHA-256 فقط (لا نص صريح ولا رمز افتراضي معروض)؛ حالة التحقق في الذاكرة (Memory Closure) وليس في sessionStorage لمنع التجاوز من الكونسول. */
@@ -1497,9 +1505,10 @@ const CITY_COORDS = {
 };
 
 function openCityMap(selectedCity = null, viewMode = 'map') {
-  const g = new Map();
+  const g = new Map(), cityCanon = new Map();
   for (const m of S.members) {
-    const c = (m.city || '').trim() || 'غير محددة';
+    const raw = (m.city || '').trim() || 'غير محددة';
+    const c = cityCanon.get(normAr(raw)) || raw; cityCanon.set(normAr(raw), c);
     (g.get(c) || g.set(c, []).get(c)).push(m);
   }
   const total = S.members.length || 1;
@@ -3755,7 +3764,10 @@ function openFeaturesTable() {
   body.querySelectorAll('[data-vis]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFeatureVisibility(b.dataset.vis); });
   body.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFeaturePin(b.dataset.pin); });
 }
-{ const bf = $('#btn-features'); if (bf) bf.onclick = () => openFeaturesTable(); const mf = $('#m-features'); if (mf) mf.onclick = () => openFeaturesTable(); }
+/* ربط زرّي جدول الميزات بتفويض نقر على مستوى المستند (بدل onclick مباشر على الزر):
+   يبقى يعمل حتى لو أُعيد بناء الترويسة أو القائمة لاحقاً، ويستدعي openFeaturesTable مرة واحدة لكل نقرة.
+   (الجولة السادسة: الزران كانا ميتين عند عمر رغم سلامة الربط المباشر في الجهاز — تفويض + رفع ?v= ينهيان أي نسخة قديمة محفوظة أو ربط ضائع.) */
+document.addEventListener('click', e => { if (e.target.closest('#btn-features, #m-features')) openFeaturesTable(); });
 
 /* ---------- ann66: الشريط السفلي بالجوال + لوحة الملف ---------- */
 /* نقل قائمة الأقسام نفسها (details.more) بين الترويسة والشريط السفلي حسب العرض —
@@ -8311,7 +8323,7 @@ setTimeout(updateBranchVisibilityBar, 300);
    74) نافذة البحث المتقدم والتصفية مع بدائل إملائية
    ============================================================ */
 function openAdvancedSearchModal() {
-  const cities = [...new Set(S.members.map(m => m.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  const cities = uniqCities(S.members.map(m => m.city));
   const branches = getMajorBranches ? getMajorBranches() : [];
   const maxGen = S.members.reduce((max, m) => Math.max(max, gen(m)), 1);
   const gens = Array.from({ length: maxGen }, (_, i) => i + 1);
@@ -10662,10 +10674,10 @@ function openCemeteriesModal() {
   let searchQuery = '';
 
   function renderModal() {
-    const cities = Array.from(new Set(allCemeteries.map(c => c.city)));
+    const cities = uniqCities(allCemeteries.map(c => c.city));
 
     const filtered = allCemeteries.filter(c => {
-      if (selectedCity !== 'all' && c.city !== selectedCity) return false;
+      if (selectedCity !== 'all' && normAr((c.city || '').trim()) !== normAr(selectedCity)) return false;
       if (searchQuery) {
         const q = stripKin(normAr(searchQuery));
         return stripKin(normAr(c.name)).includes(q) ||
@@ -13949,7 +13961,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
       const deceasedCount = branchMembers.length - aliveCount;
       const maleCount = branchMembers.filter(m => m.gender === 'male').length;
       const femaleCount = branchMembers.length - maleCount;
-      const cities = Array.from(new Set(branchMembers.map(m => m.city).filter(Boolean)));
+      const cities = uniqCities(branchMembers.map(m => m.city));
 
       reportTitle = `تقرير فرع: ${rootM ? rootM.full_name : 'الفرع'}`;
       reportSummaryHtml = `
@@ -14064,9 +14076,10 @@ function openReadyReportsModal(initialReportType = 'branch') {
 
     } else {
       // Places report
-      const cityMap = new Map();
+      const cityMap = new Map(), cityCanon = new Map();
       S.members.forEach(m => {
-        const c = livingHidden(m) ? 'محمية 🔒' : (m.city || 'غير محددة');
+        const raw = livingHidden(m) ? 'محمية 🔒' : (m.city || 'غير محددة');
+        const c = cityCanon.get(normAr(raw)) || raw; cityCanon.set(normAr(raw), c);
         if (!cityMap.has(c)) cityMap.set(c, { total: 0, alive: 0, deceased: 0 });
         const obj = cityMap.get(c);
         obj.total++;
