@@ -3,6 +3,42 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 let _toastT = null;
 function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; requestAnimationFrame(() => t.classList.add('on')); clearTimeout(_toastT); _toastT = setTimeout(() => { t.classList.remove('on'); setTimeout(() => { t.hidden = true; }, 300); }, 2600); }
 
+/* ---------- M03: حوار التطبيق الموحد بدل alert/confirm/prompt الأصلية ---------- */
+/* confirmDlg(msg) → true/false ؛ promptDlg(msg, defVal) → نص أو null عند الإلغاء
+   (نفس دلالات الأصلية: null عند الإلغاء، '' عند موافق بلا إدخال). يعمل في DEMO أيضاً.
+   إن غاب عنصر الحوار (نسخة HTML قديمة) يرجع إلغاءً آمناً بدل التعطل. */
+function _dlg(msg, input, defVal) {
+  return new Promise(res => {
+    const d = $('#app-dlg'), inp = $('#app-dlg-input');
+    if (!d) { res(input ? null : false); return; }
+    $('#app-dlg-msg').textContent = msg;
+    inp.hidden = !input;
+    if (input) inp.value = defVal == null ? '' : String(defVal);
+    let done = false;
+    const finish = v => { if (done) return; done = true; if (d.open) d.close(); res(v); };
+    $('#app-dlg-ok').onclick = () => finish(input ? inp.value : true);
+    $('#app-dlg-cancel').onclick = () => finish(input ? null : false);
+    d.oncancel = () => finish(input ? null : false);
+    if (!d.open) d.showModal();
+    if (input) inp.focus();
+  });
+}
+async function confirmDlg(msg) { return _dlg(msg, false); }
+async function promptDlg(msg, defVal = '') { return _dlg(msg, true, defVal); }
+
+/* M04: زر إظهار/إخفاء رمز الدخول (كان سكربتاً مضمّناً في index.html — نُقل هنا لأن CSP يمنع السكربتات المضمّنة) */
+(function () {
+  const btnToggle = document.getElementById('btn-toggle-code');
+  const inputCode = document.getElementById('code');
+  if (btnToggle && inputCode) {
+    btnToggle.addEventListener('click', () => {
+      const isPassword = inputCode.type === 'password';
+      inputCode.type = isPassword ? 'text' : 'password';
+      btnToggle.textContent = isPassword ? '🔒' : '👁️';
+    });
+  }
+})();
+
 /* ---------- وضع دون اتصال (E-03): آخر حزمة في IndexedDB ---------- */
 /* بعد كل تحميل ناجح تُحفظ الحزمة كاملة محلياً؛ وإن تعذّر الاتصال عند الإقلاع
    تُعرض النسخة المحفوظة (عرض وبحث) مع شارة «دون اتصال»، ويُعاد الاتصال تلقائياً
@@ -12,7 +48,7 @@ function idbOpen() {
   return new Promise((resolve, reject) => {
     try {
       const req = indexedDB.open(IDB_NAME, 1);
-      req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (_) { } };
+      req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (e) { console.warn('[almatarid]', e); } };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     } catch (e) { reject(e); }
@@ -28,7 +64,7 @@ async function cacheBundle(b) {
       tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
     });
     db.close();
-  } catch (_) { /* التخزين المحلي اختياري — فشله لا يعطل التطبيق */ }
+  } catch (e) { console.warn('[almatarid]', e); /* التخزين المحلي اختياري — فشله لا يعطل التطبيق */ }
 }
 async function loadCachedBundle() {
   try {
@@ -40,7 +76,7 @@ async function loadCachedBundle() {
     });
     db.close();
     return val;
-  } catch (_) { return null; }
+  } catch (e) { console.warn('[almatarid]', e); return null; }
 }
 
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
@@ -136,13 +172,13 @@ function applyRole() {
   initFeatToggles();
   syncToggles();
 }
-$('#btn-login').onclick = () => {
+$('#btn-login').onclick = async () => {
   if (CFG.DEMO) {  // تجربة الأدوار: زائر ثم مالك ثم مسؤول فرع
     S.role = S.role === 'visitor' ? 'owner' : S.role === 'owner' ? 'branch' : 'visitor'; S.code = 'demo';
     S.branch = S.role === 'branch' ? { root_id: S.branches[0]?.root_id || (S.kids.get(S.roots[0]?.id) || [])[0]?.id } : null;
     applyRole(); return render();
   }
-  if (canEdit() || S.role === 'branch') { if (confirm('تسجيل الخروج؟')) { sessionStorage.removeItem('code'); location.reload(); } } else showGate();
+  if (canEdit() || S.role === 'branch') { if (await confirmDlg('تسجيل الخروج؟')) { sessionStorage.removeItem('code'); location.reload(); } } else showGate();
 };
 
 /* ---------- الفهارس ---------- */
@@ -247,11 +283,11 @@ async function loadEvDoc(e, force) {
     if (!r.ok) throw new Error();
     e._items = r.items || [];
     /* ann76: وسوم الوجوه لهذه المناسبة (للعارض المكبّر) */
-    try { const tr = await rpc('get_photo_tags', { p_code: S.code, p_event_id: e.id }); e._tags = new Map(); (tr.items || []).forEach(t => { if (!e._tags.has(t.media_id)) e._tags.set(t.media_id, []); e._tags.get(t.media_id).push(t); }); } catch (_) { e._tags = new Map(); }
+    try { const tr = await rpc('get_photo_tags', { p_code: S.code, p_event_id: e.id }); e._tags = new Map(); (tr.items || []).forEach(t => { if (!e._tags.has(t.media_id)) e._tags.set(t.media_id, []); e._tags.get(t.media_id).push(t); }); } catch (e) { console.warn('[almatarid]', e); e._tags = new Map(); }
     /* ann78: الحضور اليدوي لهذه المناسبة */
-    try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: e.id }); e._attendees = (ar.items || []).map(x => x.member_id); } catch (_) { e._attendees = []; }
+    try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: e.id }); e._attendees = (ar.items || []).map(x => x.member_id); } catch (e) { console.warn('[almatarid]', e); e._attendees = []; }
     if (S.evDetail === e && $('#evdoc')) renderEvDoc(e, e._items);
-  } catch (_) {
+  } catch (e) { console.warn('[almatarid]', e);
     const m = $('#evloadmsg'); if (m && S.evDetail === e) m.textContent = 'تعذّر تحميل الصور — اضغط الزر أعلاه للمحاولة مرة أخرى';
   }
 }
@@ -279,12 +315,12 @@ function renderEvDoc(e, items) {
     <div class="evdoc-tools">${canDoc() ? `<button data-evadd="photo">➕ صورة</button><button data-evadd="video">➕ فيديو (رابط)</button><button data-evadd="story">✏️ ${e.story ? 'تعديل الحكاية' : 'كتابة حكاية المناسبة'}</button>` : `<button data-evadd="code">🎟️ لديّ رمز توثيق هذه المناسبة</button>`}</div>`;
   box.querySelectorAll('[data-evzoom]').forEach(im => im.onclick = () => { const i = photos.findIndex(z => z.id === im.dataset.evzoom); if (i >= 0) evZoom(e, photos, i); });
   box.querySelectorAll('[data-evdel]').forEach(b => b.onclick = async () => {
-    if (!confirm('حذف هذا العنصر من التوثيق؟')) return;
+    if (!await confirmDlg('حذف هذا العنصر من التوثيق؟')) return;
     try {
       if (CFG.DEMO) e._media = (e._media || []).filter(z => z.id !== b.dataset.evdel);
       else { const r = await rpc('secure_delete_event_media', { p_passcode: pass(), p_media_id: b.dataset.evdel }); if (!r.ok) throw new Error(); e.media_count = Math.max(0, (e.media_count || 1) - 1); }
       loadEvDoc(e, true); toast('تم الحذف');
-    } catch (_) { toast('تعذر الحذف — تأكد من الرمز'); }
+    } catch (e) { console.warn('[almatarid]', e); toast('تعذر الحذف — تأكد من الرمز'); }
   });
   /* ann78: الحضور — فتح الملف بالضغط، وإزالة/إضافة لليدوي فقط */
   box.querySelectorAll('.att').forEach(ch => {
@@ -295,7 +331,7 @@ function renderEvDoc(e, items) {
     ev2.stopPropagation();
     const mid = b.dataset.attdel;
     if (CFG.DEMO) { e._attendees = (e._attendees || []).filter(x => x !== mid); renderEvDoc(e, e._items || []); return; }
-    try { const r = await rpc('secure_delete_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: mid }); if (!r.ok) throw new Error(); e._attendees = (e._attendees || []).filter(x => x !== mid); renderEvDoc(e, e._items || []); toast('تمت الإزالة'); } catch (_) { toast('تعذّرت الإزالة — تأكد من الرمز'); }
+    try { const r = await rpc('secure_delete_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: mid }); if (!r.ok) throw new Error(); e._attendees = (e._attendees || []).filter(x => x !== mid); renderEvDoc(e, e._items || []); toast('تمت الإزالة'); } catch (e) { console.warn('[almatarid]', e); toast('تعذّرت الإزالة — تأكد من الرمز'); }
   });
   const attAdd = box.querySelector('[data-attadd]');
   if (attAdd) attAdd.onclick = () => {
@@ -309,7 +345,7 @@ function renderEvDoc(e, items) {
     openBulkPicker('إضافة حاضرين', items, async ids => {
       if (CFG.DEMO) { e._attendees = [...(e._attendees || []), ...ids]; renderEvDoc(e, e._items || []); toast(`تمت إضافة ${ids.length}`); return; }
       const done = [];
-      for (const mid of ids) { try { const r = await rpc('secure_add_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: mid }); if (r.ok) done.push(mid); } catch (_) {} }
+      for (const mid of ids) { try { const r = await rpc('secure_add_attendee', { p_passcode: pass(), p_event_id: e.id, p_member_id: mid }); if (r.ok) done.push(mid); } catch (e) { console.warn('[almatarid]', e);} }
       e._attendees = [...(e._attendees || []), ...done];
       renderEvDoc(e, e._items || []);
       toast(done.length === ids.length ? `تمت إضافة ${done.length}` : `أُضيف ${done.length} من ${ids.length} — راجع الرمز`);
@@ -318,33 +354,33 @@ function renderEvDoc(e, items) {
   box.querySelectorAll('[data-evadd]').forEach(b => b.onclick = async () => {
     const k = b.dataset.evadd;
     if (k === 'code') {
-      const c = prompt('أدخل رمز توثيق هذه المناسبة (تحصل عليه من مالك الموقع):'); if (!c) return;
+      const c = await promptDlg('أدخل رمز توثيق هذه المناسبة (تحصل عليه من مالك الموقع):'); if (!c) return;
       const code = c.trim();
       if (CFG.DEMO) { evDocCodes.set(String(e.id), code); loadEvDoc(e); return; }
       try {
         const r = await rpc('verify_event_doc', { p_passcode: code, p_event_id: e.id });
         if (r && r.ok) { evDocCodes.set(String(e.id), code); loadEvDoc(e); toast('تم التحقق من الرمز — تقدر توثّق الآن'); }
         else toast(r && r.error === 'locked' ? 'محاولات خاطئة كثيرة — انتظر 15 دقيقة ثم حاول' : 'الرمز غير مطابق لهذه المناسبة');
-      } catch (_) { toast('تعذر التحقق من الرمز'); }
+      } catch (e) { console.warn('[almatarid]', e); toast('تعذر التحقق من الرمز'); }
       return;
     }
     if (k === 'photo') { const f = $('#ev-file'); f.dataset.eid = e.id; f.click(); return; }
     if (k === 'video') {
-      const u = prompt('رابط الفيديو (يوتيوب/درايف…):'); if (!u) return;
-      const cap = prompt('عنوان الفيديو (اختياري):') || '';
+      const u = await promptDlg('رابط الفيديو (يوتيوب/درايف…):'); if (!u) return;
+      const cap = await promptDlg('عنوان الفيديو (اختياري):') || '';
       try {
         if (CFG.DEMO) (e._media = e._media || []).push({ id: 'v' + Date.now(), kind: 'video', url: u.trim(), caption: cap.trim() || null });
         else { const r = await rpc('secure_add_event_media', { p_passcode: pass(), p_event_id: e.id, p_kind: 'video', p_url: u.trim(), p_caption: cap.trim() }); if (!r.ok) throw new Error(); e.media_count = (e.media_count || 0) + 1; }
         loadEvDoc(e, true); toast('تمت إضافة الفيديو');
-      } catch (_) { toast('تعذر الإضافة — تأكد من الرابط أو الرمز'); }
+      } catch (e) { console.warn('[almatarid]', e); toast('تعذر الإضافة — تأكد من الرابط أو الرمز'); }
       return;
     }
     if (k === 'story') {
-      const s = prompt('حكاية المناسبة (وين كانت؟ أبرز ما صار؟):', e.story || ''); if (s === null) return;
+      const s = await promptDlg('حكاية المناسبة (وين كانت؟ أبرز ما صار؟):', e.story || ''); if (s === null) return;
       try {
         if (!CFG.DEMO) { const r = await rpc('secure_set_event_story', { p_passcode: pass(), p_event_id: e.id, p_story: s }); if (!r.ok) throw new Error(); }
         e.story = s.trim() || null; evDetails(); toast('تم حفظ الحكاية');
-      } catch (_) { toast('تعذر الحفظ — تأكد من الرمز'); }
+      } catch (e) { console.warn('[almatarid]', e); toast('تعذر الحفظ — تأكد من الرمز'); }
     }
   });
 }
@@ -655,8 +691,8 @@ function setGenCap(n) {
   S.open = new Set(S.members.filter(m => gen(m) < n).map(m => m.id));
   render(true);
 }
-const prefHidden = k => { try { return localStorage.getItem(k) === '0'; } catch (_) { return false; } };
-const setPrefHidden = (k, h) => { try { localStorage.setItem(k, h ? '0' : '1'); } catch (_) {} };
+const prefHidden = k => { try { return localStorage.getItem(k) === '0'; } catch (e) { console.warn('[almatarid]', e); return false; } };
+const setPrefHidden = (k, h) => { try { localStorage.setItem(k, h ? '0' : '1'); } catch (e) { console.warn('[almatarid]', e);} };
 function syncToggles() {
   const sec = $('#genstep');
   if (sec) {
@@ -705,9 +741,9 @@ async function ensureTagCounts() {
       const counts = new Map(), evs = new Map();
       (r.items || []).forEach(t => { counts.set(t.member_id, (counts.get(t.member_id) || 0) + 1); if (!evs.has(t.member_id)) evs.set(t.member_id, new Set()); evs.get(t.member_id).add(t.event_id); });
       /* ann78: الحضور اليدوي يشارك أيضًا في المشاركات */
-      try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: null }); (ar.items || []).forEach(x => { if (!evs.has(x.member_id)) evs.set(x.member_id, new Set()); evs.get(x.member_id).add(x.event_id); }); } catch (_) {}
+      try { const ar = await rpc('get_event_attendees', { p_code: S.code, p_event_id: null }); (ar.items || []).forEach(x => { if (!evs.has(x.member_id)) evs.set(x.member_id, new Set()); evs.get(x.member_id).add(x.event_id); }); } catch (e) { console.warn('[almatarid]', e);}
       S.tagCounts = counts; S.tagEvents = evs; return counts;
-    } catch (_) { S._tagCountsP = null; S.tagCounts = new Map(); S.tagEvents = new Map(); return S.tagCounts; }
+    } catch (e) { console.warn('[almatarid]', e); S._tagCountsP = null; S.tagCounts = new Map(); S.tagEvents = new Map(); return S.tagCounts; }
   })();
   return S._tagCountsP;
 }
@@ -731,7 +767,7 @@ function profile(id) {
   const noMotherKids = (S.kids.get(m.id) || []).filter(k => !linkedKidIds.has(k.id));
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '', digits = waNum(m.phone);
   const phoneText = isVisitor && isLiving && digits ? '<span style="color:var(--mut)">محمي — للأقارب المسجلين فقط 🔒</span>' : (digits ? `<a href="tel:+${digits}" dir="ltr">${esc(m.phone)}</a> · <a href="https://wa.me/${digits}" target="_blank" rel="noopener">واتساب</a>` : '');
-  const livingNotice = isVisitor && isLiving ? `<div style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:.76rem;color:var(--gold);display:flex;justify-content:space-between;align-items:center"><span>🔒 بيانات الأحياء الشخصية محمية وتظهر للأقارب المسجلين فقط.</span><button type="button" class="x" onclick="$('#profile').close();$('#btn-login').click();" style="color:var(--gold);font-weight:700">دخول الأقارب ←</button></div>` : '';
+  const livingNotice = isVisitor && isLiving ? `<div style="background:rgba(245,158,11,.1);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:.76rem;color:var(--gold);display:flex;justify-content:space-between;align-items:center"><span>🔒 بيانات الأحياء الشخصية محمية وتظهر للأقارب المسجلين فقط.</span><button type="button" class="x" data-m04="close-profile-login" style="color:var(--gold);font-weight:700">دخول الأقارب ←</button></div>` : '';
   const isMe = localStorage.getItem('almatarid_me_id') === id;
   const meBtn = isMe ? '<button type="button" class="ghost" data-act="unset-me" style="color:#10b981;font-weight:700">⭐ مسجل كـ «أنا» (إلغاء)</button>' : '<button type="button" class="ghost" data-act="set-me">👤 هذا أنا</button>';
   const reorderBtn = canMember(m) && (S.kids.get(m.id) || []).length > 1 ? '<button type="button" class="ghost" data-act="reorder" title="ترتيب أبناء هذا الفرد بالسحب">↕️ ترتيب الأبناء</button>' : '';
@@ -985,25 +1021,25 @@ async function editWife(id) {
 async function setWifeStatus(id, status) {
   const w = S.wives.find(x => x.id === id); if (!w) return;
   const msg = status === 'divorced' ? `إنهاء زواج «${w.full_name}» بالطلاق؟ ستصبح «زوجة سابقة»: تختفي عن جميع الزوار والمحررين ومسؤولي الفروع، وتبقى ظاهرة لك وحدك مع بقاء أبنائها مرتبطين بها.` : `إعادة «${w.full_name}» كزوجة حالية؟`;
-  if (!confirm(msg)) return;
+  if (!await confirmDlg(msg)) return;
   try { await op('secure_set_wife_status', { p_wife_id: id, p_status: status, p_passcode: S.code }, () => { w.marriage_status = status; }); if (!CFG.DEMO) await refresh(); profile(w.husband_id); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message); }
 }
 async function delWife(id) {
   const w = S.wives.find(x => x.id === id); if (!w) return;
-  if (S.members.some(m => m.wife_mother_id === id)) return alert('لا يمكن حذفها: لها أبناء مسجّلون.');
-  if (!confirm(`حذف الزوجة «${w.full_name}»؟`)) return;
+  if (S.members.some(m => m.wife_mother_id === id)) return toast('لا يمكن حذفها: لها أبناء مسجّلون.');
+  if (!await confirmDlg(`حذف الزوجة «${w.full_name}»؟`)) return;
   try { await op('secure_delete_wife', { wife_id: id, passcode: S.code }, () => { S.wives = S.wives.filter(x => x.id !== id); }); if (!CFG.DEMO) await refresh(); profile(w.husband_id); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message); }
 }
 async function delMember(m) {
-  if ((S.kids.get(m.id) || []).length) return alert('لا يمكن حذف فرد له أبناء. احذف الأبناء أولًا.');
-  if (!confirm(`حذف «${m.full_name}» نهائيًا؟ لا يمكن التراجع، وخذ نسخة احتياطية قبل ذلك.`)) return;
+  if ((S.kids.get(m.id) || []).length) return toast('لا يمكن حذف فرد له أبناء. احذف الأبناء أولًا.');
+  if (!await confirmDlg(`حذف «${m.full_name}» نهائيًا؟ لا يمكن التراجع، وخذ نسخة احتياطية قبل ذلك.`)) return;
   try {
     for (const w of S.wives.filter(x => x.husband_id === m.id)) await op('secure_delete_wife', { wife_id: w.id, passcode: S.code }, () => {});
     await op('secure_delete_member', { member_id: m.id, passcode: S.code }, () => { S.members = S.members.filter(x => x.id !== m.id); S.wives = S.wives.filter(w => w.husband_id !== m.id); });
     $('#profile').close(); if (!CFG.DEMO) await refresh();
-  } catch (err) { alert(err.message); }
+  } catch (err) { toast(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
   const b = e.target.closest('[data-act],[data-wd],[data-ws],[data-we]'); if (!b) return;
@@ -1046,7 +1082,7 @@ async function verifyOwner2FA(onSuccess) {
   } catch (e) {
     /* الدالة غير موجودة: ملف 03_security_hardening.sql لم يُشغَّل بعد — تحقق من صفة المالك خادمياً */
     if (/Could not find the function|PGRST202|404/.test(e.message || '')) return verifyOwner2FAFallback(onSuccess);
-    alert('تعذّر الاتصال بالخادم، حاول مرة أخرى');
+    toast('تعذّر الاتصال بالخادم، حاول مرة أخرى');
     return;
   }
 
@@ -1057,7 +1093,7 @@ async function verifyOwner2FA(onSuccess) {
     if (r.token) { _owner2faToken = r.token; onSuccess(); return; }
   }
   if (r && r.pin_set) { show2faPrompt(onSuccess); return; } /* رمز 2FA معيّن — اعرض نافذة إدخال الرمز */
-  alert((r && r.message) || 'تعذّر التحقق');
+  toast((r && r.message) || 'تعذّر التحقق');
 }
 
 /* احتياطي ما قبل الهجرة: إثبات صفة المالك يكون باستدعاء خادمي (get_bundle) لا بعلامة محلية */
@@ -1069,8 +1105,8 @@ async function verifyOwner2FAFallback(onSuccess) {
       toast('⚠️ حماية 2FA الخادمية غير مفعّلة بعد — شغّل ملف 03_security_hardening.sql ثم عيّن رمز تحقق من الإعدادات');
       return;
     }
-  } catch (_) {}
-  alert('تعذّر التحقق — تأكد من الاتصال وحاول مجدداً');
+  } catch (e) { console.warn('[almatarid]', e);}
+  toast('تعذّر التحقق — تأكد من الاتصال وحاول مجدداً');
 }
 
 function show2faPrompt(onSuccess) {
@@ -1145,17 +1181,17 @@ $('#m-settings').onclick = () => {
       { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر غير متسلسلة)', type: 'password' }], async d => {
       if (d.fam) {
         const nf = d.fam.trim();
-        if (nf.length < 8) return alert('رمز العائلة يجب ألا يقل عن 8 خانات.');
-        if (/^(.)\1+$/.test(nf) || '12345678 87654321 01234567'.includes(nf)) return alert('رمز العائلة ضعيف جداً، يرجى اختيار رمز غير متكرر وغير متسلسل.');
+        if (nf.length < 8) return toast('رمز العائلة يجب ألا يقل عن 8 خانات.');
+        if (/^(.)\1+$/.test(nf) || '12345678 87654321 01234567'.includes(nf)) return toast('رمز العائلة ضعيف جداً، يرجى اختيار رمز غير متكرر وغير متسلسل.');
       }
       if (d.ed) {
         const ne = d.ed.trim();
-        if (ne.length < 8) return alert('رمز المحرر يجب ألا يقل عن 8 خانات.');
-        if (/^(.)\1+$/.test(ne) || '12345678 87654321 01234567'.includes(ne)) return alert('رمز المحرر ضعيف جداً، يرجى اختيار رمز غير متكرر وغير متسلسل.');
+        if (ne.length < 8) return toast('رمز المحرر يجب ألا يقل عن 8 خانات.');
+        if (/^(.)\1+$/.test(ne) || '12345678 87654321 01234567'.includes(ne)) return toast('رمز المحرر ضعيف جداً، يرجى اختيار رمز غير متكرر وغير متسلسل.');
       }
       if (d.pin2fa) {
         const np = d.pin2fa.trim();
-        if (!/^\d{4,8}$/.test(np)) return alert('رمز 2FA يجب أن يكون 4-8 أرقام.');
+        if (!/^\d{4,8}$/.test(np)) return toast('رمز 2FA يجب أن يكون 4-8 أرقام.');
       }
       await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
       await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
@@ -1169,11 +1205,11 @@ $('#m-settings').onclick = () => {
           _owner2faPinSet = true;
           _owner2faToken = null;
         } catch (e) {
-          if (/Could not find the function|PGRST202|404/.test(e.message || '')) return alert('تم حفظ باقي الإعدادات، لكن رمز 2FA لم يُحفظ: ملف الحماية الخادمية (03_security_hardening.sql) لم يُشغَّل بعد — شغّله في سوبابيس أولاً ثم أعد تعيين الرمز.');
-          return alert(e.message || 'تعذّر حفظ رمز 2FA');
+          if (/Could not find the function|PGRST202|404/.test(e.message || '')) return toast('تم حفظ باقي الإعدادات، لكن رمز 2FA لم يُحفظ: ملف الحماية الخادمية (03_security_hardening.sql) لم يُشغَّل بعد — شغّله في سوبابيس أولاً ثم أعد تعيين الرمز.');
+          toast(e.message || 'تعذّر حفظ رمز 2FA'); return;
         }
       }
-      alert('تم الحفظ وتحديث إعدادات المصادقة الثنائية بنجاح');
+      toast('تم الحفظ وتحديث إعدادات المصادقة الثنائية بنجاح');
     });
   });
 };
@@ -1190,8 +1226,8 @@ function hijriToGreg(y, m, d) {
   for (let i = 0; i < 400; i++) { const k = key(gregToHijri(new Date(t))); if (k === want) return new Date(t); t += (k < want ? 86400000 : -86400000); }
   return new Date(t);
 }
-const hijriLong = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d); } catch (_) { return ''; } };
-const hijriShort = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(d); } catch (_) { return ''; } };
+const hijriLong = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d); } catch (e) { console.warn('[almatarid]', e); return ''; } };
+const hijriShort = d => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(d); } catch (e) { console.warn('[almatarid]', e); return ''; } };
 const localDT = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 function showInfo(html) { $('#profile-body').dataset.id = ''; $('#profile-body').innerHTML = html; const p = $('#profile'); if (!p.open) p.showModal(); }
 const evWhen = e => new Date(e.event_date).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' });
@@ -1380,9 +1416,9 @@ function eventForm(e) {
   calSel.addEventListener('change', syncCal); syncCal();
 }
 async function delEvent(id) {
-  const e = S.events.find(x => String(x.id) === id); if (!e || !confirm(`حذف المناسبة «${e.title}»؟`)) return;
+  const e = S.events.find(x => String(x.id) === id); if (!e || !await confirmDlg(`حذف المناسبة «${e.title}»؟`)) return;
   try { await op('secure_delete_event', { event_id: id, passcode: S.code }, () => { S.events = S.events.filter(x => String(x.id) !== id); }); if (!CFG.DEMO) await refresh(); showEvent(); eventsList(); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message); }
 }
 const CORR_FIELDS = [['full_name', 'الاسم الكامل'], ['nickname', 'الكنية'], ['gender', 'الجنس'], ['is_alive', 'الحالة'], ['birth_year_text', 'سنة الميلاد'], ['death_year_text', 'سنة الوفاة'], ['city', 'المدينة'], ['phone', 'الهاتف'], ['achievement_badge', 'الشارة'], ['badge_is_job', 'نوع الشارة'], ['birth_order', 'الترتيب بين الأبناء'], ['wife_mother_id', 'الأم'], ['biography_story', 'النبذة']];
 const corrFieldLabel = k => (CORR_FIELDS.find(([v]) => v === k) || [, k])[1];
@@ -1437,7 +1473,7 @@ function suggestForm(targetId) {
     }
     await op('submit_suggestion', { p_code: S.code || null, p_target_member_id: target, p_request_type: type, p_proposed_data: data },
       () => { (S.demoSug ||= []).push({ id: 's' + Date.now(), target_member_id: target, request_type: type, proposed_data: data, created_at: new Date().toISOString() }); });
-    alert('شكرًا لك، وصلت رسالتك وسيراجعها المسؤول.');
+    toast('شكرًا لك، وصلت رسالتك وسيراجعها المسؤول.');
   });
   const F = n => document.querySelector(`#form-fields [name=${n}]`);
   const row = n => F(n)?.closest('.fl');
@@ -1466,14 +1502,14 @@ async function inboxBadge() {
     const r = await rpc('list_suggestions', { p_passcode: S.code });
     const n = r.success ? (r.items || []).filter(x => (x.status || 'pending') === 'pending').length : 0;
     b.textContent = n; b.hidden = !n; if (d) d.hidden = !n;
-  } catch (_) { b.hidden = true; if (d) d.hidden = true; }
+  } catch (e) { console.warn('[almatarid]', e); b.hidden = true; if (d) d.hidden = true; }
 }
 const REQ_TYPES = { suggestion: '💡 مقترح', inquiry: '❓ استفسار', correction: '✏️ طلب تعديل معلومة', complaint: '🗣️ شكوى' };
 async function inbox() {
   $('.more').open = false;
   let items;
   if (CFG.DEMO) items = S.demoSug ||= [{ id: 's0', target_member_id: S.members[3]?.id, request_type: 'correction', proposed_data: { field: 'birth_year_text', field_label: 'سنة الميلاد', new_value: '1370هـ (الموافق 1950–1951م)', note: 'مثال: تصحيح سنة الميلاد.', from: 'زائر تجريبي' } }];
-  else { const r = await rpc('list_suggestions', { p_passcode: S.code }); if (!r.success) return alert(r.message); items = r.items; }
+  else { const r = await rpc('list_suggestions', { p_passcode: S.code }); if (!r.success) return toast(r.message); items = r.items; }
   const rowHtml = s => {
     const m = S.byId.get(s.target_member_id), pd = s.proposed_data || {};
     const structured = s.request_type === 'correction' && !!pd.field;
@@ -1494,7 +1530,7 @@ async function inbox() {
   showInfo(`<h2>📥 صندوق الاقتراحات والشكاوى — للمالك فقط</h2><p class="sub">الكل: ${items.length} · جديدة: ${pend} · مؤرشفة: ${items.length - pend} — لا يُحذف أي طلب أبدًا</p>${items.map(rowHtml).join('') || '<p class="sub">لا توجد رسائل بعد.</p>'}`);
 }
 async function applySuggestion(id) {
-  if (!confirm('اعتماد هذا التعديل وتطبيقه مباشرة على بيانات العضو؟')) return;
+  if (!await confirmDlg('اعتماد هذا التعديل وتطبيقه مباشرة على بيانات العضو؟')) return;
   try {
     await op('secure_apply_suggestion', { p_suggestion_id: id, p_passcode: S.code }, () => {
       const s = (S.demoSug || []).find(x => String(x.id) === String(id));
@@ -1502,13 +1538,13 @@ async function applySuggestion(id) {
       const dx = (S.demoSug || []).find(x => String(x.id) === String(id)); if (dx) dx.status = 'applied';
     });
     if (!CFG.DEMO) await refresh();
-    await inbox(); inboxBadge(); alert('تم اعتماد التعديل وتطبيقه ✅');
-  } catch (err) { alert(err.message); }
+    await inbox(); inboxBadge(); toast('تم اعتماد التعديل وتطبيقه ✅');
+  } catch (err) { toast(err.message); }
 }
 async function delSuggestion(id) {
-  if (!confirm('أرشفة هذا الطلب؟ سيبقى محفوظًا في الصندوق نهائيًا ولن يُحذف.')) return;
+  if (!await confirmDlg('أرشفة هذا الطلب؟ سيبقى محفوظًا في الصندوق نهائيًا ولن يُحذف.')) return;
   try { await op('secure_reject_suggestion', { p_suggestion_id: id, p_passcode: S.code }, () => { const x = (S.demoSug || []).find(z => String(z.id) === String(id)); if (x) x.status = 'rejected'; }); await inbox(); inboxBadge(); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
   const b = e.target.closest('[data-ee],[data-ed],[data-ea],[data-sg],[data-sd],[data-so],[data-sa]'); if (!b) return;
@@ -2927,7 +2963,7 @@ function open3dView() {
       infoCard.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <b style="color:var(--gold)">${esc(m.full_name)}</b>
-          <button type="button" class="x" onclick="document.getElementById('v3d-info-card').style.display='none'" style="font-size:.7rem;padding:0 4px">✕</button>
+          <button type="button" class="x" data-m04="hide-v3d-info" style="font-size:.7rem;padding:0 4px">✕</button>
         </div>
         <div style="font-size:.75rem;color:#cbd5e1">الجيل ${closest.g} · ${m.city || 'المدينة غير محددة'}</div>
         <div style="margin-top:6px;display:flex;justify-content:flex-end">
@@ -3224,9 +3260,9 @@ function readCodeForm(root) {
   });
 }
 async function clearReadCode(root) {
-  if (!confirm('إلغاء رمز قراءة هذا الفرع؟ من يدخل به سيفقد الوصول فورًا.')) return;
+  if (!await confirmDlg('إلغاء رمز قراءة هذا الفرع؟ من يدخل به سيفقد الوصول فورًا.')) return;
   try { await op('secure_set_branch_read_code', { p_root: root, p_code: null, p_passcode: S.code }, () => { const b = S.branches.find(x => x.root_id === root); if (b) b.reader_set = false; }); if (!CFG.DEMO) await refresh(); branchesList(); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message); }
 }
 const underRoot = (m, root) => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.father_id), i++) if (p.id === root) return true; return false; };
 function branchForm(rootId) {
@@ -3249,9 +3285,9 @@ function branchForm(rootId) {
   });
 }
 async function delBranch(root) {
-  if (!confirm(`إلغاء تفويض مسؤول فرع «${S.byId.get(root)?.full_name || ''}»؟ سيفقد دخوله فورًا.`)) return;
+  if (!await confirmDlg(`إلغاء تفويض مسؤول فرع «${S.byId.get(root)?.full_name || ''}»؟ سيفقد دخوله فورًا.`)) return;
   try { await op('secure_clear_branch_editor', { p_branch_root: root, p_passcode: S.code }, () => { S.branches = S.branches.filter(b => b.root_id !== root); }); if (!CFG.DEMO) await refresh(); branchesList(); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message); }
 }
 $('#profile-body').addEventListener('click', e => {
   const b = e.target.closest('[data-bf],[data-bx],[data-brc],[data-brx]'); if (!b) return;
@@ -3271,14 +3307,14 @@ const TBL = { members: 'فرد', wives: 'زوجة', family_events: 'مناسبة
 const fmtV = (k, v) => v == null ? '—' : (k === 'father_id' || k === 'husband_id') ? (S.byId.get(v)?.full_name || '؟') : typeof v === 'boolean' ? (v ? 'حي' : 'متوفى') : String(v);
 $('#m-log').onclick = async () => {
   $('.more').open = false;
-  if (CFG.DEMO) return alert('سجل التغييرات يعمل مع القاعدة الحقيقية فقط.');
+  if (CFG.DEMO) return toast('سجل التغييرات يعمل مع القاعدة الحقيقية فقط.');
   try {
-    const r = await rpc('list_changes', { p_passcode: S.code, p_limit: 150 }); if (!r.success) return alert(r.message);
+    const r = await rpc('list_changes', { p_passcode: S.code, p_limit: 150 }); if (!r.success) return toast(r.message);
     showInfo(`<h2>📜 سجل التغييرات</h2>${r.items.map(c => {
       const ch = c.action === 'update' ? Object.entries(c.changes || {}).map(([k, v]) => Array.isArray(v) ? `${FLD[k] || k}: ${fmtV(k, v[0])} ← ${fmtV(k, v[1])}` : `${FLD[k] || k}: ${v}`).join('، ') : '';
       return `<div class="evrow"><div><b>${esc(ACT[c.action] || c.action)} ${esc(TBL[c.table] || c.table)}: ${esc(c.label || '')}</b><small>${esc(c.actor)} · ${esc(new Date(c.at).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'short', timeStyle: 'short' }))}${ch ? '<br>' + esc(ch) : ''}</small></div></div>`;
     }).join('') || '<p class="sub">لا توجد تغييرات مسجّلة بعد.</p>'}`);
-  } catch (err) { alert(err.message); }
+  } catch (err) { toast(err.message); }
 };
 $('#m-snap').onclick = () => openSnapshots(); /* ميزة 2: مدير اللقطات بدل اللقطة الفورية */
 
@@ -3286,32 +3322,32 @@ $('#m-snap').onclick = () => openSnapshots(); /* ميزة 2: مدير اللقط
 /* الاستعادة نفسها خادمية (secure_restore_snapshot ← admin_restore_snapshot) وتأخذ لقطة «قبل الاستعادة» تلقائيًا قبل أن تمسح شيئًا. */
 async function openSnapshots() {
   $('.more').open = false;
-  if (CFG.DEMO) return alert('اللقطات تعمل مع القاعدة الحقيقية فقط.');
+  if (CFG.DEMO) return toast('اللقطات تعمل مع القاعدة الحقيقية فقط.');
   let items = null, rpcMissing = false;
   try {
     const r = await rpc('list_snapshots', { p_passcode: S.code });
-    if (!r.success) return alert(r.message);
+    if (!r.success) return toast(r.message);
     items = r.items || [];
-  } catch (_) { rpcMissing = true; }
+  } catch (e) { console.warn('[almatarid]', e); rpcMissing = true; }
   const row = s => `<div class="evrow"><div><b>لقطة رقم ${s.id} — ${esc(s.label || '')}</b><small>${esc(new Date(s.created_at).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' }))} · ${s.members} فردًا · ${s.wives} زوجة · ${s.events} مناسبة</small></div><button class="ghost" data-restore="${s.id}" data-label="${esc(s.label || '')}">↩ استعادة</button></div>`;
   showInfo(`<h2>📸 اللقطات الاحتياطية</h2><p class="sub">تُحفظ آخر 20 لقطة تلقائيًا في القاعدة.</p>
     ${rpcMissing ? '<p class="sub">قائمة اللقطات تحتاج تشغيل SQL التجريبي (02_trial_additions.sql) — يمكنك أخذ لقطة جديدة فقط الآن.</p>' : ''}
     <div class="row"><button id="snap-new">📸 لقطة جديدة الآن</button></div>
     ${items ? (items.map(row).join('') || '<p class="sub">لا توجد لقطات بعد.</p>') : ''}`);
-  $('#snap-new').onclick = async () => { try { const r = await rpc('secure_snapshot', { p_passcode: S.code }); alert(r.success ? `تم حفظ لقطة رقم ${r.id}` : r.message); if (r.success) openSnapshots(); } catch (err) { alert(err.message); } };
+  $('#snap-new').onclick = async () => { try { const r = await rpc('secure_snapshot', { p_passcode: S.code }); toast(r.success ? `تم حفظ لقطة رقم ${r.id}` : r.message); if (r.success) openSnapshots(); } catch (err) { toast(err.message); } };
   document.querySelectorAll('#profile-body [data-restore]').forEach(b => b.onclick = async () => {
     const id = +b.dataset.restore;
-    if (!confirm(`استعادة اللقطة رقم ${id} (${b.dataset.label})؟\nستُلغى كل التغييرات بعدها، وتُحفظ لقطة «قبل الاستعادة» تلقائيًا.`)) return;
-    if (!confirm('تأكيد أخير: متابعة الاستعادة؟')) return;
+    if (!await confirmDlg(`استعادة اللقطة رقم ${id} (${b.dataset.label})؟\nستُلغى كل التغييرات بعدها، وتُحفظ لقطة «قبل الاستعادة» تلقائيًا.`)) return;
+    if (!await confirmDlg('تأكيد أخير: متابعة الاستعادة؟')) return;
     /* A-01: الاستعادة إجراء حساس — لا تتم إلا بعد تحقق خادمي ناجح */
     verifyOwner2FA(async () => {
       try {
         const args = { p_passcode: S.code, p_id: id, p_confirm: 'RESTORE' };
         if (_owner2faServerReady) args.p_2fa_token = _owner2faToken;
         const r = await rpc('secure_restore_snapshot', args);
-        if (!r.success) return alert(r.message || 'تعذرت الاستعادة');
-        alert(r.message || 'تمت الاستعادة'); $('#profile').close(); await refresh();
-      } catch (err) { alert(err.message); }
+        if (!r.success) return toast(r.message || 'تعذرت الاستعادة');
+        toast(r.message || 'تمت الاستعادة'); $('#profile').close(); await refresh();
+      } catch (err) { toast(err.message); }
     });
   });
 }
@@ -3343,10 +3379,10 @@ async function drawCard(data, kind) {
   x.strokeStyle = accent; x.lineWidth = 6; x.strokeRect(36, 36, 1008, 1008);
   x.lineWidth = 2; x.strokeRect(56, 56, 968, 968);
   x.textAlign = 'center';
-  try { await document.fonts.ready; } catch (_) {}
+  try { await document.fonts.ready; } catch (e) { console.warn('[almatarid]', e);}
   const F = (s, w = 800) => `${w} ${s}px Cairo, Tahoma, sans-serif`;
   const fit = (t, s) => { x.font = F(s); while (x.measureText(t).width > 920 && s > 28) { s -= 4; x.font = F(s); } };
-  await new Promise(res => { const im = new Image(); im.onload = () => { try { x.save(); x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.clip(); x.drawImage(im, 448, 113, 184, 184); x.restore(); x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.stroke(); } catch (_) {} res(); }; im.onerror = () => res(); im.src = 'logo.jpg'; });
+  await new Promise(res => { const im = new Image(); im.onload = () => { try { x.save(); x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.clip(); x.drawImage(im, 448, 113, 184, 184); x.restore(); x.strokeStyle = accent; x.lineWidth = 3; x.beginPath(); x.arc(540, 205, 92, 0, Math.PI * 2); x.stroke(); } catch (e) { console.warn('[almatarid]', e);} res(); }; im.onerror = () => res(); im.src = 'logo.jpg'; });
   x.fillStyle = accent; x.font = F(46); x.fillText('أسرة آل مطارد - بنو عمرو', 540, 395);
   x.fillStyle = '#f1f5f9';
   const title = C.title;
@@ -3397,7 +3433,7 @@ $('#m-annpost').onclick = menuClose(() => {
       const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: 'general', p_member_id: null, p_member_name: d.title.trim(), p_gender: 'male', p_body: d.text.trim() });
       if (!r || !r.ok) throw new Error();
       toast('تم نشر الإعلان'); checkAnnouncements(false);
-    } catch (_) { toast('تعذر النشر — تأكد أنك شغّلت القسم 11 من ملف الإعداد'); }
+    } catch (e) { console.warn('[almatarid]', e); toast('تعذر النشر — تأكد أنك شغّلت القسم 11 من ملف الإعداد'); }
   });
 });
 $('#m-cards').onclick = menuClose(() => {
@@ -3419,17 +3455,17 @@ $('#m-member-stories').onclick = menuClose(() => openMemberStoriesModal());
 
 /* ---------- إعلانات البطاقات: منبثقة أول مرة لكل زائر، ثم شريط علوي دوّار حتى تنتهي مدتها (7 أيام) ---------- */
 const ANN_KEY = 'alm_seen_ann';
-const seenAnn = () => { try { return JSON.parse(localStorage.getItem(ANN_KEY) || '[]'); } catch (_) { return []; } };
-function markSeenAnn(id) { if (!id) return; const s = seenAnn(); if (!s.includes(id)) { s.push(id); try { localStorage.setItem(ANN_KEY, JSON.stringify(s.slice(-60))); } catch (_) {} } }
+const seenAnn = () => { try { return JSON.parse(localStorage.getItem(ANN_KEY) || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
+function markSeenAnn(id) { if (!id) return; const s = seenAnn(); if (!s.includes(id)) { s.push(id); try { localStorage.setItem(ANN_KEY, JSON.stringify(s.slice(-60))); } catch (e) { console.warn('[almatarid]', e);} } }
 async function postAnnouncement(kind, member) {
   if (CFG.DEMO || !member) return; /* ann31: أنواع جديدة wedding/general عبر member.body */
   if (!canEdit() && S.role !== 'branch') { toast('البطاقة ظهرت لك فقط — نشرها للزوار يحتاج دخول المالك أو المحرر أو مسؤول الفرع'); return; } /* ann61: الخادم يسمح للفرع داخل فرعه أصلًا */
-  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male', p_body: member.body || null }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } else toast('تعذر نشر البطاقة للزوار'); } catch (_) { toast('تعذر نشر البطاقة للزوار'); }
+  try { const r = await rpc('secure_post_announcement', { p_passcode: S.code, p_kind: kind, p_member_id: member.id ?? null, p_member_name: member.full_name || '', p_gender: member.gender || 'male', p_body: member.body || null }); if (r && r.ok) { markSeenAnn(r.id); checkAnnouncements(false); } else toast('تعذر نشر البطاقة للزوار'); } catch (e) { console.warn('[almatarid]', e); toast('تعذر نشر البطاقة للزوار'); }
 }
 async function checkAnnouncements(popups = true) {
   if (CFG.DEMO || !S.code) return;
   let items = [];
-  try { const r = await rpc('get_announcements', { p_code: S.code }); if (!r.ok) return; items = r.items || []; } catch (_) { return; }
+  try { const r = await rpc('get_announcements', { p_code: S.code }); if (!r.ok) return; items = r.items || []; } catch (e) { console.warn('[almatarid]', e); return; }
   S.ann = items; renderNewsbar();
   if (!popups) return;
   const seen = seenAnn();
@@ -3453,17 +3489,17 @@ async function renderNewsbar() {
       for (const k of [...S.thumbCache.keys()]) if (!items.some(z => z.id === k)) S.thumbCache.delete(k);
       if (!S.thumbCache.has(a.id)) S.thumbCache.set(a.id, (await drawCard({ full_name: a.member_name, gender: a.gender }, a.kind)).toDataURL('image/png'));
       img.src = S.thumbCache.get(a.id);
-    } catch (_) {}
+    } catch (e) { console.warn('[almatarid]', e);}
   }
   bar.querySelectorAll('[data-ann]').forEach(b => b.onclick = () => { const a = items.find(z => z.id === b.dataset.ann); if (!a) return; markSeenAnn(a.id); if (a.kind === 'general') showInfo(`<h2>📢 ${esc(a.member_name)}</h2><div class="story">${esc(a.body || '').replace(/\n/g, '<br>')}</div>`); else openCard({ full_name: a.member_name, gender: a.gender, phone: a.phone, body: a.body || undefined }, a.kind); });
   bar.querySelectorAll('[data-andel]').forEach(x => x.onclick = async e => {
     e.stopPropagation();
-    if (!confirm('حذف هذا الإعلان نهائيًا؟')) return;
+    if (!await confirmDlg('حذف هذا الإعلان نهائيًا؟')) return;
     const id = x.dataset.andel;
     try {
       if (!CFG.DEMO) { const r = await rpc('secure_delete_announcement', { p_passcode: S.code, p_id: id }); if (!r || !r.ok) throw new Error('delete failed'); }
       S.ann = (S.ann || []).filter(z => z.id !== id); renderNewsbar(); toast('تم حذف الإعلان');
-    } catch (_) { toast('تعذر حذف الإعلان'); }
+    } catch (e) { console.warn('[almatarid]', e); toast('تعذر حذف الإعلان'); }
   });
   /* ann84: تعديل الإعلان — العام: العنوان + النص؛ البطاقات: الاسم الظاهر (+ نص الشكر إن وُجد) */
   bar.querySelectorAll('[data-anedit]').forEach(x => x.onclick = e => {
@@ -3484,7 +3520,7 @@ async function renderNewsbar() {
         a.member_name = name; if (body !== undefined) a.body = body || null;
         if (S.thumbCache) S.thumbCache.delete(a.id); /* ann84: إعادة توليد صورة البطاقة بعد تعديل الاسم */
         renderNewsbar(); toast('تم تعديل الإعلان');
-      } catch (_) { toast('تعذر تعديل الإعلان'); }
+      } catch (e) { console.warn('[almatarid]', e); toast('تعذر تعديل الإعلان'); }
     });
   });
   startNbCycle(items.length);
@@ -3499,7 +3535,7 @@ async function fetchPhotos() {
     const before = S.photos.size;
     S.photos = new Map((r.items || []).map(x => [x.member_id, x.photo]));
     if (S.photos.size !== before) render();
-  } catch (_) {}
+  } catch (e) { console.warn('[almatarid]', e);}
 }
 function compressPhoto(file) {
   return new Promise((res, rej) => {
@@ -3523,11 +3559,11 @@ $('#ev-file').addEventListener('change', async e => {
   const ev = S.events.find(x => String(x.id) === String(eid)); if (!ev) return;
   try {
     const data = await compressEventPhoto(file);
-    const cap = prompt('تعليق على الصورة (اختياري):') || '';
+    const cap = await promptDlg('تعليق على الصورة (اختياري):') || '';
     if (CFG.DEMO) (ev._media = ev._media || []).push({ id: 'p' + Date.now(), kind: 'photo', url: data, caption: cap.trim() || null });
     else { const pc = canEdit() ? S.code : evDocCodes.get(String(eid)); const r = await rpc('secure_add_event_media', { p_passcode: pc, p_event_id: eid, p_kind: 'photo', p_url: data, p_caption: cap.trim() }); if (!r.ok) throw new Error(); ev.media_count = (ev.media_count || 0) + 1; }
     toast('تمت إضافة الصورة'); if ($('#evdoc')) loadEvDoc(ev, true);
-  } catch (_) { toast('تعذر رفع الصورة'); }
+  } catch (e) { console.warn('[almatarid]', e); toast('تعذر رفع الصورة'); }
 });
 $('#photo-file').addEventListener('change', async e => {
   const file = e.target.files[0], mid = e.target.dataset.mid; e.target.value = '';
@@ -3541,7 +3577,7 @@ $('#photo-file').addEventListener('change', async e => {
       S.photos.set(mid, data);
     }
     toast('تم حفظ الصورة'); profile(mid); render();
-  } catch (_) { toast('تعذر حفظ الصورة'); }
+  } catch (e) { console.warn('[almatarid]', e); toast('تعذر حفظ الصورة'); }
 });
 async function silentRefresh() {
   if (CFG.DEMO || !S.code || document.hidden || document.querySelector('dialog[open]')) return;
@@ -3561,7 +3597,7 @@ async function silentRefresh() {
     if (sig !== S._sig) { S._sig = sig; index(); render(); showEvent(); applyRole(); renderFeat(); inboxBadge(); }
     checkAnnouncements(true);
     fetchPhotos();
-  } catch (_) {}
+  } catch (e) { console.warn('[almatarid]', e);}
 }
 
 /* ---------- محرر العائلة: زوجات وأبناء الأب في شاشة واحدة، لصق جماعي، حفظ واحد ---------- */
@@ -3597,7 +3633,7 @@ function familyEditor(fid) {
       const k = S.byId.get(inp.dataset.kn); if (!k) continue;
       const name = inp.value.trim(), g = document.querySelector(`[data-kg="${k.id}"]`).value;
       if (!name || (name === k.full_name && g === k.gender)) continue;
-      try { await saveMemberData(k, { full_name: name, gender: g }); done++; } catch (_) { fail++; }
+      try { await saveMemberData(k, { full_name: name, gender: g }); done++; } catch (e) { console.warn('[almatarid]', e); fail++; }
     }
     const mom = $('#fe-mom').value || null;
     let order = kids.length;
@@ -3605,7 +3641,7 @@ function familyEditor(fid) {
       let name = raw.trim(); if (!name) continue;
       let gender = 'male';
       if (/\s(بنت|أنثى)$/.test(name)) { gender = 'female'; name = name.replace(/\s(بنت|أنثى)$/, '').trim(); }
-      try { await op('secure_save_member', { p_id: null, p_full_name: name, p_nickname: null, p_gender: gender, p_father_id: fid, p_wife_mother_id: mom, p_birth_order: ++order, p_phone: null, p_is_alive: true, p_birth_year_text: null, p_death_year_text: null, p_biography_story: null, p_passcode: S.code }, () => {}); done++; } catch (_) { fail++; }
+      try { await op('secure_save_member', { p_id: null, p_full_name: name, p_nickname: null, p_gender: gender, p_father_id: fid, p_wife_mother_id: mom, p_birth_order: ++order, p_phone: null, p_is_alive: true, p_birth_year_text: null, p_death_year_text: null, p_biography_story: null, p_passcode: S.code }, () => {}); done++; } catch (e) { console.warn('[almatarid]', e); fail++; }
     }
     msg.textContent = `تم حفظ ${done} تغيير${fail ? ` — وتعذّر ${fail} (راجعها من ملف كل فرد)` : ''}.`;
     if (!CFG.DEMO) await refresh(); else render();
@@ -3656,7 +3692,7 @@ async function toggleFeat(key) {
   try {
     await op('secure_set_featured_sections', { p_passcode: S.code, p_sections: S.featured }, () => {});
     toast('تم حفظ الأقسام المُبرزة');
-  } catch (_) { toast('تعذر الحفظ — شغّل قسم 10 في SQL أولًا إن لم تفعل'); }
+  } catch (e) { console.warn('[almatarid]', e); toast('تعذر الحفظ — شغّل قسم 10 في SQL أولًا إن لم تفعل'); }
 }
 function initFeatToggles() {
   if (!canEdit()) return;
@@ -3764,17 +3800,17 @@ async function loadFeatureFlags() {
      واحد يؤجل تطبيق الأعلام إلى ما بعد اكتمال التقييم (في الإنتاج load() ينتظر RPC أصلاً فلا أثر) */
   await Promise.resolve();
   let v = null, p = null;
-  if (!CFG.DEMO) { try { const r = await rpc('get_feature_flags', {}); if (r && r.success !== false) { v = r.visible; p = r.pinned; } } catch (_) { /* SQL التجريبي لم يُشغَّل بعد — احتياط localStorage */ } }
-  if (v == null) { try { v = JSON.parse(localStorage.getItem(LS_VIS) || 'null'); p = JSON.parse(localStorage.getItem(LS_PIN) || 'null'); } catch (_) { } }
+  if (!CFG.DEMO) { try { const r = await rpc('get_feature_flags', {}); if (r && r.success !== false) { v = r.visible; p = r.pinned; } } catch (e) { console.warn('[almatarid]', e); /* SQL التجريبي لم يُشغَّل بعد — احتياط localStorage */ } }
+  if (v == null) { try { v = JSON.parse(localStorage.getItem(LS_VIS) || 'null'); p = JSON.parse(localStorage.getItem(LS_PIN) || 'null'); } catch (e) { console.warn('[almatarid]', e); } }
   if (Array.isArray(v)) S.visibleFeatures = v.filter(k => featByKey(k));
   if (Array.isArray(p)) S.pinnedFeatures = p.filter(k => { const f = featByKey(k); return f && f.btn; });
   applyFeatureVisibility(); renderFeat();
 }
 async function saveFeatureFlags() {
-  try { localStorage.setItem(LS_VIS, JSON.stringify(S.visibleFeatures)); localStorage.setItem(LS_PIN, JSON.stringify(S.pinnedFeatures)); } catch (_) { }
+  try { localStorage.setItem(LS_VIS, JSON.stringify(S.visibleFeatures)); localStorage.setItem(LS_PIN, JSON.stringify(S.pinnedFeatures)); } catch (e) { console.warn('[almatarid]', e); }
   if (CFG.DEMO) return;
   try { await op('secure_set_feature_flags', { p_passcode: S.code, p_visible: S.visibleFeatures, p_pinned: S.pinnedFeatures }, () => { }); }
-  catch (_) { toast('حُفظ محلياً فقط — شغّل database/02_trial_additions.sql في Supabase'); }
+  catch (e) { console.warn('[almatarid]', e); toast('حُفظ محلياً فقط — شغّل database/02_trial_additions.sql في Supabase'); }
 }
 /* تطبيق الإخفاء على أزرار القائمة + زرّي الترويسة المرتبطين بميزتين (التنبيهات 21، اللغة 17).
    لا يُظهر زراً أخفاه applyRole حسب الدور أبداً — الإخفاء هنا إضافي فقط. */
@@ -3874,6 +3910,26 @@ function openFeaturesTable() {
    يبقى يعمل حتى لو أُعيد بناء الترويسة أو القائمة لاحقاً، ويستدعي openFeaturesTable مرة واحدة لكل نقرة.
    (الجولة السادسة: الزران كانا ميتين عند عمر رغم سلامة الربط المباشر في الجهاز — تفويض + رفع ?v= ينهيان أي نسخة قديمة محفوظة أو ربط ضائع.) */
 document.addEventListener('click', e => { if (e.target.closest('#btn-features, #m-features')) openFeaturesTable(); });
+
+/* M04: تفويض نقر موحد بدل onclick المضمّن (CSP يمنع المعالجات المضمّنة):
+   أي عنصر يحمل data-m04 يُنفَّذ فعله هنا. القيم: close-profile / close-profile-login /
+   close-profile-focus (data-m04-id) / alt-charts (data-m04-id + data-m04-kind) /
+   profile (data-m04-id) / photo-album (data-m04-id + data-m04-group) /
+   ai-restore (data-m04-url + data-m04-id) / help-board / hide-v3d-info / lineage-card (data-m04-id). */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-m04]'); if (!el) return;
+  const d = el.dataset, k = d.m04;
+  if (k === 'close-profile') $('#profile').close();
+  else if (k === 'close-profile-login') { $('#profile').close(); $('#btn-login').click(); }
+  else if (k === 'close-profile-focus') { $('#profile').close(); focusMember(d.m04Id); }
+  else if (k === 'alt-charts') openAlternativeCharts(d.m04Id, d.m04Kind);
+  else if (k === 'profile') profile(d.m04Id);
+  else if (k === 'photo-album') openMemberPhotoAlbum(d.m04Id, d.m04Group);
+  else if (k === 'ai-restore') openAiPhotoRestoreModal(d.m04Url, d.m04Id);
+  else if (k === 'help-board') openRelativesHelpBoard();
+  else if (k === 'hide-v3d-info') { const c = document.getElementById('v3d-info-card'); if (c) c.style.display = 'none'; }
+  else if (k === 'lineage-card') openLineageCard(d.m04Id);
+});
 
 /* ---------- ann66: الشريط السفلي بالجوال + لوحة الملف ---------- */
 /* نقل قائمة الأقسام نفسها (details.more) بين الترويسة والشريط السفلي حسب العرض —
@@ -4034,7 +4090,7 @@ function openLineageCard(targetId = null) {
       try {
         await navigator.clipboard.writeText(waShareText);
         toast('تم نسخ بطاقة النسب بنجاح!');
-      } catch (_) {
+      } catch (e) { console.warn('[almatarid]', e);
         toast('يرجى تحديد النص ونسخه يدويًا');
       }
     };
@@ -4057,7 +4113,7 @@ function getEventRsvps(evId) {
   try {
     const raw = localStorage.getItem(`almatarid_rsvp_${evId}`);
     if (raw) return JSON.parse(raw);
-  } catch (_) {}
+  } catch (e) { console.warn('[almatarid]', e);}
   return [];
 }
 
@@ -4068,7 +4124,7 @@ function saveEventRsvp(evId, entry) {
   else list.push(entry);
   try {
     localStorage.setItem(`almatarid_rsvp_${evId}`, JSON.stringify(list));
-  } catch (_) {}
+  } catch (e) { console.warn('[almatarid]', e);}
   return list;
 }
 
@@ -4274,7 +4330,7 @@ function getArchiveItems() {
   try {
     const raw = localStorage.getItem('almatarid_archive_items');
     if (raw) return JSON.parse(raw);
-  } catch (_) {}
+  } catch (e) { console.warn('[almatarid]', e);}
   return [];
 }
 
@@ -4454,13 +4510,13 @@ function openFamilyArchive() {
   // إضافة وثيقة حقيقية (مالك/محرر فقط) — بلا عناصر افتراضية
   const addBtn = $('#btn-add-archive');
   if (addBtn) {
-    addBtn.onclick = () => {
-      const title = prompt('عنوان الوثيقة أو الصورة:');
+    addBtn.onclick = async () => {
+      const title = await promptDlg('عنوان الوثيقة أو الصورة:');
       if (!title) return;
-      const type = prompt('النوع: (doc=صك/مخطوط، photo=صورة، letter=رسالة)') || 'doc';
-      const yearH = parseInt(prompt('السنة الهجرية (مثال: 1342):') || '', 10);
-      const desc = prompt('وصف موجز للوثيقة:') || '';
-      const source = prompt('المصدر أو الحافظ (مثال: محفوظة لدى فلان):') || '';
+      const type = await promptDlg('النوع: (doc=صك/مخطوط، photo=صورة، letter=رسالة)') || 'doc';
+      const yearH = parseInt(await promptDlg('السنة الهجرية (مثال: 1342):') || '', 10);
+      const desc = await promptDlg('وصف موجز للوثيقة:') || '';
+      const source = await promptDlg('المصدر أو الحافظ (مثال: محفوظة لدى فلان):') || '';
       const newItem = {
         id: 'arch_user_' + Date.now(),
         title,
@@ -4482,7 +4538,7 @@ function openFamilyArchive() {
         const stored = raw ? JSON.parse(raw) : [];
         stored.unshift(newItem);
         localStorage.setItem('almatarid_archive_items', JSON.stringify(stored));
-      } catch (_) { /* تجاهل خطأ التخزين المحلي */ }
+      } catch (e) { console.warn('[almatarid]', e); /* تجاهل خطأ التخزين المحلي */ }
       toast('✅ أُضيفت الوثيقة إلى الأرشيف');
       openFamilyArchive();
     };
@@ -4516,7 +4572,7 @@ function initVoiceSearch() {
     btnVoice.setAttribute('title', 'تحدث للبحث بالاسم');
     qInp.placeholder = 'ابحث بالاسم أو الكنية';
     if (voiceRecognizer) {
-      try { voiceRecognizer.stop(); } catch (_) {}
+      try { voiceRecognizer.stop(); } catch (e) { console.warn('[almatarid]', e);}
     }
   }
 
@@ -5647,7 +5703,7 @@ function openWaAnnouncements(activeTplKey = 'meeting') {
         try {
           await navigator.clipboard.writeText(msg);
           toast('تم نسخ الرسالة بنجاح!');
-        } catch (_) {
+        } catch (e) { console.warn('[almatarid]', e);
           toast('يرجى تحديد النص ونسخه يدوياً');
         }
       };
@@ -5748,7 +5804,7 @@ function showWomenDirectory() {
             ${w.city ? `<div>📍 <b>المدينة:</b> ${esc(w.city)}</div>` : ''}
           </div>
           <div style="margin-top:auto;padding-top:6px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center">
-            <button type="button" class="btn ghost" style="padding:4px 8px;font-size:.74rem;color:#f472b6" onclick="openLineageCard('${w.id}')">
+            <button type="button" class="btn ghost" style="padding:4px 8px;font-size:.74rem;color:#f472b6" data-m04="lineage-card" data-m04-id="${w.id}">
               📇 بطاقة النسب
             </button>
             <span style="font-size:.72rem;color:var(--mut)">${w.is_alive === false ? 'رحمها الله' : 'حفظها الله'}</span>
@@ -5923,7 +5979,7 @@ function getAutoBackups() {
   try {
     const raw = localStorage.getItem('almatarid_backups_list');
     if (raw) return JSON.parse(raw);
-  } catch (_) {}
+  } catch (e) { console.warn('[almatarid]', e);}
   return [];
 }
 
@@ -6461,7 +6517,7 @@ function openTreeCompletionHints() {
                 <button type="button" class="btn" data-hint-act="${i}" style="background:var(--gold);color:#1c1204;font-size:.75rem;padding:5px 12px;border-radius:6px;font-weight:700">
                   ${esc(h.actLabel)}
                 </button>
-                <button type="button" class="x" onclick="$('#profile').close();focusMember('${h.member.id}')" style="color:var(--mut);font-size:.72rem">
+                <button type="button" class="x" data-m04="close-profile-focus" data-m04-id="${h.member.id}" style="color:var(--mut);font-size:.72rem">
                   عرض في الشجرة ←
                 </button>
               </div>
@@ -6665,8 +6721,8 @@ function openCsvImportModal() {
     };
   }
 
-  $('#btn-paste-csv').onclick = () => {
-    const txt = prompt('الصق نص ملف CSV هنا:');
+  $('#btn-paste-csv').onclick = async () => {
+    const txt = await promptDlg('الصق نص ملف CSV هنا:');
     if (txt) processText(txt);
   };
 
@@ -6753,7 +6809,7 @@ function renderFanChartSvg(m) {
     const px = cx - Math.cos(angle) * (ringRadius - 30);
     const py = cy - Math.sin(angle) * (ringRadius - 30);
 
-    svg += `<g style="cursor:pointer" onclick="openAlternativeCharts('${anc.id}', 'fan')">`;
+    svg += `<g style="cursor:pointer" data-m04="alt-charts" data-m04-id="${anc.id}" data-m04-kind="fan">`;
     svg += `<circle cx="${px}" cy="${py}" r="26" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>`;
     svg += `<text x="${px}" y="${py + 3}" fill="#fff" font-size="9" font-weight="700" text-anchor="middle">${esc(anc.first || anc.full_name.split(' ')[0])}</text>`;
     svg += `<text x="${px}" y="${py + 15}" fill="#38bdf8" font-size="8" text-anchor="middle">الجيل ${gen(anc)}</text>`;
@@ -6789,7 +6845,7 @@ function renderHourglassSvg(m) {
   ancestors.forEach((anc, i) => {
     const y = 140 - i * 50;
     const x = cx + (i % 2 === 0 ? -60 : 60) * (i + 1) * 0.6;
-    svg += `<g style="cursor:pointer" onclick="openAlternativeCharts('${anc.id}', 'hourglass')">`;
+    svg += `<g style="cursor:pointer" data-m04="alt-charts" data-m04-id="${anc.id}" data-m04-kind="hourglass">`;
     svg += `<rect x="${x - 45}" y="${y - 14}" width="90" height="28" rx="6" fill="#1e293b" stroke="#f59e0b"/>`;
     svg += `<text x="${x}" y="${y + 4}" fill="#fff" font-size="9" font-weight="700" text-anchor="middle">👴 ${esc(anc.first || anc.full_name.split(' ')[0])}</text>`;
     svg += `</g>`;
@@ -6802,7 +6858,7 @@ function renderHourglassSvg(m) {
     const spacing = 460 / (count + 1);
     const x = 90 + spacing * (i + 1);
     const y = 340;
-    svg += `<g style="cursor:pointer" onclick="openAlternativeCharts('${kid.id}', 'hourglass')">`;
+    svg += `<g style="cursor:pointer" data-m04="alt-charts" data-m04-id="${kid.id}" data-m04-kind="hourglass">`;
     svg += `<rect x="${x - 40}" y="${y - 14}" width="80" height="28" rx="6" fill="#0f172a" stroke="#38bdf8"/>`;
     svg += `<text x="${x}" y="${y + 4}" fill="#fff" font-size="9" font-weight="700" text-anchor="middle">${kid.gender === 'female' ? '👧' : '👦'} ${esc(kid.first || kid.full_name.split(' ')[0])}</text>`;
     svg += `</g>`;
@@ -6819,7 +6875,7 @@ function renderDescendantsTreeHtml(m) {
     const children = S.kids.get(person.id) || [];
     return `
       <div style="margin-right:${depth ? '20px' : '0'};padding-right:${depth ? '12px' : '0'};border-right:${depth ? '2px solid rgba(245,158,11,.4)' : 'none'};margin-top:6px">
-        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer" onclick="openAlternativeCharts('${person.id}', 'descendants')">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer" data-m04="alt-charts" data-m04-id="${person.id}" data-m04-kind="descendants">
           <span style="font-size:1.1rem">${person.gender === 'female' ? '🌸' : '🌿'}</span>
           <b style="color:${depth === 0 ? 'var(--gold)' : '#fff'};font-size:.88rem">${esc(person.full_name)}</b>
           <span class="bd" style="font-size:.68rem">الجيل ${gen(person)}</span>
@@ -7756,7 +7812,7 @@ function openSetMeModal() {
   if (saveBtn) {
     saveBtn.onclick = () => {
       const mid = sel?.value;
-      if (!mid) return alert('يرجى اختيار اسمك من القائمة');
+      if (!mid) return toast('يرجى اختيار اسمك من القائمة');
       localStorage.setItem('almatarid_me_id', mid);
       $('#profile').close();
       centerOnMember(mid);
@@ -8106,7 +8162,7 @@ if (mBranchTrees) mBranchTrees.onclick = menuClose(() => openBranchTreesModal())
    ============================================================ */
 function openSiblingReorderModal(selectedParentId) {
   if (!canEdit() && S.role !== 'branch') {
-    return alert('هذه الميزة متاحة للمالك والمحرر ومسؤول الفرع فقط.');
+    toast('هذه الميزة متاحة للمالك والمحرر ومسؤول الفرع فقط.'); return;
   }
 
   // Find eligible parents who have 2+ children
@@ -8174,7 +8230,7 @@ function openSiblingReorderModal(selectedParentId) {
         <button type="button" id="dnd-save-order" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:8px 18px;font-size:.88rem">
           💾 حفظ الترتيب الجديد للشجرة
         </button>
-        <button type="button" onclick="$('#profile').close();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
+        <button type="button" data-m04="close-profile" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
           إلغاء
         </button>
       </div>
@@ -8896,7 +8952,7 @@ function getBranchAlerts() {
   const userBranchRootId = me ? (typeof getAncestryChain === 'function' ? getAncestryChain(me)[1]?.id : null) : (S.branch?.root_id || null);
 
   let readAlertIds = new Set();
-  try { readAlertIds = new Set(JSON.parse(localStorage.getItem('almatarid_read_alerts') || '[]')); } catch (_) { readAlertIds = new Set(); }
+  try { readAlertIds = new Set(JSON.parse(localStorage.getItem('almatarid_read_alerts') || '[]')); } catch (e) { console.warn('[almatarid]', e); readAlertIds = new Set(); }
   const alerts = [];
 
   const recentKids = S.members.filter(m => gen(m) >= 5 || !m.father_id).slice(-6);
@@ -8996,7 +9052,7 @@ function openBranchAlertsModal() {
           <input type="checkbox" id="alerts-browser-push" ${typeof Notification !== 'undefined' && Notification?.permission === 'granted' ? 'checked' : ''}>
           <span>تفعيل إشعارات المتصفح الفورية 🔔</span>
         </label>
-        <button type="button" onclick="$('#profile').close();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">إغلاق</button>
+        <button type="button" data-m04="close-profile" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">إغلاق</button>
       </div>
     </div>
   `;
@@ -9031,7 +9087,7 @@ function openBranchAlertsModal() {
           new Notification('شجرة آل مطارد', { body: 'تم تفعيل تنبيهات الفرع بنجاح!' });
         } else {
           pushChk.checked = false;
-          alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
+          toast('يرجى السماح بالإشعارات من إعدادات المتصفح');
         }
       }
     };
@@ -9066,9 +9122,12 @@ function urlBase64ToUint8Array(base64String) {
 async function getPushSubscription() {
   try {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
-    const reg = await navigator.serviceWorker.ready;
+    /* E-01: مهلة 3 ثوانٍ — serviceWorker.ready لا يرفض أبداً إن لم يُسجَّل العامل
+       (مثلاً على 127.0.0.1 حيث pwa.js لا يسجّله)، فبلا مهلة تبقى النافذة معلقة للأبد */
+    const reg = await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 3000))]);
+    if (!reg) return null;
     return await reg.pushManager.getSubscription();
-  } catch (_) { return null; }
+  } catch (e) { console.warn('[almatarid]', e); return null; }
 }
 async function openWebPushModal() {
   const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
@@ -9092,7 +9151,7 @@ async function openWebPushModal() {
       if (perm !== 'granted') { toast('لم يُمنح إذن الإشعارات من المتصفح'); return; }
       const reg = await navigator.serviceWorker.ready;
       const subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
-      const meId = (() => { try { return localStorage.getItem('almatarid_me_id'); } catch (_) { return null; } })();
+      const meId = (() => { try { return localStorage.getItem('almatarid_me_id'); } catch (e) { console.warn('[almatarid]', e); return null; } })();
       const meName = meId && S.byId.get(meId) ? S.byId.get(meId).full_name : null;
       const r = await rpc('secure_save_push_subscription', { p_passcode: S.code, p_subscription: subscription.toJSON(), p_name: meName });
       if (!r || r.success === false) throw new Error((r && r.message) || 'تعذّر حفظ الاشتراك');
@@ -9106,11 +9165,11 @@ async function openWebPushModal() {
       const s = await getPushSubscription();
       if (s) {
         await s.unsubscribe();
-        try { await rpc('secure_delete_push_subscription', { p_passcode: S.code, p_endpoint: s.endpoint }); } catch (_) { /* يبقى السجل ويُحذف عند أول إرسال فاشل */ }
+        try { await rpc('secure_delete_push_subscription', { p_passcode: S.code, p_endpoint: s.endpoint }); } catch (e) { console.warn('[almatarid]', e); /* يبقى السجل ويُحذف عند أول إرسال فاشل */ }
       }
       toast('تم إلغاء اشتراك الإشعارات');
       $('#profile').close();
-    } catch (_) { toast('تعذّر إلغاء الاشتراك'); }
+    } catch (e) { console.warn('[almatarid]', e); toast('تعذّر إلغاء الاشتراك'); }
   };
 }
 const mWebPush = $('#m-web-push');
@@ -9200,7 +9259,7 @@ function openSurnameOriginPage() {
       try {
         await navigator.clipboard.writeText(textToShare);
         toast('✅ تم نسخ نبذة أصل اللقب بنجاح!');
-      } catch (_) {
+      } catch (e) { console.warn('[almatarid]', e);
         toast('تم النسخ');
       }
     };
@@ -9218,7 +9277,7 @@ if (mSurnameOrigin) {
 function getHelpRequests() {
   const stored = localStorage.getItem('almatarid_help_requests');
   if (stored) {
-    try { return JSON.parse(stored); } catch (_) {}
+    try { return JSON.parse(stored); } catch (e) { console.warn('[almatarid]', e);}
   }
   return [
     {
@@ -9327,10 +9386,10 @@ function openRelativesHelpBoard() {
   });
 
   document.querySelectorAll('[data-help-respond]').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const req = requests.find(r => r.id === btn.dataset.helpRespond);
       if (!req) return;
-      const msg = prompt(`تفضل بكتابة ردك أو إرسال رابط الصورة/الوثيقة للطلب: «${req.title}»:\n(يمكنك أيضاً التواصل مع المشرف عبر واتساب)`);
+      const msg = await promptDlg(`تفضل بكتابة ردك أو إرسال رابط الصورة/الوثيقة للطلب: «${req.title}»:\n(يمكنك أيضاً التواصل مع المشرف عبر واتساب)`);
       if (msg) {
         toast('🙏 جزاك الله خيراً! تم تسجيل مساهمتك وإشعار المشرفين.');
       }
@@ -9383,7 +9442,7 @@ function openCreateHelpRequestForm() {
           <button type="button" id="hform-submit-btn" class="fstats-btn" style="background:var(--gold);color:#0f172a;font-weight:700;padding:8px 18px;font-size:.88rem">
             نشر الطلب على اللوحة ←
           </button>
-          <button type="button" onclick="openRelativesHelpBoard();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" data-m04="help-board" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إلغاء والرجوع
           </button>
         </div>
@@ -9403,7 +9462,7 @@ function openCreateHelpRequestForm() {
       const requester = $('#hform-requester')?.value.trim();
 
       if (!title || !desc || !requester) {
-        return alert('يرجى ملء جميع الحقول المطلوبة');
+        toast('يرجى ملء جميع الحقول المطلوبة'); return;
       }
 
       const list = getHelpRequests();
@@ -9546,10 +9605,10 @@ function openMemberPhotoAlbum(memberId, groupBy = 'event') {
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;border-top:1px solid var(--line);padding-top:10px">
-        <button type="button" onclick="profile('${m.id}')" class="fstats-btn" style="padding:6px 14px;font-size:.8rem">
+        <button type="button" data-m04="profile" data-m04-id="${m.id}" class="fstats-btn" style="padding:6px 14px;font-size:.8rem">
           ← رجوع لملف العضو
         </button>
-        <button type="button" onclick="$('#profile').close();" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
+        <button type="button" data-m04="close-profile" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
           إغلاق
         </button>
       </div>
@@ -9572,8 +9631,8 @@ function openMemberPhotoAlbum(memberId, groupBy = 'event') {
           <img src="${esc(url)}" style="max-width:100%;max-height:65vh;border-radius:10px;border:1.5px solid var(--gold);display:block;margin:0 auto 10px auto">
           <b style="color:var(--txt);font-size:.9rem">${esc(cap)}</b>
           <div style="margin-top:12px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
-            <button type="button" class="fstats-btn" onclick="openMemberPhotoAlbum('${memberId}', '${groupBy}')">← رجوع للألبوم</button>
-            <button type="button" class="fstats-btn" onclick="openAiPhotoRestoreModal('${esc(url)}', '${memberId}')" style="background:rgba(245,158,11,.2);color:var(--gold);border-color:var(--gold)">🎨 ترميم وتلوين بالذكاء الاصطناعي</button>
+            <button type="button" class="fstats-btn" data-m04="photo-album" data-m04-id="${memberId}" data-m04-group="${groupBy}">← رجوع للألبوم</button>
+            <button type="button" class="fstats-btn" data-m04="ai-restore" data-m04-url="${esc(url)}" data-m04-id="${memberId}" style="background:rgba(245,158,11,.2);color:var(--gold);border-color:var(--gold)">🎨 ترميم وتلوين بالذكاء الاصطناعي</button>
             <a href="${esc(url)}" download="almatarid-photo.jpg" class="fstats-btn" style="text-decoration:none;background:var(--gold);color:#0f172a;font-weight:700">💾 تحميل الصورة</a>
           </div>
         </div>
@@ -9583,10 +9642,10 @@ function openMemberPhotoAlbum(memberId, groupBy = 'event') {
 
   const uploadInput = $('#album-upload-input');
   if (uploadInput) {
-    uploadInput.onchange = (e) => {
+    uploadInput.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const cap = prompt('اكتب تعليقاً على الصورة (مثال: حفل تخرج / مناسبة العيد):') || 'صورة عائلية';
+      const cap = await promptDlg('اكتب تعليقاً على الصورة (مثال: حفل تخرج / مناسبة العيد):') || 'صورة عائلية';
       const reader = new FileReader();
       reader.onload = (ev) => {
         const localAlbum = JSON.parse(localStorage.getItem('almatarid_album_' + m.id) || '[]');
@@ -9623,7 +9682,7 @@ function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
         <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
           <span>🎨</span> ترميم وتلوين الصور القديمة بالذكاء الاصطناعي
         </h2>
-        <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
       </div>
 
       <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -9684,7 +9743,7 @@ function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
             🖼️ حفظ في ألبوم العضو
           </button>
         </div>
-        <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+        <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
           إغلاق
         </button>
       </div>
@@ -10002,10 +10061,10 @@ function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
   }
 
   if (saveAlbumBtn) {
-    saveAlbumBtn.onclick = () => {
+    saveAlbumBtn.onclick = async () => {
       if (!activeMemberId) return;
       const m = S.byId.get(activeMemberId);
-      const cap = prompt('اكتب تعليقاً على الصورة المرممة:', `صورة تاريخية مرممة - ${m ? m.full_name : ''}`) || 'صورة تاريخية مرممة';
+      const cap = await promptDlg('اكتب تعليقاً على الصورة المرممة:', `صورة تاريخية مرممة - ${m ? m.full_name : ''}`) || 'صورة تاريخية مرممة';
       const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       const localAlbum = JSON.parse(localStorage.getItem('almatarid_album_' + activeMemberId) || '[]');
       localAlbum.push({
@@ -10033,7 +10092,7 @@ function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
         <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
           <span>🔍</span> تحليل الصور القديمة واستنتاج تاريخها ومكانها بالذكاء الاصطناعي
         </h2>
-        <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+        <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
       </div>
 
       <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -10101,7 +10160,7 @@ function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
         <button type="button" class="fstats-btn" id="btn-copy-analysis" style="display:none;background:var(--gold);color:#0f172a;font-weight:700">
           📋 نسخ تقرير التحليل
         </button>
-        <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+        <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
           إغلاق
         </button>
       </div>
@@ -10205,7 +10264,7 @@ function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
         matchedEl.innerHTML = `
           <div>من أعلام وكبار العائلة المعاصرين لهذه الحقبة:</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-            ${elders.map(e => `<button type="button" class="x" style="color:var(--gold);font-weight:700" onclick="profile('${e.id}')">${esc(e.full_name)}</button>`).join(' · ')}
+            ${elders.map(e => `<button type="button" class="x" style="color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${e.id}">${esc(e.full_name)}</button>`).join(' · ')}
           </div>
         `;
       } else {
@@ -10410,7 +10469,7 @@ function openPhotoExifMapModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📍</span> قراءة بيانات الصور وعرض مكانها على الخريطة (GPS & EXIF)
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -10487,14 +10546,14 @@ function openPhotoExifMapModal() {
                 <a href="https://www.google.com/maps?q=${activePhoto.lat},${activePhoto.lng}" target="_blank" class="fstats-btn" style="text-decoration:none;font-size:.72rem;padding:4px 8px;background:rgba(245,158,11,.15);color:var(--gold);border-color:var(--gold);white-space:nowrap">
                   🗺️ خرائط Google ↗
                 </a>` : ''}
-                ${activePhoto.memberId ? `<button type="button" class="fstats-btn" style="font-size:.72rem;padding:4px 8px" onclick="profile('${activePhoto.memberId}')">ملف العضو</button>` : ''}
+                ${activePhoto.memberId ? `<button type="button" class="fstats-btn" style="font-size:.72rem;padding:4px 8px" data-m04="profile" data-m04-id="${activePhoto.memberId}">ملف العضو</button>` : ''}
               </div>
             </div>
           ` : ''}
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -10583,7 +10642,7 @@ function openTranscribeModal(initialTab = 'docs') {
   /* بلا نسخ افتراضية مختلقة — النسخ من إدخال المستخدم فقط (يرفع وثيقته ويكتب نسخها بنفسه) */
 
   // Retrieve any user added transcripts from localStorage
-  const readTranscripts = () => { try { return JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]'); } catch (_) { return []; } };
+  const readTranscripts = () => { try { return JSON.parse(localStorage.getItem('almatarid_transcripts') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const savedTranscripts = readTranscripts();
   const allTranscripts = [...savedTranscripts];
 
@@ -10609,7 +10668,7 @@ function openTranscribeModal(initialTab = 'docs') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📜</span> نسخ الوثائق الخطية والتسجيلات إلى نص قابل للبحث
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -10708,7 +10767,7 @@ function openTranscribeModal(initialTab = 'docs') {
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -10741,7 +10800,7 @@ function openTranscribeModal(initialTab = 'docs') {
         renderModal();
         // إعادة التركيز بعد إعادة الرسم حتى لا ينقطع الكتابة
         const inp2 = $('#transcribe-search-inp');
-        if (inp2) { inp2.focus(); try { inp2.setSelectionRange(caret, caret); } catch (_) {} }
+        if (inp2) { inp2.focus(); try { inp2.setSelectionRange(caret, caret); } catch (e) { console.warn('[almatarid]', e);} }
       };
     }
 
@@ -10823,7 +10882,7 @@ function openTranscribeModal(initialTab = 'docs') {
           const stored = readTranscripts();
           stored.unshift(newDoc);
           localStorage.setItem('almatarid_transcripts', JSON.stringify(stored));
-        } catch (_) { /* تجاهل خطأ التخزين المحلي */ }
+        } catch (e) { console.warn('[almatarid]', e); /* تجاهل خطأ التخزين المحلي */ }
         allTranscripts.unshift(newDoc);
         activeItem = newDoc;
         toast('📄 أُضيفت الوثيقة — اكتب نسخها في حقل التحرير ثم احفظها');
@@ -10839,7 +10898,7 @@ function openTranscribeModal(initialTab = 'docs') {
 function openCemeteriesModal() {
   /* بلا مقابر افتراضية — المواقع الحقيقية يضيفها المالك/المحرر فقط */
 
-  const readCemeteries = () => { try { return JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]'); } catch (_) { return []; } };
+  const readCemeteries = () => { try { return JSON.parse(localStorage.getItem('almatarid_cemeteries') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localCustom = readCemeteries();
   const allCemeteries = [...localCustom];
 
@@ -10869,7 +10928,7 @@ function openCemeteriesModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🌿</span> قبور ومدافن العائلة (المواقع فقط)
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <!-- Prophetic Visitation Supplication -->
@@ -10937,7 +10996,7 @@ function openCemeteriesModal() {
                     <div style="font-size:.74rem;color:var(--mut);margin-bottom:4px">من الراقدين هنا من أفراد العائلة (رحمهم الله):</div>
                     <div style="display:flex;flex-wrap:wrap;gap:6px">
                       ${relatedDeceased.map(m => `
-                        <button type="button" class="x" style="font-size:.76rem;color:var(--gold);font-weight:700;background:rgba(245,158,11,.08);padding:2px 8px;border-radius:4px" onclick="profile('${m.id}')">
+                        <button type="button" class="x" style="font-size:.76rem;color:var(--gold);font-weight:700;background:rgba(245,158,11,.08);padding:2px 8px;border-radius:4px" data-m04="profile" data-m04-id="${m.id}">
                           🤲 ${esc(m.full_name)}
                         </button>
                       `).join('')}
@@ -10957,7 +11016,7 @@ function openCemeteriesModal() {
           <span style="font-size:.76rem;color:var(--mut)">
             * يُعرض فقط الموقع الجغرافي للمقبرة للتسهيل على الراغبين بالزيارة الشرعية والدعاء للأموات.
           </span>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -10984,22 +11043,22 @@ function openCemeteriesModal() {
         const caret = e.target.selectionStart;
         renderModal();
         const inp2 = $('#cem-search-inp');
-        if (inp2) { inp2.focus(); try { inp2.setSelectionRange(caret, caret); } catch (_) {} }
+        if (inp2) { inp2.focus(); try { inp2.setSelectionRange(caret, caret); } catch (e) { console.warn('[almatarid]', e);} }
       };
     }
 
     // Add cemetery binding
     const addBtn = $('#btn-add-cemetery');
     if (addBtn) {
-      addBtn.onclick = () => {
-        const name = prompt('اسم المقبرة:');
+      addBtn.onclick = async () => {
+        const name = await promptDlg('اسم المقبرة:');
         if (!name) return;
-        const city = prompt('المدينة (مثال: النماص، الرياض، جدة):');
+        const city = await promptDlg('المدينة (مثال: النماص، الرياض، جدة):');
         if (!city) { toast('⚠️ المدينة مطلوبة — أعد المحاولة واكتب المدينة'); return; }
-        const desc = prompt('وصف المقبرة أو معلم قريب:') || '';
+        const desc = await promptDlg('وصف المقبرة أو معلم قريب:') || '';
         // الإحداثيات اختيارية — فارغة تعني بلا إحداثيات (لا افتراض لأي مدينة)
-        const latStr = prompt('خط العرض (Latitude) — اتركه فارغاً إن لم تعرفه:') || '';
-        const lngStr = prompt('خط الطول (Longitude) — اتركه فارغاً إن لم تعرفه:') || '';
+        const latStr = await promptDlg('خط العرض (Latitude) — اتركه فارغاً إن لم تعرفه:') || '';
+        const lngStr = await promptDlg('خط الطول (Longitude) — اتركه فارغاً إن لم تعرفه:') || '';
 
         const lat = latStr.trim() ? parseFloat(latStr) : null;
         const lng = lngStr.trim() ? parseFloat(lngStr) : null;
@@ -11018,7 +11077,7 @@ function openCemeteriesModal() {
           const stored = readCemeteries();
           stored.push(newCem);
           localStorage.setItem('almatarid_cemeteries', JSON.stringify(stored));
-        } catch (_) { /* تجاهل خطأ التخزين المحلي */ }
+        } catch (e) { console.warn('[almatarid]', e); /* تجاهل خطأ التخزين المحلي */ }
         allCemeteries.unshift(newCem);
         toast('✅ تمت إضافة المقبرة بنجاح!');
         renderModal();
@@ -11197,7 +11256,7 @@ function openQrShareModal(targetMemberId = null) {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📱</span> مشاركة الشجرة أو بطاقة العضو برمز QR مع كود
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11283,7 +11342,7 @@ function openQrShareModal(targetMemberId = null) {
               📋 نسخ الرابط والكود
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -11403,7 +11462,7 @@ function checkPersonalInvitation() {
           يتشرف ${esc(host)} بدعوتكم الكريمة للاطلاع على <b>${esc(ev)}</b> في موقع شجرة عائلة آل مطارد المباركة.
         </p>
         <div style="display:flex;justify-content:center;gap:8px;margin-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 16px;font-size:.85rem">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 16px;font-size:.85rem">
             تصفح الشجرة الآن 🌳
           </button>
         </div>
@@ -11464,7 +11523,7 @@ function openPersonalInvitesModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>💌</span> روابط دعوة شخصية تحمل اسم المدعو
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11547,7 +11606,7 @@ function openPersonalInvitesModal() {
               💾 حفظ في سجل الدعوات
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -11613,7 +11672,7 @@ function openPersonalInvitesModal() {
 function openFamilyNewsModal(filterCat = 'all') {
   /* بلا منشورات افتراضية مختلقة — الأخبار الحقيقية ينشرها أفراد العائلة فقط */
 
-  const readPosts = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]'); } catch (_) { return []; } };
+  const readPosts = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_posts') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localPosts = readPosts();
   const allPosts = [...localPosts];
 
@@ -11628,7 +11687,7 @@ function openFamilyNewsModal(filterCat = 'all') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📰</span> لوحة أخبار العائلة ومنشورات الأقارب
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11721,7 +11780,7 @@ function openFamilyNewsModal(filterCat = 'all') {
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -11760,7 +11819,7 @@ function openFamilyNewsModal(filterCat = 'all') {
 
     // Comment sending
     document.querySelectorAll('[data-comm-send]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const pid = btn.dataset.commSend;
         const inp = document.querySelector(`[data-comm-inp="${pid}"]`);
         if (!inp || !inp.value.trim()) return;
@@ -11768,7 +11827,7 @@ function openFamilyNewsModal(filterCat = 'all') {
         const post = allPosts.find(p => p.id === pid);
         if (post) {
           if (!post.comments) post.comments = [];
-          const name = prompt('اكتب اسمك ليظهر مع التهنئة:', S.role === 'visitor' ? 'ابن العم' : 'قريب من العائلة') || 'أحد أفراد العائلة';
+          const name = await promptDlg('اكتب اسمك ليظهر مع التهنئة:', S.role === 'visitor' ? 'ابن العم' : 'قريب من العائلة') || 'أحد أفراد العائلة';
           post.comments.push({ name, text });
           const stored = readPosts();
           const idx = stored.findIndex(s => s.id === pid);
@@ -11795,13 +11854,13 @@ function openFamilyNewsModal(filterCat = 'all') {
     // Add new post
     const addBtn = $('#btn-add-fnews');
     if (addBtn) {
-      addBtn.onclick = () => {
-        const title = prompt('عنوان الخبر أو المناسبة (مثال: تخرج فلان / زواج فلان):');
+      addBtn.onclick = async () => {
+        const title = await promptDlg('عنوان الخبر أو المناسبة (مثال: تخرج فلان / زواج فلان):');
         if (!title) return;
-        const author = prompt('اسم الكاتب أو صاحب المنشور:') || 'أحد أفراد الأسرة';
-        const body = prompt('تفاصيل الخبر أو التهنئة:') || '';
-        const catKey = prompt('التصنيف: (grad=تخرج، baby=مولود، wedding=زواج، meet=اجتماع)') || 'meet';
-        const imgUrl = prompt('رابط صورة للخبر (اختياري - اتركه فارغاً إن لم يتوفر):') || '';
+        const author = await promptDlg('اسم الكاتب أو صاحب المنشور:') || 'أحد أفراد الأسرة';
+        const body = await promptDlg('تفاصيل الخبر أو التهنئة:') || '';
+        const catKey = await promptDlg('التصنيف: (grad=تخرج، baby=مولود، wedding=زواج، meet=اجتماع)') || 'meet';
+        const imgUrl = await promptDlg('رابط صورة للخبر (اختياري - اتركه فارغاً إن لم يتوفر):') || '';
 
         const catLabels = { grad: '🎓 إنجازات وتخرج', baby: '👶 مواليد', wedding: '💍 أفراح وزواجات', meet: '🤝 اجتماعات' };
 
@@ -11836,8 +11895,8 @@ function openFamilyNewsModal(filterCat = 'all') {
 function openFamilyVoteModal() {
   /* بلا استطلاعات افتراضية مختلقة — التصويت الحقيقي ينشئه أفراد العائلة فقط */
 
-  const readPolls = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]'); } catch (_) { return []; } };
-  const readVotes = () => { try { return JSON.parse(localStorage.getItem('almatarid_user_votes') || '{}'); } catch (_) { return {}; } };
+  const readPolls = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
+  const readVotes = () => { try { return JSON.parse(localStorage.getItem('almatarid_user_votes') || '{}'); } catch (e) { console.warn('[almatarid]', e); return {}; } };
   const localPolls = readPolls();
   const allPolls = [...localPolls];
   const userVotes = readVotes();
@@ -11849,7 +11908,7 @@ function openFamilyVoteModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🗳️</span> تصويت واستطلاعات قرارات العائلة
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11930,7 +11989,7 @@ function openFamilyVoteModal() {
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -11991,13 +12050,13 @@ function openFamilyVoteModal() {
     // Create poll
     const createBtn = $('#btn-create-poll');
     if (createBtn) {
-      createBtn.onclick = () => {
-        const title = prompt('عنوان التصويت أو القرار المطروح:');
+      createBtn.onclick = async () => {
+        const title = await promptDlg('عنوان التصويت أو القرار المطروح:');
         if (!title) return;
-        const desc = prompt('شرح موجز لموضوع الاستطلاع:') || '';
-        const opt1 = prompt('الخيار الأول:') || 'نعم، أوافق';
-        const opt2 = prompt('الخيار الثاني:') || 'لا أوافق';
-        const opt3 = prompt('الخيار الثالث (اختياري):');
+        const desc = await promptDlg('شرح موجز لموضوع الاستطلاع:') || '';
+        const opt1 = await promptDlg('الخيار الأول:') || 'نعم، أوافق';
+        const opt2 = await promptDlg('الخيار الثاني:') || 'لا أوافق';
+        const opt3 = await promptDlg('الخيار الثالث (اختياري):');
 
         const options = [
           { id: 'opt_' + Date.now() + '_1', text: opt1, votes: 0 },
@@ -12100,7 +12159,7 @@ function openCareersDirectoryModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>💼</span> دليل مهن وأعمال أفراد العائلة
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -12148,7 +12207,7 @@ function openCareersDirectoryModal() {
 
                 <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:auto">
                   ${matchedMember ? `
-                    <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${matchedMember.id}')">
+                    <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${matchedMember.id}">
                       👤 الملف بالشجرة
                     </button>
                   ` : `<span></span>`}
@@ -12171,7 +12230,7 @@ function openCareersDirectoryModal() {
 
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
           <span style="font-size:.74rem;color:var(--mut)">إجمالي الكفاءات المسجلة: <b>${allCareers.length} فرد</b></span>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -12200,15 +12259,15 @@ function openCareersDirectoryModal() {
     // Add career
     const addBtn = $('#btn-add-career');
     if (addBtn) {
-      addBtn.onclick = () => {
-        const name = prompt('اسمك الكريم مع اللقب (مثال: د. عبدالله بن صالح المطارد):');
+      addBtn.onclick = async () => {
+        const name = await promptDlg('اسمك الكريم مع اللقب (مثال: د. عبدالله بن صالح المطارد):');
         if (!name) return;
-        const title = prompt('المسمى المهني والوظيفة (مثال: استشاري باطنة / مهندس برمجيات):') || 'أخصائي';
-        const workplace = prompt('جهة العمل أو اسم الشركة/العيادة/المكتب:') || 'القطاع الخاص';
-        const specialty = prompt('التخصص الدقيق أو مجال العمل:') || 'عام';
-        const city = prompt('المدينة (الرياض، النماص، جدة، أبها...):') || 'الرياض';
-        const phone = prompt('رقم الجوال للتواصل المهني (اختياري):') || '';
-        const catKey = prompt('رمز التصنيف: (med=طب، eng=هندسة، law=قانون، edu=تعليم، biz=تجارة، gov=حكومي، mil=عسكري، other=أخرى):') || 'biz';
+        const title = await promptDlg('المسمى المهني والوظيفة (مثال: استشاري باطنة / مهندس برمجيات):') || 'أخصائي';
+        const workplace = await promptDlg('جهة العمل أو اسم الشركة/العيادة/المكتب:') || 'القطاع الخاص';
+        const specialty = await promptDlg('التخصص الدقيق أو مجال العمل:') || 'عام';
+        const city = await promptDlg('المدينة (الرياض، النماص، جدة، أبها...):') || 'الرياض';
+        const phone = await promptDlg('رقم الجوال للتواصل المهني (اختياري):') || '';
+        const catKey = await promptDlg('رمز التصنيف: (med=طب، eng=هندسة، law=قانون، edu=تعليم، biz=تجارة، gov=حكومي، mil=عسكري، other=أخرى):') || 'biz';
 
         const catLabels = {
           med: '🩺 الطب والصحة',
@@ -12250,7 +12309,7 @@ function openCareersDirectoryModal() {
 function openTimeCapsuleModal(activeFilter = 'all') {
   /* بلا كبسولات افتراضية مختلقة — الرسائل والوصايا الحقيقية يكتبها كبار العائلة فقط */
 
-  const readCapsules = () => { try { return JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]'); } catch (_) { return []; } };
+  const readCapsules = () => { try { return JSON.parse(localStorage.getItem('almatarid_time_capsules') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localCapsules = readCapsules();
   const allCapsules = [...localCapsules];
 
@@ -12269,7 +12328,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>⏳</span> رسائل موقوتة من كبار العائلة (كبسولة الزمن)
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -12342,7 +12401,7 @@ function openTimeCapsuleModal(activeFilter = 'all') {
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -12370,15 +12429,15 @@ function openTimeCapsuleModal(activeFilter = 'all') {
 
     // Secret unlock action
     document.querySelectorAll('[data-unlock-cap]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const id = btn.dataset.unlockCap;
         const cap = allCapsules.find(c => c.id === id);
         if (cap) {
-          const pass = prompt('أدخل رمز الفتح الخاص بالكبسولة (أو رمز المالك/الفرع):');
+          const pass = await promptDlg('أدخل رمز الفتح الخاص بالكبسولة (أو رمز المالك/الفرع):');
           const master = (S.code || '').trim();
           if (pass && (pass === (cap.secretCode || '') || (master && pass === master))) {
             cap.status = 'unlocked';
-            const realMsg = prompt('أدخل أو عدّل النص الكامل للوصية ليظهر للجميع:', cap.body);
+            const realMsg = await promptDlg('أدخل أو عدّل النص الكامل للوصية ليظهر للجميع:', cap.body);
             if (realMsg) cap.body = realMsg;
             const stored = readCapsules();
             const idx = stored.findIndex(s => s.id === id);
@@ -12396,15 +12455,15 @@ function openTimeCapsuleModal(activeFilter = 'all') {
     // Add new timed capsule
     const addBtn = $('#btn-add-capsule');
     if (addBtn) {
-      addBtn.onclick = () => {
-        const author = prompt('اسم الوالد / الجد / كاتب الرسالة:');
+      addBtn.onclick = async () => {
+        const author = await promptDlg('اسم الوالد / الجد / كاتب الرسالة:');
         if (!author) return;
-        const occasion = prompt('المناسبة المستهدفة (مثال: يوم تخرج فلان / زواج فلان / اجتماع عام كذا):') || 'مناسبة عائلية خاصة';
-        const unlockCond = prompt('شرط وموعد فتح الرسالة (مثال: عند تخرج الحفيد / عام 1448هـ):') || 'عند حلول المناسبة';
-        const body = prompt('نص الرسالة أو الوصية:') || '';
-        const isLockedChoice = confirm('هل تريد إبقاء الرسالة مغلقة ومحفوظة حتى حلول الموعد؟\n(اضغط موافق للإغلاق والتوقيت، أو إلغاء لتكون مفتوحة فوراً)');
+        const occasion = await promptDlg('المناسبة المستهدفة (مثال: يوم تخرج فلان / زواج فلان / اجتماع عام كذا):') || 'مناسبة عائلية خاصة';
+        const unlockCond = await promptDlg('شرط وموعد فتح الرسالة (مثال: عند تخرج الحفيد / عام 1448هـ):') || 'عند حلول المناسبة';
+        const body = await promptDlg('نص الرسالة أو الوصية:') || '';
+        const isLockedChoice = await confirmDlg('هل تريد إبقاء الرسالة مغلقة ومحفوظة حتى حلول الموعد؟\n(اضغط موافق للإغلاق والتوقيت، أو إلغاء لتكون مفتوحة فوراً)');
 
-        const secret = isLockedChoice ? (prompt('اختر رمزاً سرياً لفتح الكبسولة (شاركه مع من تريد أن يفتحها):') || '').trim() : '';
+        const secret = isLockedChoice ? (await promptDlg('اختر رمزاً سرياً لفتح الكبسولة (شاركه مع من تريد أن يفتحها):') || '').trim() : '';
 
         const newCap = {
           id: 'cap_user_' + Date.now(),
@@ -12520,7 +12579,7 @@ function openAnniversariesModal(filterMode = 'all') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>💍</span> تذكير بذكرى الزواج للأزواج
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <!-- Prophetic Marriage Supplication -->
@@ -12568,7 +12627,7 @@ function openAnniversariesModal(filterMode = 'all') {
               <!-- Action Buttons -->
               <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;flex-wrap:wrap;gap:6px">
                 <div style="display:flex;gap:6px">
-                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${c.husbandId}')">
+                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${c.husbandId}">
                     👤 ملف الزوج
                   </button>
                   <button type="button" class="x" style="font-size:.74rem;color:var(--mut)" data-edit-mdate="${c.wifeId}">
@@ -12594,7 +12653,7 @@ function openAnniversariesModal(filterMode = 'all') {
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -12639,18 +12698,18 @@ function openAnniversariesModal(filterMode = 'all') {
 
     // Edit marriage date
     document.querySelectorAll('[data-edit-mdate]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const wid = btn.dataset.editMdate;
         const c = couples.find(x => x.wifeId === wid);
         if (!c) return;
-        const newYrStr = prompt(`سنة زواج (${c.husbandName}):`, c.marriageYear);
+        const newYrStr = await promptDlg(`سنة زواج (${c.husbandName}):`, c.marriageYear);
         if (!newYrStr) return;
         const newYr = parseInt(newYrStr);
         if (isNaN(newYr) || newYr < 1920 || newYr > currentYear) {
           toast('يرجى إدخال سنة ميلادية صحيحة');
           return;
         }
-        const newDate = prompt('تاريخ الزواج (YYYY-MM-DD):', `${newYr}-05-15`) || `${newYr}-05-15`;
+        const newDate = await promptDlg('تاريخ الزواج (YYYY-MM-DD):', `${newYr}-05-15`) || `${newYr}-05-15`;
         customAnnivs[wid] = { date: newDate, year: newYr };
         localStorage.setItem('almatarid_anniversaries', JSON.stringify(customAnnivs));
         toast('✅ تم تحديث تاريخ الزواج بنجاح!');
@@ -12731,7 +12790,7 @@ function lifeStoryMilestones(m, d) {
   return { list, bLabel, dLabel };
 }
 /* LS-PURE-END */
-function lsReadMilestones(id) { try { const v = JSON.parse(localStorage.getItem('almatarid_milestones_' + id) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } }
+function lsReadMilestones(id) { try { const v = JSON.parse(localStorage.getItem('almatarid_milestones_' + id) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { console.warn('[almatarid]', e); return []; } }
 
 /* ---------- 93) صفحة «قصة حياة» ومحطات العمر لكل فرد (فرع تجربة) ---------- */
 function openLifeStoryModal(targetMemberId = null) {
@@ -12764,7 +12823,7 @@ function openLifeStoryModal(targetMemberId = null) {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📖</span> صفحة «قصة حياة» ومحطات العمر لكل فرد
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -12788,7 +12847,7 @@ function openLifeStoryModal(targetMemberId = null) {
             <button type="button" class="fstats-btn" id="btn-add-milestone" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
               ➕ إضافة محطة حياة جديدة
             </button>
-            <button type="button" class="fstats-btn" onclick="profile('${m.id}')" style="padding:5px 10px;font-size:.78rem">
+            <button type="button" class="fstats-btn" data-m04="profile" data-m04-id="${m.id}" style="padding:5px 10px;font-size:.78rem">
               👤 الملف الشخصي
             </button>
           </div>
@@ -12844,7 +12903,7 @@ function openLifeStoryModal(targetMemberId = null) {
               📋 نسخ قصة الحياة
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -12870,13 +12929,13 @@ function openLifeStoryModal(targetMemberId = null) {
     // Add milestone
     const addBtn = $('#btn-add-milestone');
     if (addBtn) {
-      addBtn.onclick = () => {
-        const title = prompt('عنوان المحطة (مثال: رحلة الحج عام 1395هـ / الانتقال إلى الرياض):');
+      addBtn.onclick = async () => {
+        const title = await promptDlg('عنوان المحطة (مثال: رحلة الحج عام 1395هـ / الانتقال إلى الرياض):');
         if (!title) return;
-        const periodText = prompt('الفترة أو السنة (مثال: عام 1400هـ / 1980م):') || 'محطة تاريخية';
-        const location = prompt('المكان:') || 'غير محدد';
-        const desc = prompt('تفاصيل المحطة أو الحدث:') || '';
-        const icon = prompt('رمز تعبيري (أيقونة):', '🌟') || '🌟';
+        const periodText = await promptDlg('الفترة أو السنة (مثال: عام 1400هـ / 1980م):') || 'محطة تاريخية';
+        const location = await promptDlg('المكان:') || 'غير محدد';
+        const desc = await promptDlg('تفاصيل المحطة أو الحدث:') || '';
+        const icon = await promptDlg('رمز تعبيري (أيقونة):', '🌟') || '🌟';
 
         const newMs = { icon, title, periodText, location, desc };
         const stored = lsReadMilestones(m.id);
@@ -12929,7 +12988,7 @@ function openMemberStoriesModal(filterMemberId = null) {
   ];
 
   /* قصص المستخدم فقط — بلا قصص افتراضية مختلقة: تُدوَّن القصص من أفراد العائلة وتربط بعضو حقيقي من الشجرة */
-  const readStories = () => { try { return JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]'); } catch (_) { return []; } };
+  const readStories = () => { try { return JSON.parse(localStorage.getItem('almatarid_written_stories') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localStories = readStories();
   const allStories = [...localStories];
 
@@ -12956,7 +13015,7 @@ function openMemberStoriesModal(filterMemberId = null) {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📜</span> قصص ومأثورات أفراد العائلة المكتوبة
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -13012,7 +13071,7 @@ function openMemberStoriesModal(filterMemberId = null) {
 
               <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;flex-wrap:wrap;gap:6px">
                 ${story.memberId ? `
-                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${story.memberId}')">
+                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${story.memberId}">
                     👤 ملف صاحب القصة بالشجرة
                   </button>
                 ` : `<span></span>`}
@@ -13037,7 +13096,7 @@ function openMemberStoriesModal(filterMemberId = null) {
 
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
           <span style="font-size:.74rem;color:var(--mut)">القصص المدوّنة: <b>${allStories.length} قصة</b></span>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -13062,7 +13121,7 @@ function openMemberStoriesModal(filterMemberId = null) {
         refocusSearch = true;
         renderModal();
       };
-      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (_) {} }
+      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (e) { console.warn('[almatarid]', e);} }
     }
 
     // WhatsApp share
@@ -13162,7 +13221,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
   ];
 
   /* تراجم المستخدم فقط — بلا تراجم افتراضية مختلقة لأسلاف مسمّين بتواريخ وإنجازات لم تُوثَّق */
-  const readBios = () => { try { return JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]'); } catch (_) { return []; } };
+  const readBios = () => { try { return JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localBios = readBios();
   const allBios = [...localBios];
 
@@ -13175,7 +13234,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>⚖️</span> قواعد وميثاق العائلة وتراجم أعلامها
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -13235,7 +13294,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
                     </div>
                     <span style="display:flex;gap:6px;align-items:center">
                       <span class="mstory-badge">🕒 ${esc(b.era)}</span>
-                      ${b.memberId ? `<button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" onclick="profile('${b.memberId}')">👤 ملف العَلَم</button>` : ''}
+                      ${b.memberId ? `<button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${b.memberId}">👤 ملف العَلَم</button>` : ''}
                     </span>
                   </div>
 
@@ -13267,7 +13326,7 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
               📋 نسخ النص
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -13361,10 +13420,10 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
 /* ---------- 96) مجلس العائلة - الأعضاء والقرارات (فرع تجربة) ---------- */
 function openCouncilDecreesModal(initialTab = 'decrees') {
   /* قرارات وأعضاء المجلس من إدخال المستخدم فقط — بلا قرارات ولا تشكيل افتراضيين مختلقين */
-  const readDecrees = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]'); } catch (_) { return []; } };
+  const readDecrees = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localDecrees = readDecrees();
   const allDecrees = [...localDecrees];
-  const readMembers = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_members') || '[]'); } catch (_) { return []; } };
+  const readMembers = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_members') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const allMembers = readMembers();
 
   let currentTab = initialTab; // 'decrees', 'members'
@@ -13385,7 +13444,7 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🏛️</span> مجلس عائلة آل مطارد (الأعضاء والقرارات)
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -13480,7 +13539,7 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
                       <b style="color:var(--gold);font-size:.88rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</b>
                       <div style="font-size:.76rem;color:var(--txt);font-weight:700">${esc(m.role)}</div>
                       <div style="font-size:.7rem;color:var(--mut)">${esc(m.branch)}</div>
-                      ${m.memberId ? `<button type="button" class="x" style="font-size:.72rem;color:var(--gold);font-weight:700" onclick="profile('${m.memberId}')">👤 ملفه بالشجرة</button>` : ''}
+                      ${m.memberId ? `<button type="button" class="x" style="font-size:.72rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${m.memberId}">👤 ملفه بالشجرة</button>` : ''}
                     </div>
                   </div>
                 `).join('') : `
@@ -13495,7 +13554,7 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
         </div>
 
         <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -13516,7 +13575,7 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
         refocusSearch = true;
         renderModal();
       };
-      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (_) {} }
+      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (e) { console.warn('[almatarid]', e);} }
     }
 
     // WhatsApp share
@@ -13609,10 +13668,10 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
 /* ---------- 97) صندوق العائلة التكافلي والخيري (فرع تجربة) ---------- */
 function openFamilyFundModal() {
   /* حملات المستخدم فقط — بلا حملات افتراضية بمبالغ مختلقة؛ والحساب البنكي يحدده المالك/المحرر (بلا آيبان مكتوب) */
-  const readCampaigns = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]'); } catch (_) { return []; } };
+  const readCampaigns = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_campaigns') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localCampaigns = readCampaigns();
   const allCampaigns = [...localCampaigns];
-  const readAccount = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_account') || 'null'); } catch (_) { return null; } };
+  const readAccount = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_account') || 'null'); } catch (e) { console.warn('[almatarid]', e); return null; } };
   let fundAccount = readAccount();
 
   function renderModal() {
@@ -13626,7 +13685,7 @@ function openFamilyFundModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🤝</span> صندوق عائلة آل مطارد التكافلي والخيري
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -13734,7 +13793,7 @@ function openFamilyFundModal() {
         <!-- Footer Actions -->
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
           <span style="font-size:.74rem;color:var(--mut)">* تصرف التبرعات والمساهمات بإشراف مجلس الأسرة وأمين الصندوق بعد تعيينه.</span>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -13798,12 +13857,12 @@ function openFamilyFundModal() {
 
     // Record Donation
     document.querySelectorAll('[data-record-don]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const cid = btn.dataset.recordDon;
         const camp = allCampaigns.find(c => c.id === cid);
         if (!camp) return;
-        const donator = prompt('اسم المساهم (أو اكتب «فاعل خير من الأسرة»):') || 'فاعل خير من الأسرة';
-        const amtStr = prompt(`المبلغ المحول لمبادرة «${camp.title}» (بالريال السعودي):`, '500');
+        const donator = await promptDlg('اسم المساهم (أو اكتب «فاعل خير من الأسرة»):') || 'فاعل خير من الأسرة';
+        const amtStr = await promptDlg(`المبلغ المحول لمبادرة «${camp.title}» (بالريال السعودي):`, '500');
         if (!amtStr) return;
         const amt = parseFloat(amtStr);
         if (isNaN(amt) || amt <= 0) {
@@ -14014,7 +14073,7 @@ function openBlankTreeModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🖨️</span> شجرة فارغة قابلة للطباعة والتعبئة يدوياً (3–5 أجيال)
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -14055,7 +14114,7 @@ function openBlankTreeModal() {
               💾 تنزيل صورة عالية الدقة (PNG)
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -14405,7 +14464,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📑</span> مركز التقارير الجاهزة والتعداد
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <!-- Report Tabs -->
@@ -14482,7 +14541,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
               📋 نسخ الملخص
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -14788,7 +14847,7 @@ function openExportTreeMediaModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🖼️</span> تصدير الشجرة كصورة (PNG) أو ملف رسومي (SVG)
           </h2>
-          <button type="button" class="x" onclick="$('#profile').close();" style="font-size:1.2rem;color:var(--mut)">✕</button>
+          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -14843,7 +14902,7 @@ function openExportTreeMediaModal() {
               📲 مشاركة بالواتساب
             </button>
           </div>
-          <button type="button" class="fstats-btn" onclick="$('#profile').close();" style="background:transparent;border-color:var(--line);color:var(--mut)">
+          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
             إغلاق
           </button>
         </div>
@@ -14901,7 +14960,7 @@ function openExportTreeMediaModal() {
           a.download = `almatarid-tree-${activeScope}-${activeTheme}.png`;
           a.click();
           toast('💾 جاري تنزيل صورة PNG عالية الدقة للشجرة...');
-        } catch (_) {
+        } catch (e) { console.warn('[almatarid]', e);
           toast('تعذّر تحويل الصورة إلى PNG (صور بعيدة بلا إذن مشاركة) — جرّب تنزيل ملف SVG بدلاً منه');
         }
       };
@@ -14918,7 +14977,7 @@ function openExportTreeMediaModal() {
         a.download = `almatarid-tree-${activeScope}.ged`;
         a.click();
         toast('📜 جاري تنزيل ملف GEDCOM...');
-      } catch (_) { toast('تعذّر إنشاء ملف GEDCOM'); }
+      } catch (e) { console.warn('[almatarid]', e); toast('تعذّر إنشاء ملف GEDCOM'); }
     };
 
     // WhatsApp share
