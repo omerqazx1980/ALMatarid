@@ -3,6 +3,46 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 let _toastT = null;
 function toast(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; requestAnimationFrame(() => t.classList.add('on')); clearTimeout(_toastT); _toastT = setTimeout(() => { t.classList.remove('on'); setTimeout(() => { t.hidden = true; }, 300); }, 2600); }
 
+/* ---------- وضع دون اتصال (E-03): آخر حزمة في IndexedDB ---------- */
+/* بعد كل تحميل ناجح تُحفظ الحزمة كاملة محلياً؛ وإن تعذّر الاتصال عند الإقلاع
+   تُعرض النسخة المحفوظة (عرض وبحث) مع شارة «دون اتصال»، ويُعاد الاتصال تلقائياً
+   عند عودة الشبكة عبر التحديث الصامت. في DEMO لا تُحفظ بيانات وهمية. */
+const IDB_NAME = 'almatarid', IDB_STORE = 'bundle';
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (_) { } };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch (e) { reject(e); }
+  });
+}
+async function cacheBundle(b) {
+  if (!b || !Array.isArray(b.members)) return;
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put({ bundle: b, savedAt: Date.now() }, 'last');
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (_) { /* التخزين المحلي اختياري — فشله لا يعطل التطبيق */ }
+}
+async function loadCachedBundle() {
+  try {
+    const db = await idbOpen();
+    const val = await new Promise((resolve, reject) => {
+      const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get('last');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return val;
+  } catch (_) { return null; }
+}
+
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
@@ -26,11 +66,25 @@ function demo() {
 
 /* ---------- التحميل والدخول ---------- */
 async function load(code) {
-  const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
+  let b, offline = false, cachedAt = null;
+  if (CFG.DEMO) { b = { ok: true, role: 'visitor', members: demo(), wives: [] }; }
+  else {
+    try { b = await rpc('get_bundle', { p_code: code || null }); }
+    catch (e) {
+      const cached = await loadCachedBundle();
+      if (cached && cached.bundle && Array.isArray(cached.bundle.members) && cached.bundle.members.length) {
+        b = cached.bundle; offline = true; cachedAt = cached.savedAt;
+      } else throw e; /* بلا نسخة محفوظة — يتصرف الإقلاع كما قبل */
+    }
+  }
   if (!b.ok) { S.locked = b.error === 'locked'; queueMicrotask(() => { applyRole(); renderFeat(); }); return false; }
+  S.offline = offline;
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
   S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
   S.featured = Array.isArray(b.featured_sections) ? b.featured_sections : ['events', 'honor'];
+  const offEl = $('#offline'); if (offEl) offEl.hidden = !offline;
+  if (!CFG.DEMO && !offline) cacheBundle(b);
+  if (offline) setTimeout(() => toast('📶 دون اتصال — تُعرض آخر نسخة محفوظة' + (cachedAt ? ' (' + new Date(cachedAt).toLocaleDateString('ar-SA') + ')' : '')), 500);
   loadFeatureFlags(); /* نظام الإخفاء — تحميل أعلام الميزات (خادم ثم localStorage) وتطبيقها */
   const day = n => new Date(Date.now() + n * 864e5 + 2 * 36e5).toISOString();
   S.events = CFG.DEMO ? [
@@ -3494,6 +3548,8 @@ async function silentRefresh() {
   try {
     const b = await rpc('get_bundle', { p_code: S.code });
     if (!b.ok) return;
+    if (S.offline) { S.offline = false; const offEl = $('#offline'); if (offEl) offEl.hidden = true; toast('📶 عاد الاتصال — تم تحديث الشجرة'); }
+    cacheBundle(b); /* E-03: تحديث النسخة المحفوظة دون اتصال عند كل تحديث ناجح */
     S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.role = b.role; S.branches = b.branches || []; S.branch = b.branch || null;
     S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
     if (Array.isArray(b.featured_sections)) S.featured = b.featured_sections;
@@ -3635,6 +3691,7 @@ const FEATURES = [
   { key: 'data-quality', btn: '#m-data-quality', cat: 'data', name: '✅ لوحة جودة البيانات', desc: 'تنبيهات عن البيانات الناقصة أو المتناقضة في الشجرة' },
   { key: 'date-conflicts', btn: '#m-data-quality', cat: 'data', name: '⚠️ كشف تناقض التواريخ', desc: 'تنبيه عند وفاة قبل الميلاد أو تواريخ مستحيلة' },
   { key: 'completion-hints', btn: '#m-completion-hints', cat: 'data', name: '💡 تلميحات إكمال الشجرة', desc: 'اقتراحات لسد الفجوات في الشجرة' },
+  { key: 'branch-gaps', btn: null, cat: 'data', name: '📋 تقرير النواقص لكل فرع', desc: 'أعضاء بلا سنة ميلاد أو بلا تاريخ وفاة أو بلا أم مسجلة — لكل فرع، لتمكين حملة إكمال البيانات (التعبئة عمل مدراء الفروع، لا تُملأ أي بيانة تلقائياً)' },
   { key: 'csv-import', btn: '#m-csv-import', cat: 'data', name: '📥 استيراد جماعي من Excel/CSV', desc: 'إضافة أعضاء دفعة واحدة مع معاينة، بلا حذف' },
   /* المخططات والعرض */
   { key: 'alt-charts', btn: '#m-alt-charts', cat: 'charts', name: '📊 مخططات بديلة', desc: 'مروحة الأجداد والساعة الرملية والنسل' },
@@ -3656,6 +3713,7 @@ const FEATURES = [
   /* المناسبات والخرائط */
   { key: 'events-map', btn: '#m-events-map', cat: 'events', name: '📍 خريطة مناسبات العائلة', desc: 'أماكن المناسبات على الخريطة مع فلتر زمني' },
   { key: 'branch-alerts', btn: '#m-branch-alerts', cat: 'events', name: '🔔 تنبيهات فرعك', desc: 'تنبيه عند تعديل فرعك أو إضافة قريب جديد' },
+  { key: 'web-push', btn: '#m-web-push', cat: 'events', name: '📲 إشعارات المتصفح (Web Push)', desc: 'اشترك ليصلك تنبيه عند مناسبة أو قريب جديد — التقاط الاشتراكات فقط؛ الإرسال يحتاج خادماً خارجياً بمفتاح VAPID الخاص' },
   { key: 'anniversaries', btn: '#m-anniversaries', cat: 'events', name: '💍 تذكير بذكرى الزواج', desc: 'تذكير سنوي بذكرى زواج أفراد العائلة' },
   { key: 'events-reminders', btn: '#m-events', cat: 'events', name: '🎉 تذكير المناسبات والعد التنازلي', desc: 'مناسبات قادمة مع عد تنازلي' },
   { key: 'annual-calendar', btn: '#m-calendar', cat: 'events', name: '🗓️ التقويم السنوي', desc: 'تقويم العائلة هجري وميلادي' },
@@ -8989,6 +9047,76 @@ if (mBranchAlerts) mBranchAlerts.onclick = menuClose(() => openBranchAlertsModal
 setTimeout(updateAlertsBadge, 500);
 
 /* ============================================================
+   إشعارات المتصفح Web Push (E-01)
+   ============================================================ */
+/* ما يبنيه التطبيق: التقاط اشتراكات Push وحفظها في الخادم (جدول
+   push_subscriptions عبر secure_save_push_subscription) + استقبال
+   الإشعارات وعرضها في عامل الخدمة (sw.js). ما لا يعمله التطبيق:
+   الإرسال نفسه — يحتاج خادم إرسال خارجي يحمل مفتاح VAPID الخاص
+   (انظر tools/push-sender-example.mjs)؛ فبدونه لا يصل أي إشعار أبداً. */
+const VAPID_PUBLIC_KEY = 'BK85ApKwhvUsB3637J9j5-Oorr3gYjOVM9k7J8Rj1wPl_93KYjicnqCVHafHeyAowPwUiUCFHiTnHT9AHk_o0SU';
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+async function getPushSubscription() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+  } catch (_) { return null; }
+}
+async function openWebPushModal() {
+  const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  const sub = supported ? await getPushSubscription() : null;
+  const status = !supported ? 'متصفحك لا يدعم إشعارات الويب'
+    : sub ? 'مفعّلة على هذا الجهاز ✅' : 'غير مفعّلة على هذا الجهاز';
+  showInfo(`<h2>📲 إشعارات المتصفح</h2>
+    <p class="sub">الحالة: <b>${esc(status)}</b></p>
+    <p style="font-size:.82rem;color:var(--txt);line-height:1.7">عند تفعيلها تصلك تنبيهات المناسبات وإضافات الأقارب الجدد على هذا الجهاز حتى والموقع مغلق. الإذن يُطلب من المتصفح، ويمكن إلغاؤه في أي وقت من إعدادات المتصفح أو من هنا.</p>
+    <p style="font-size:.78rem;color:var(--mut);line-height:1.6">ملاحظة: التفعيل يحفظ اشتراك جهازك في الخادم فقط؛ وصول الإشعارات فعلياً يتطلب تشغيل خادم الإرسال الخارجي (مفتاح VAPID الخاص) — بدونه لا يصل أي إشعار.</p>
+    <div class="row adm">
+      ${sub ? '<button type="button" class="danger" id="wp-off">🔕 إلغاء الاشتراك</button>' : '<button type="button" id="wp-on">🔔 تفعيل الإشعارات</button>'}
+      <button type="button" class="ghost" id="wp-close">إغلاق</button>
+    </div>`);
+  const closeBtn = $('#wp-close'); if (closeBtn) closeBtn.onclick = () => $('#profile').close();
+  const onBtn = $('#wp-on');
+  if (onBtn) onBtn.onclick = async () => {
+    if (CFG.DEMO) { toast('إشعارات Push تعمل مع القاعدة الحقيقية فقط.'); return; }
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('لم يُمنح إذن الإشعارات من المتصفح'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+      const meId = (() => { try { return localStorage.getItem('almatarid_me_id'); } catch (_) { return null; } })();
+      const meName = meId && S.byId.get(meId) ? S.byId.get(meId).full_name : null;
+      const r = await rpc('secure_save_push_subscription', { p_passcode: S.code, p_subscription: subscription.toJSON(), p_name: meName });
+      if (!r || r.success === false) throw new Error((r && r.message) || 'تعذّر حفظ الاشتراك');
+      toast('🔔 تم تفعيل الإشعارات على هذا الجهاز');
+      $('#profile').close();
+    } catch (e) { toast((e && e.message) || 'تعذّر تفعيل الإشعارات'); }
+  };
+  const offBtn = $('#wp-off');
+  if (offBtn) offBtn.onclick = async () => {
+    try {
+      const s = await getPushSubscription();
+      if (s) {
+        await s.unsubscribe();
+        try { await rpc('secure_delete_push_subscription', { p_passcode: S.code, p_endpoint: s.endpoint }); } catch (_) { /* يبقى السجل ويُحذف عند أول إرسال فاشل */ }
+      }
+      toast('تم إلغاء اشتراك الإشعارات');
+      $('#profile').close();
+    } catch (_) { toast('تعذّر إلغاء الاشتراك'); }
+  };
+}
+const mWebPush = $('#m-web-push');
+if (mWebPush) mWebPush.onclick = menuClose(() => openWebPushModal());
+
+/* ============================================================
    78) صفحة أصل لقب «آل مطارد» — معناه وتاريخه وأول من حمله
    ============================================================ */
 function openSurnameOriginPage() {
@@ -13997,6 +14125,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
   const repAlive = m => m.is_alive !== false;
 
   function renderModal() {
+    if (reportType === 'gaps' && !featOn('branch-gaps')) reportType = 'branch'; /* التبويب مخفي افتراضياً — يظهره المالك من جدول الميزات */
     let reportTitle = '';
     let reportSummaryHtml = '';
     let reportTableHtml = '';
@@ -14122,6 +14251,89 @@ function openReadyReportsModal(initialReportType = 'branch') {
         ])
       ];
 
+    } else if (reportType === 'gaps') {
+      /* تقرير النواقص لكل فرع (E-05 / أداة حملة D-02): لا تُملأ أي بيانة هنا ولا تُخترع
+         تواريخ — التقرير للمتابعة فقط، والتعبئة عمل مدراء الفروع عبر «طلب مساعدة» أو
+         نموذج التصحيح. النواقص: بلا سنة ميلاد، ومتوفى بلا تاريخ وفاة، وابن بلا أم مسجلة،
+         وسجل زوجة غير مربوط بسجل في الشجرة. */
+      const rootM = S.byId.get(selectedBranchId) || S.members[0];
+      const branchMembers = getSubtree(rootM ? rootM.id : null);
+      const gapOf = m => {
+        const g = [];
+        if (!m.birth_date && !m.birth_year_text) g.push('بلا سنة ميلاد');
+        if (m.is_alive === false && !m.death_date && !m.death_year_text) g.push('بلا تاريخ وفاة');
+        if (m.father_id && !m.wife_mother_id) g.push('بلا أم مسجلة');
+        return g;
+      };
+      const gapMembers = branchMembers.filter(m => gapOf(m).length);
+      const noBirthB = branchMembers.filter(m => !m.birth_date && !m.birth_year_text).length;
+      const noDeathB = branchMembers.filter(m => m.is_alive === false && !m.death_date && !m.death_year_text).length;
+      const noMotherB = branchMembers.filter(m => m.father_id && !m.wife_mother_id).length;
+      const noBirthAll = S.members.filter(m => !m.birth_date && !m.birth_year_text).length;
+      const noDeathAll = S.members.filter(m => m.is_alive === false && !m.death_date && !m.death_year_text).length;
+      const noMotherAll = S.members.filter(m => m.father_id && !m.wife_mother_id).length;
+      const branchIds = new Set(branchMembers.map(m => m.id));
+      const branchWives = S.wives.filter(w => !w.member_id && branchIds.has(w.husband_id));
+      const unlinkedAll = S.wives.filter(w => !w.member_id).length;
+
+      reportTitle = `تقرير النواقص — فرع: ${rootM ? rootM.full_name : 'الفرع'}`;
+      reportSummaryHtml = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-bottom:12px">
+          <div class="fund-stat-box"><b style="color:var(--gold);font-size:1.1rem">${gapMembers.length} / ${branchMembers.length}</b><div style="font-size:.72rem;color:var(--mut)">أفراد بنواقص في هذا الفرع</div></div>
+          <div class="fund-stat-box"><b style="color:#f59e0b;font-size:1.1rem">${noBirthB}</b><div style="font-size:.72rem;color:var(--mut)">بلا سنة ميلاد (الفرع)</div></div>
+          <div class="fund-stat-box"><b style="color:#f87171;font-size:1.1rem">${noDeathB}</b><div style="font-size:.72rem;color:var(--mut)">متوفون بلا تاريخ وفاة</div></div>
+          <div class="fund-stat-box"><b style="color:#f472b6;font-size:1.1rem">${noMotherB}</b><div style="font-size:.72rem;color:var(--mut)">أبناء بلا أم مسجلة</div></div>
+          <div class="fund-stat-box"><b style="color:var(--txt);font-size:1.1rem">${branchWives.length}</b><div style="font-size:.72rem;color:var(--mut)">سجلات زوجات غير مربوطة</div></div>
+        </div>
+        <p class="sub" style="margin:0 0 10px">حملة إكمال البيانات (D-02) — الشجرة كلها: ${noBirthAll} بلا سنة ميلاد، ${noDeathAll} متوفون بلا تاريخ وفاة، ${noMotherAll} أبناء بلا أم، ${unlinkedAll} سجلات زوجات غير مربوطة. التعبئة عمل مدراء الفروع — أرسلوا النواقص عبر «طلب مساعدة من الأقارب» أو نموذج التصحيح.</p>
+      `;
+
+      reportTableHtml = `
+        <table class="reports-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم الكامل</th>
+              <th>الأب</th>
+              <th>الجيل</th>
+              <th>الحالة</th>
+              <th>النواقص</th>
+              <th>المدينة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${gapMembers.map((m, idx) => {
+              const f = m.father_id ? S.byId.get(m.father_id) : null;
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><b>${esc(m.full_name)}</b></td>
+                  <td>${f ? esc(f.full_name) : '—'}</td>
+                  <td>الجيل ${gen(m)}</td>
+                  <td>${repAlive(m) ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
+                  <td>${gapOf(m).map(g => `<span style="display:inline-block;background:rgba(245,158,11,.14);border:1px solid var(--gold);border-radius:6px;padding:1px 7px;margin:1px;font-size:.72rem">${esc(g)}</span>`).join('')}</td>
+                  <td>${esc(repCity(m))}</td>
+                </tr>
+              `;
+            }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--mut)">لا نواقص في هذا الفرع 🎉</td></tr>'}
+          </tbody>
+        </table>
+        ${branchWives.length ? `<h4 style="color:var(--gold);margin:14px 0 6px">سجلات زوجات غير مربوطة بسجل في الشجرة (${branchWives.length})</h4><p class="sub" style="margin:0">${branchWives.map(w => { const h = S.byId.get(w.husband_id); return esc(w.full_name) + (h ? ' — زوجة ' + esc(h.full_name) : ''); }).join('؛ ')}</p>` : ''}
+      `;
+
+      csvRows = [
+        ['#', 'الاسم', 'الأب', 'الجيل', 'الحالة', 'النواقص', 'المدينة'],
+        ...gapMembers.map((m, idx) => [
+          idx + 1,
+          m.full_name,
+          m.father_id ? (S.byId.get(m.father_id)?.full_name || '') : '',
+          gen(m),
+          repAlive(m) ? 'حي' : 'متوفى',
+          gapOf(m).join('؛ '),
+          livingHidden(m) ? '' : (m.city || 'غير محددة')
+        ])
+      ];
+
     } else {
       // Places report
       const cityMap = new Map(), cityCanon = new Map();
@@ -14207,11 +14419,15 @@ function openReadyReportsModal(initialReportType = 'branch') {
           <button type="button" class="transcribe-tab-btn ${reportType === 'places' ? 'active' : ''}" id="rep-btn-places">
             📍 سجل وأطلس الأماكن
           </button>
+          ${featOn('branch-gaps') ? `
+          <button type="button" class="transcribe-tab-btn ${reportType === 'gaps' ? 'active' : ''}" id="rep-btn-gaps">
+            📋 تقرير النواقص لكل فرع
+          </button>` : ''}
         </div>
 
         <!-- Filter Controls -->
         <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
-          ${reportType === 'branch' ? `
+          ${reportType === 'branch' || reportType === 'gaps' ? `
             <div style="display:flex;align-items:center;gap:8px;flex:1">
               <span style="font-size:.78rem;color:var(--gold);font-weight:700">اختر الفرع:</span>
               <select id="rep-branch-sel" class="fstats-btn" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
@@ -14279,6 +14495,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
     $('#rep-btn-branch').onclick = () => { reportType = 'branch'; renderModal(); };
     $('#rep-btn-gen').onclick = () => { reportType = 'gen'; renderModal(); };
     $('#rep-btn-places').onclick = () => { reportType = 'places'; renderModal(); };
+    const gbBtn = $('#rep-btn-gaps'); if (gbBtn) gbBtn.onclick = () => { reportType = 'gaps'; renderModal(); };
 
     // Branch select binding
     const bSel = $('#rep-branch-sel');
@@ -14330,6 +14547,109 @@ function openReadyReportsModal(initialReportType = 'branch') {
   }
 
   renderModal();
+}
+
+/* ---------- تصدير GEDCOM 5.5.1 (E-02) ---------- */
+/* صيغة الأنساب القياسية — تُفتح في Gramps وFamilySearch وAncestry وغيرها.
+   بلا بيانات مخترعة: التواريخ الميلادية الكاملة من birth_date/death_date فقط؛
+   سنة ميلادية مذكورة في النص تُصدَّر ABT؛ والنص الهجري التقريبي يُحفظ NOTE.
+   الأحياء محميون عن الزوار كما في CSV (بلا تواريخ ولا أماكن). الزوجات غير
+   المربوطة بسجل في الشجرة تُصدَّر كأفراد من سجلات S.wives الحقيقية (بلا تواريخ). */
+const GED_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const gedClean = s => String(s || '').replace(/[@\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+function gedDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const mo = GED_MONTHS[parseInt(m[2], 10) - 1];
+  if (!mo) return null;
+  return (parseInt(m[3], 10) || '') + (parseInt(m[3], 10) ? ' ' : '') + mo + ' ' + m[1];
+}
+function gedYearFromText(t) {
+  const g = String(t || '').match(/(19|20)\d{2}/); /* سنة ميلادية مذكورة صراحة (مثلاً «1950–1951م») */
+  return g ? g[0] : null;
+}
+function buildGedcom(scope = 'all') {
+  const members = scope === 'all' ? S.members : getSubtree(scope);
+  const inScope = new Set(members.map(m => m.id));
+  const gid = id => 'I' + String(id).replace(/[^A-Za-z0-9]/g, '');
+  const fams = new Map(); /* father|wifeRec -> { husb, wifeRec, chil[] } */
+  for (const m of members) {
+    if (!m.father_id) continue;
+    const key = m.father_id + '|' + (m.wife_mother_id || '');
+    if (!fams.has(key)) fams.set(key, { husb: m.father_id, wifeRec: m.wife_mother_id || null, chil: [] });
+    fams.get(key).chil.push(m.id);
+  }
+  const famKeys = [...fams.keys()];
+  const famGid = k => 'F' + (famKeys.indexOf(k) + 1);
+  /* الأفراد: أعضاء النطاق + آباء/أمهات مشار إليهم من خارجه (من S.byId — سجلات حقيقية) */
+  const indiList = [...members];
+  const indiSeen = new Set(members.map(m => m.id));
+  const extraWives = new Map(); /* wifeRecId -> wife record */
+  for (const f of fams.values()) {
+    if (!inScope.has(f.husb)) { const p = S.byId.get(f.husb); if (p && !indiSeen.has(p.id)) { indiList.push(p); indiSeen.add(p.id); } }
+    if (!f.wifeRec) continue;
+    const w = S.wives.find(x => String(x.id) === String(f.wifeRec));
+    if (!w) continue;
+    if (w.member_id) { const mm = S.byId.get(w.member_id); if (mm && !indiSeen.has(mm.id)) { indiList.push(mm); indiSeen.add(mm.id); } }
+    else extraWives.set(String(w.id), w);
+  }
+  const wifeGidOf = recId => {
+    const w = S.wives.find(x => String(x.id) === String(recId));
+    if (!w) return null;
+    return w.member_id ? gid(w.member_id) : ('W' + String(w.id).replace(/[^A-Za-z0-9]/g, ''));
+  };
+  const famcOf = new Map(), famsOf = new Map(); /* memberId -> [famGids] */
+  for (const k of famKeys) {
+    const f = fams.get(k);
+    for (const c of f.chil) { if (!famcOf.has(c)) famcOf.set(c, []); famcOf.get(c).push(famGid(k)); }
+    if (!famsOf.has(f.husb)) famsOf.set(f.husb, []);
+    famsOf.get(f.husb).push(famGid(k));
+    if (f.wifeRec) {
+      const w = S.wives.find(x => String(x.id) === String(f.wifeRec));
+      const wid = w && w.member_id ? w.member_id : null;
+      if (wid) { if (!famsOf.has(wid)) famsOf.set(wid, []); famsOf.get(wid).push(famGid(k)); }
+    }
+  }
+  const lines = ['0 HEAD', '1 SOUR ALMatarid', '2 VERS 1.0', '2 NAME شجرة أسرة آل مطارد', '1 GEDC', '2 VERS 5.5.1', '2 FORM LINEAGE-LINKED', '1 CHAR UTF-8'];
+  const indiDates = m => {
+    const out = [];
+    const lh = livingHidden(m);
+    if (!lh) {
+      const bd = gedDate(m.birth_date), by = bd ? null : gedYearFromText(m.birth_year_text);
+      if (bd || by) { out.push('1 BIRT'); out.push('2 DATE ' + (bd || ('ABT ' + by))); if (m.city) out.push('2 PLAC ' + gedClean(m.city)); }
+      else if (m.birth_year_text) out.push('1 NOTE سنة الميلاد المسجلة: ' + gedClean(m.birth_year_text));
+      if (m.is_alive === false) {
+        const dd = gedDate(m.death_date), dy = dd ? null : gedYearFromText(m.death_year_text);
+        if (dd || dy) { out.push('1 DEAT'); out.push('2 DATE ' + (dd || ('ABT ' + dy))); if (m.city) out.push('2 PLAC ' + gedClean(m.city)); }
+        else if (m.death_year_text) out.push('1 NOTE سنة الوفاة المسجلة: ' + gedClean(m.death_year_text));
+      }
+    }
+    return out;
+  };
+  for (const m of indiList) {
+    lines.push('0 @' + gid(m.id) + '@ INDI');
+    lines.push('1 NAME ' + gedClean(m.full_name) + ' /آل مطارد/');
+    lines.push('1 SEX ' + (m.gender === 'female' ? 'F' : m.gender === 'male' ? 'M' : 'U'));
+    lines.push(...indiDates(m));
+    for (const f of (famcOf.get(m.id) || [])) lines.push('1 FAMC @' + f + '@');
+    for (const f of (famsOf.get(m.id) || [])) lines.push('1 FAMS @' + f + '@');
+  }
+  for (const w of extraWives.values()) {
+    lines.push('0 @W' + String(w.id).replace(/[^A-Za-z0-9]/g, '') + '@ INDI');
+    lines.push('1 NAME ' + gedClean(w.full_name) + ' /آل مطارد/');
+    lines.push('1 SEX F');
+    lines.push('1 NOTE زوجة غير مربوطة بسجل في الشجرة');
+  }
+  for (const k of famKeys) {
+    const f = fams.get(k);
+    lines.push('0 @' + famGid(k) + '@ FAM');
+    lines.push('1 HUSB @' + gid(f.husb) + '@');
+    const wg = f.wifeRec ? wifeGidOf(f.wifeRec) : null;
+    if (wg) lines.push('1 WIFE @' + wg + '@');
+    for (const c of f.chil) lines.push('1 CHIL @' + gid(c) + '@');
+  }
+  lines.push('0 TRLR');
+  return lines.join('\r\n') + '\r\n';
 }
 
 /* ---------- 100) تصدير الشجرة كصورة PNG أو ملف SVG (فرع تجربة) ---------- */
@@ -14516,6 +14836,9 @@ function openExportTreeMediaModal() {
             <button type="button" class="fstats-btn" id="btn-dl-tree-png" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
               💾 تنزيل كصورة عريضة (PNG)
             </button>
+            <button type="button" class="fstats-btn" id="btn-dl-tree-gedcom" style="background:var(--gold);color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
+              📜 تنزيل GEDCOM (للبرامج الأنساب)
+            </button>
             <button type="button" class="fstats-btn" id="btn-share-tree-wa" style="background:#25d366;color:#0f172a;font-weight:700;padding:6px 14px;font-size:.82rem">
               📲 مشاركة بالواتساب
             </button>
@@ -14583,6 +14906,19 @@ function openExportTreeMediaModal() {
         }
       };
       img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(code)));
+    };
+
+    // Download GEDCOM (E-02) — صيغة الأنساب القياسية 5.5.1
+    $('#btn-dl-tree-gedcom').onclick = () => {
+      try {
+        const ged = buildGedcom(activeScope);
+        const blob = new Blob(['\uFEFF' + ged], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `almatarid-tree-${activeScope}.ged`;
+        a.click();
+        toast('📜 جاري تنزيل ملف GEDCOM...');
+      } catch (_) { toast('تعذّر إنشاء ملف GEDCOM'); }
     };
 
     // WhatsApp share
