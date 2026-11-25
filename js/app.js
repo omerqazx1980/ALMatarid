@@ -13921,29 +13921,6 @@ function openBlankTreeModal() {
   renderModal();
 }
 
-/* ---------- دالة مساعدة: استرجاع أفراد الفرع والذرية بالكامل ---------- */
-function getSubtree(rootId) {
-  if (!rootId || rootId === 'all') return S.members;
-  const root = S.byId.get(rootId);
-  if (!root) return S.members;
-  const result = [];
-  const queue = [root];
-  const visited = new Set();
-  while (queue.length > 0) {
-    const curr = queue.shift();
-    if (!curr || visited.has(curr.id)) continue;
-    visited.add(curr.id);
-    result.push(curr);
-    const children = S.kids.get(curr.id) || [];
-    for (const child of children) {
-      if (child && !visited.has(child.id)) {
-        queue.push(child);
-      }
-    }
-  }
-  return result;
-}
-
 /* ---------- 99) تقارير جاهزة: فرع كامل، قائمة جيل، سجل الأماكن (فرع تجربة) ---------- */
 function openReadyReportsModal(initialReportType = 'branch') {
   let reportType = initialReportType; // 'branch', 'gen', 'places'
