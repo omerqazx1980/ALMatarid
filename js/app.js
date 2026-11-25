@@ -960,17 +960,11 @@ $('#m-export').onclick = () => {
   a.click(); URL.revokeObjectURL(a.href); $('.more').open = false;
 };
 /* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
-/* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
-/* إصلاح أمني: الرمز يُحفظ كبصمة SHA-256 فقط (لا نص صريح ولا رمز افتراضي معروض)؛ لا رمز ثابت ولا قبول كود المالك كعامل ثانٍ. */
+/* إصلاح أمني: الرمز يُحفظ كبصمة SHA-256 فقط (لا نص صريح ولا رمز افتراضي معروض)؛ حالة التحقق في الذاكرة (Memory Closure) وليس في sessionStorage لمنع التجاوز من الكونسول. */
+let _owner2faVerifiedUntil = 0;
 async function hash2fa(pin) {
-  try {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('alm-2fa:' + pin));
-    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch (_) {
-    let h = 0; const s = 'alm-2fa:' + pin;
-    for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
-    return 'f' + h.toString(16);
-  }
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('alm-2fa:' + pin));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 /* ترحيل لمرة واحدة: رمز نصي قديم (قبل الإصلاح) يُحوَّل لبصمة ثم يُحذف نصه من التخزين */
 async function get2faHash() {
@@ -984,7 +978,7 @@ async function get2faHash() {
   } catch (_) { return ''; }
 }
 async function verifyOwner2FA(onSuccess) {
-  if (sessionStorage.getItem('almatarid_owner_2fa') === '1') {
+  if (_owner2faVerifiedUntil && Date.now() < _owner2faVerifiedUntil) {
     onSuccess();
     return;
   }
@@ -1027,7 +1021,7 @@ async function verifyOwner2FA(onSuccess) {
   const doCheck = async () => {
     const val = (inp.value || '').trim();
     if (val && (await hash2fa(val)) === storedHash) {
-      sessionStorage.setItem('almatarid_owner_2fa', '1');
+      _owner2faVerifiedUntil = Date.now() + 15 * 60 * 1000;
       $('#profile').close();
       toast('✓ تم التحقق بنجاح من المصادقة الثنائية 2FA');
       onSuccess();
