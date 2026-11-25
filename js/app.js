@@ -706,8 +706,17 @@ $('#profile-x').onclick = () => {
 $('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x').textContent = 'إغلاق'; });
 
 /* ---------- الإدارة: تعمل عبر دوال الخادم المؤمّنة، وفي التجربة على الذاكرة ---------- */
+/* حالة 2FA الخادمية (A-01): _owner2faToken حامل لرمز صادر من الخادم (15 دقيقة) —
+   تزويره من الكونسول لا يفيد لأن الخادم يتحقق منه في جدوله؛ _owner2faServerReady
+   تعني أن دوال الهجرة موجودة في الخادم (بعد تشغيل 03_security_hardening.sql). */
+let _owner2faToken = null;
+let _owner2faServerReady = false;
+let _owner2faPinSet = false;
+/* دوال حساسة تتطلب رمز 2FA خادمياً عند تفعيله */
+const _TWOFA_GATED = new Set(['secure_set_access_mode', 'secure_set_women_names_visible', 'secure_set_family_code', 'secure_set_editor_code', 'secure_restore_snapshot', 'secure_set_owner_2fa_pin']);
 async function op(name, args, demo) {
   if (CFG.DEMO) { demo(); index(); render(); return { success: true }; }
+  if (_TWOFA_GATED.has(name) && _owner2faServerReady) args = { ...args, p_2fa_token: _owner2faToken };
   const r = await rpc(name, args);
   /* ann95: بعض الدوال ترجع {'ok': true} لا {'success': true} (مثل secure_set_member_dates §20) — اقبلها نجاحًا */
   if (!r.success && !r.ok) throw new Error(r.message || 'تعذر الحفظ');
@@ -967,32 +976,50 @@ $('#m-export').onclick = () => {
   a.click(); URL.revokeObjectURL(a.href); $('.more').open = false;
   toast(`📦 تم تنزيل النسخة الاحتياطية (${S.members.length} فرد) — تحقق من مجلد التنزيلات`);
 };
-/* ---------- المصادقة الثنائية لحساب المالك (2FA) ---------- */
-/* إصلاح أمني: الرمز يُحفظ كبصمة SHA-256 فقط (لا نص صريح ولا رمز افتراضي معروض)؛ حالة التحقق في الذاكرة (Memory Closure) وليس في sessionStorage لمنع التجاوز من الكونسول. */
-let _owner2faVerifiedUntil = 0;
-async function hash2fa(pin) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('alm-2fa:' + pin));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-/* ترحيل لمرة واحدة: رمز نصي قديم (قبل الإصلاح) يُحوَّل لبصمة ثم يُحذف نصه من التخزين */
-async function get2faHash() {
-  try {
-    let h = localStorage.getItem('almatarid_owner_2fa_hash') || '';
-    if (!h) {
-      const legacy = localStorage.getItem('almatarid_owner_2fa_pin');
-      if (legacy) { h = await hash2fa(legacy.trim()); localStorage.setItem('almatarid_owner_2fa_hash', h); localStorage.removeItem('almatarid_owner_2fa_pin'); }
-    }
-    return h;
-  } catch (_) { return ''; }
-}
+/* ---------- المصادقة الثنائية لحساب المالك (2FA) — خادمية ---------- */
+/* الهجرة الخادمية (A-01): التحقق في الخادم حصراً عبر secure_verify_owner_2fa الذي
+   يصدر رمزاً قصير الأجل (15 دقيقة)؛ الكتابة في أي متغير من الكونسول لا تفتح شيئاً —
+   الرمز لا يصدره إلا الخادم، والدوال الحساسة تتحقق منه داخل الخادم نفسه.
+   _owner2faToken مجرد حامل لرمز صادر من الخادم (تزويره لا يفيد: الخادم يرفضه).
+   قبل تشغيل 03_security_hardening.sql يتحقق العميل من صفة المالك خادمياً عبر get_bundle. */
 async function verifyOwner2FA(onSuccess) {
-  if (_owner2faVerifiedUntil && Date.now() < _owner2faVerifiedUntil) {
-    onSuccess();
+  if (CFG.DEMO) { onSuccess(); return; } /* التجربة: بيانات وهمية أصلاً */
+  if (_owner2faToken) { onSuccess(); return; } /* رمز سارٍ من تحقق سابق في الجلسة */
+
+  let r;
+  try {
+    r = await rpc('secure_verify_owner_2fa', { p_passcode: S.code, p_pin: null });
+  } catch (e) {
+    /* الدالة غير موجودة: ملف 03_security_hardening.sql لم يُشغَّل بعد — تحقق من صفة المالك خادمياً */
+    if (/Could not find the function|PGRST202|404/.test(e.message || '')) return verifyOwner2FAFallback(onSuccess);
+    alert('تعذّر الاتصال بالخادم، حاول مرة أخرى');
     return;
   }
 
-  const storedHash = await get2faHash();
-  if (!storedHash) { onSuccess(); return; } /* لم يُعيَّن رمز بعد — يُعيَّن من داخل الإعدادات */
+  if (r && (r.success || r.ok)) {
+    _owner2faServerReady = true;
+    _owner2faPinSet = !!r.pin_set;
+    if (!r.pin_set) { onSuccess(); toast('⚠️ فعّل رمز التحقق 2FA من الإعدادات لحماية حساب المالك'); return; }
+    if (r.token) { _owner2faToken = r.token; onSuccess(); return; }
+  }
+  if (r && r.pin_set) { show2faPrompt(onSuccess); return; } /* رمز 2FA معيّن — اعرض نافذة إدخال الرمز */
+  alert((r && r.message) || 'تعذّر التحقق');
+}
+
+/* احتياطي ما قبل الهجرة: إثبات صفة المالك يكون باستدعاء خادمي (get_bundle) لا بعلامة محلية */
+async function verifyOwner2FAFallback(onSuccess) {
+  try {
+    const b = await rpc('get_bundle', { p_code: S.code });
+    if (b && b.ok && b.role === 'owner') {
+      onSuccess();
+      toast('⚠️ حماية 2FA الخادمية غير مفعّلة بعد — شغّل ملف 03_security_hardening.sql ثم عيّن رمز تحقق من الإعدادات');
+      return;
+    }
+  } catch (_) {}
+  alert('تعذّر التحقق — تأكد من الاتصال وحاول مجدداً');
+}
+
+function show2faPrompt(onSuccess) {
   const html = `
     <div style="display:flex;flex-direction:column;gap:12px;padding:4px 0;text-align:center">
       <div style="font-size:2rem">🔐</div>
@@ -1028,13 +1055,19 @@ async function verifyOwner2FA(onSuccess) {
 
   const doCheck = async () => {
     const val = (inp.value || '').trim();
-    if (val && (await hash2fa(val)) === storedHash) {
-      _owner2faVerifiedUntil = Date.now() + 15 * 60 * 1000;
+    if (!val) { errEl.textContent = 'أدخل رمز التحقق.'; errEl.hidden = false; return; }
+    let r;
+    try { r = await rpc('secure_verify_owner_2fa', { p_passcode: S.code, p_pin: val }); }
+    catch (e) { errEl.textContent = 'تعذّر الاتصال بالخادم، حاول مجدداً.'; errEl.hidden = false; return; }
+    if (r && (r.success || r.ok) && r.token) {
+      _owner2faToken = r.token;
+      _owner2faServerReady = true;
+      _owner2faPinSet = true;
       $('#profile').close();
       toast('✓ تم التحقق بنجاح من المصادقة الثنائية 2FA');
       onSuccess();
     } else {
-      errEl.textContent = 'رمز التحقق غير صحيح، يرجى المحاولة مرة أخرى.';
+      errEl.textContent = (r && r.message) || 'رمز التحقق غير صحيح، يرجى المحاولة مرة أخرى.';
       errEl.hidden = false;
       inp.select();
     }
@@ -1049,7 +1082,7 @@ $('#m-settings').onclick = () => {
   $('.more').open = false;
   verifyOwner2FA(async () => {
     const mode = CFG.DEMO ? 'family_code' : await rpc('get_access_mode');
-    const hasPin = !!(await get2faHash());
+    const hasPin = _owner2faPinSet;
     openForm('إعدادات الوصول وحساب المالك (2FA)', [
       { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
       { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
@@ -1069,13 +1102,23 @@ $('#m-settings').onclick = () => {
       if (d.pin2fa) {
         const np = d.pin2fa.trim();
         if (!/^\d{4,8}$/.test(np)) return alert('رمز 2FA يجب أن يكون 4-8 أرقام.');
-        localStorage.setItem('almatarid_owner_2fa_hash', await hash2fa(np));
-        localStorage.removeItem('almatarid_owner_2fa_pin');
       }
       await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
       await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
       if (d.fam) await op('secure_set_family_code', { p_new_code: d.fam, p_passcode: S.code }, () => {});
       if (d.ed) await op('secure_set_editor_code', { p_new_code: d.ed, p_passcode: S.code }, () => {});
+      /* A-01: حفظ رمز 2FA خادمياً أخيراً — تغييره يبطل كل الرموز السابقة،
+         فيلزم أن تسبقه بقية الحفظات وهي تحمل الرمز الحالي */
+      if (d.pin2fa) {
+        try {
+          await op('secure_set_owner_2fa_pin', { p_passcode: S.code, p_new_pin: d.pin2fa.trim() }, () => {});
+          _owner2faPinSet = true;
+          _owner2faToken = null;
+        } catch (e) {
+          if (/Could not find the function|PGRST202|404/.test(e.message || '')) return alert('تم حفظ باقي الإعدادات، لكن رمز 2FA لم يُحفظ: ملف الحماية الخادمية (03_security_hardening.sql) لم يُشغَّل بعد — شغّله في سوبابيس أولاً ثم أعد تعيين الرمز.');
+          return alert(e.message || 'تعذّر حفظ رمز 2FA');
+        }
+      }
       alert('تم الحفظ وتحديث إعدادات المصادقة الثنائية بنجاح');
     });
   });
@@ -3206,11 +3249,16 @@ async function openSnapshots() {
     const id = +b.dataset.restore;
     if (!confirm(`استعادة اللقطة رقم ${id} (${b.dataset.label})؟\nستُلغى كل التغييرات بعدها، وتُحفظ لقطة «قبل الاستعادة» تلقائيًا.`)) return;
     if (!confirm('تأكيد أخير: متابعة الاستعادة؟')) return;
-    try {
-      const r = await rpc('secure_restore_snapshot', { p_passcode: S.code, p_id: id, p_confirm: 'RESTORE' });
-      if (!r.success) return alert(r.message || 'تعذرت الاستعادة');
-      alert(r.message || 'تمت الاستعادة'); $('#profile').close(); await refresh();
-    } catch (err) { alert(err.message); }
+    /* A-01: الاستعادة إجراء حساس — لا تتم إلا بعد تحقق خادمي ناجح */
+    verifyOwner2FA(async () => {
+      try {
+        const args = { p_passcode: S.code, p_id: id, p_confirm: 'RESTORE' };
+        if (_owner2faServerReady) args.p_2fa_token = _owner2faToken;
+        const r = await rpc('secure_restore_snapshot', args);
+        if (!r.success) return alert(r.message || 'تعذرت الاستعادة');
+        alert(r.message || 'تمت الاستعادة'); $('#profile').close(); await refresh();
+      } catch (err) { alert(err.message); }
+    });
   });
 }
 
