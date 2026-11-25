@@ -27,7 +27,7 @@ function demo() {
 /* ---------- التحميل والدخول ---------- */
 async function load(code) {
   const b = CFG.DEMO ? { ok: true, role: 'visitor', members: demo(), wives: [] } : await rpc('get_bundle', { p_code: code || null });
-  if (!b.ok) { S.locked = b.error === 'locked'; return false; }
+  if (!b.ok) { S.locked = b.error === 'locked'; queueMicrotask(() => { applyRole(); renderFeat(); }); return false; }
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
   S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
   S.featured = Array.isArray(b.featured_sections) ? b.featured_sections : ['events', 'honor'];
@@ -435,8 +435,9 @@ function render(fitView) {
       if (S.hit) S.order = [...$('#tree').querySelectorAll('[data-p]')].map(el => el.dataset.p);
     }
   }
-  $('#qn').hidden = !S.order.length;
-  $('#qc').textContent = S.curId && S.order.includes(S.curId) ? `${S.order.indexOf(S.curId) + 1} / ${S.order.length}` : `${S.order.length} نتيجة`;
+  const hasQueryOrFilter = !!($('#q')?.value.trim()) || (typeof hasActiveFilter === 'function' && hasActiveFilter());
+  $('#qn').hidden = !S.order.length || !hasQueryOrFilter;
+  $('#qc').textContent = $('#qn').hidden ? '' : (S.curId && S.order.includes(S.curId) ? `${S.order.indexOf(S.curId) + 1} / ${S.order.length}` : `${S.order.length} نتيجة`);
   $('#empty').innerHTML = (S.members.length ? 'لا توجد نتائج لهذا البحث.' : 'لا يوجد أفراد بعد.') + (!S.members.length && canEdit() ? '<br><button id="add-root">➕ إضافة أول فرد</button>' : '');
   $('#empty').hidden = !(none || !S.members.length);
   syncToggles();
@@ -3499,7 +3500,7 @@ $('#m-family').onclick = menuClose(() => familyEditor(null));
 (async () => {
   try {
     if (CFG.DEMO) { $('#demo').hidden = false; await load(); return; }
-    if (!(await load(sessionStorage.getItem('code')))) { sessionStorage.removeItem('code'); $('#chips').textContent = 'الشجرة محمية برمز العائلة'; showGate(S.locked ? 'محاولات خاطئة كثيرة. انتظر 15 دقيقة ثم حاول من جديد.' : ''); }
+    if (!(await load(sessionStorage.getItem('code')))) { sessionStorage.removeItem('code'); $('#chips').textContent = 'الشجرة محمية برمز العائلة'; showGate(S.locked ? 'محاولات خاطئة كثيرة. انتظر 15 دقيقة ثم حاول من جديد.' : ''); queueMicrotask(() => { applyRole(); renderFeat(); }); }
   } catch { $('#chips').textContent = 'تعذر الاتصال بالخادم'; }
 })();
 
