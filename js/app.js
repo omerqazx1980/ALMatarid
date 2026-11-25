@@ -13921,6 +13921,29 @@ function openBlankTreeModal() {
   renderModal();
 }
 
+/* ---------- دالة مساعدة: استرجاع أفراد الفرع والذرية بالكامل ---------- */
+function getSubtree(rootId) {
+  if (!rootId || rootId === 'all') return S.members;
+  const root = S.byId.get(rootId);
+  if (!root) return S.members;
+  const result = [];
+  const queue = [root];
+  const visited = new Set();
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    if (!curr || visited.has(curr.id)) continue;
+    visited.add(curr.id);
+    result.push(curr);
+    const children = S.kids.get(curr.id) || [];
+    for (const child of children) {
+      if (child && !visited.has(child.id)) {
+        queue.push(child);
+      }
+    }
+  }
+  return result;
+}
+
 /* ---------- 99) تقارير جاهزة: فرع كامل، قائمة جيل، سجل الأماكن (فرع تجربة) ---------- */
 function openReadyReportsModal(initialReportType = 'branch') {
   let reportType = initialReportType; // 'branch', 'gen', 'places'
@@ -14410,9 +14433,9 @@ function openExportTreeMediaModal() {
         </p>
 
         <!-- Config Toolbar -->
-        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 14px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
-          <div style="display:flex;align-items:center;gap:8px;flex:1">
-            <span style="font-size:.78rem;color:var(--gold);font-weight:700">النطاق:</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 14px;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:12px">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px">
+            <span style="font-size:.78rem;color:var(--gold);font-weight:700;white-space:nowrap">النطاق:</span>
             <select id="export-scope-sel" class="fstats-btn" style="flex:1;background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.82rem">
               <option value="all" ${activeScope === 'all' ? 'selected' : ''}>🌐 الشجرة بالكامل (${S.members.length} فرد)</option>
               ${S.branches.map(b => {
