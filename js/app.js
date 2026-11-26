@@ -80,9 +80,16 @@ async function loadCachedBundle() {
 }
 
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
+/* الجولة 10 — بقايا البند 1: تسمية الدور عبر T() حتى تترجم مع اللغة (كانت ROLES العربية تُعيدها عربية عند كل applyRole) */
+const roleLabel = r => r === 'owner' ? T('roleOwner') : r === 'editor' ? T('roleEditor') : r === 'branch' ? T('roleBranch') : (ROLES[r] || r);
 const W = 170, H = 120, GX = 18, GY = 62;
 const COL = ['#f59e0b', '#38bdf8', '#34d399', '#c084fc', '#f472b6', '#fb923c'];
 const S = { members: [], wives: [], byId: new Map(), kids: new Map(), roots: [], open: new Set(), hit: null, saved: null, curId: null, order: [], code: '', onForm: null, branch: null, branches: [], role: 'visitor', view: innerWidth < 700 ? 'list' : 'graph', photos: new Map(), womenVisible: true, accessStats: null, ann: [], tagCounts: null, tagEvents: null, _tagCountsP: null, visibleFeatures: ['living-privacy'], pinnedFeatures: [] };
+/* قواميس الترجمة تُملأ في آخر الملف — تُصرَّح هنا مبكراً (null) حتى لا يرمي أي استدعاء أثناء التقييم TDZ. */
+let I18N = null, MENU_EN = null, FEATURES_EN = null, FEAT_CATS_EN = null, FEAT_EN = null, GENORD_EN = null, GENORD_AR = null;
+/* الجولة 10 — إصلاح حرج: T/isEn يُستدعيان أثناء تقييم السكربت (syncBbView وغيره) قبل وصول التقييم إلى قاموس I18N في آخر الملف؛ التعريف المبكر هنا يقرأ القاموس وقت الاستدعاء لا وقت التعريف، فيعمل قبل اكتمال التقييم وبعده. لا تُعاد كتابتهما أدناه. */
+const T = k => (I18N && I18N[S.lang] && I18N[S.lang][k]) || (I18N && I18N.ar && I18N.ar[k]) || k;
+const isEn = () => S.lang === 'en';
 const V = { x: 0, y: 0, k: 1 };
 
 /* ---------- بيانات وهمية للتصميم ---------- */
@@ -165,9 +172,10 @@ const delegateName = b => S.byId.get(b?.delegate_id)?.full_name || b?.label || '
 const inBranch = m => { for (let p = m, i = 0; p && i < 60; p = S.byId.get(p.father_id), i++) if (p.id === S.branch?.root_id) return true; return false; };
 const canMember = m => canEdit() || (S.role === 'branch' && inBranch(m));
 function applyRole() {
-  $('#btn-login').textContent = ['visitor', 'family', 'reader'].includes(S.role) ? 'دخول' : ROLES[S.role] + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
+  $('#btn-login').textContent = ['visitor', 'family', 'reader'].includes(S.role) ? T('login') : roleLabel(S.role) + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : ''); /* ann50: زر واحد «دخول» للزائر وفرد العائلة، والدور يظهر بعد دخول الإدارة فقط */
   $('#adm-menu').hidden = !canEdit(); $('#m-settings').hidden = $('#m-branches').hidden = $('#m-log').hidden = $('#m-snap').hidden = $('#m-backups').hidden = S.role !== 'owner'; $('#m-inbox').hidden = S.role !== 'owner'; /* ann59: صندوق الاقتراحات والشكاوى للمالك فقط */ $('#m-family').hidden = !canEdit();
   $('#m-cards').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* ann44: صفحة البطاقات مقفلة عن الزوار (قرار المالك 2026-10-24) */
+  $('#m-branch-perms').hidden = !['owner', 'editor', 'branch'].includes(S.role); /* الجولة 10 — البند 5: لوحة الصلاحيات للمالك والمحرر ومسؤول الفرع */
   applyFeatureVisibility(); /* نظام الإخفاء — يعيد تطبيق إظهار/إخفاء أزرار الميزات عند تبديل الدور */
   initFeatToggles();
   syncToggles();
@@ -178,7 +186,7 @@ $('#btn-login').onclick = async () => {
     S.branch = S.role === 'branch' ? { root_id: S.branches[0]?.root_id || (S.kids.get(S.roots[0]?.id) || [])[0]?.id } : null;
     applyRole(); return render();
   }
-  if (canEdit() || S.role === 'branch') { if (await confirmDlg('تسجيل الخروج؟')) { sessionStorage.removeItem('code'); location.reload(); } } else showGate();
+  if (canEdit() || S.role === 'branch') { if (await confirmDlg(T('confirmLogout'))) { sessionStorage.removeItem('code'); location.reload(); } } else showGate();
 };
 
 /* ---------- الفهارس ---------- */
@@ -208,8 +216,9 @@ const shortName = m => {
 };
 const cardName = m => gen(m) <= 2 ? m.full_name : shortName(m);
 /* الترحم والحالة حسب الجنس: رحمها الله / حية ترزق للأنثى، رحمه الله / حي يرزق للذكر (ann102) */
-const ripText = m => m.gender === 'female' ? 'رحمها الله' : 'رحمه الله';
-const aliveText = m => m.gender === 'female' ? 'حية ترزق' : 'حي يرزق';
+const keepText = m => m.gender === 'female' ? T('keepF') : T('keepM');
+const ripText = m => m.gender === 'female' ? T('ripF') : T('ripM'); /* الجولة 10: أعيد تعريفه — حذفه 5b92e5d خطأً فصار render() يرمي عند كل رسم */
+const aliveText = m => m.gender === 'female' ? T('aliveF') : T('aliveM');
 const isFemale = m => m.gender === 'female'; /* كانت تُستدعى في 11 و14 و21 دون تعريف إطلاقاً — فيرمي خطأ عند كل تحميل للصفحة (updateAlertsBadge) */
 /* اسم بطاقات التهاني والتعازي وإعلاناتها: ثلاثي أو رباعي — الاسم الأول + الأب + الجد + أبو الجد عبر سلسلة الآباء (طلب المالك 2026-10-22) */
 const cardLongName = m => {
@@ -220,11 +229,11 @@ const cardLongName = m => {
 };
 function stats() {
   const n = f => S.members.filter(f).length, gens = S.members.reduce((x, m) => Math.max(x, gen(m)), 0);
-  const c = [['👥', 'الإجمالي', S.members.length, 'total'], ['👨', 'الذكور', n(m => m.gender === 'male'), 'male'], ['👩', 'الإناث', n(m => m.gender === 'female'), 'female'],
-    ['🟢', 'الأحياء', n(m => m.is_alive), 'alive'], ['⚪', 'المتوفون', n(m => m.is_alive === false), 'dead'], ['📜', 'الأجيال', gens, 'gens']];
+  const c = [['👥', T('statTotal'), S.members.length, 'total'], ['👨', T('statMale'), n(m => m.gender === 'male'), 'male'], ['👩', T('statFemale'), n(m => m.gender === 'female'), 'female'],
+    ['🟢', T('statAlive'), n(m => m.is_alive), 'alive'], ['⚪', T('statDead'), n(m => m.is_alive === false), 'dead'], ['📜', T('statGens'), gens, 'gens']];
   $('#chips').innerHTML = c.map(([i, l, v, k]) => `<span class="chip" data-k="${k}">${i} <span class="chl">${l}</span> <b>${v}</b></span>`).join(''); /* ann48: بالجوال رموز وأرقام فقط · ann54: الأحياء/المتوفون مخفيان بالجوال */
   $('#chips').style.cursor = 'pointer';
-  $('#chips').title = 'اضغط لفتح إحصائيات العائلة الشاملة';
+  $('#chips').title = T('chipsTitle');
   $('#chips').onclick = () => openFamilyStats();
 }
 const evList = () => (S.events || []).map(e => ({ ...e, t: new Date(e.event_date).getTime() })).filter(e => e.t > Date.now()).sort((a, b) => a.t - b.t);
@@ -239,15 +248,16 @@ function showEvent() {
     const cur = evList(); if (!cur.length) return showEvent();
     S.ev = Math.min(S.ev || 0, cur.length - 1);
     const e = cur[S.ev], ms = e.t - Date.now(), s = Math.max(0, Math.floor(ms / 1000));
-    box.innerHTML = `<div class="evslide"><span class="ev-type">${esc((e.description || '').split(' — ')[0] || 'مناسبة')}</span><b class="ev-title">${esc(e.title)}</b>
-    <span class="ev-cd">⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}</span><button class="ev-more">📍 تفاصيل الدعوة والموقع</button>
-    ${cur.length > 1 ? `<span class="ev-pg"><button data-evn="-1" aria-label="السابقة">›</button>${S.ev + 1} / ${cur.length}<button data-evn="1" aria-label="التالية">‹</button></span>` : ''}</div>`; /* ann46: غلاف واحد للتلاشي الناعم */
+    const cdTxt = (s2) => T('evLeft').replace('{d}', Math.floor(s2 / 86400)).replace('{t}', `${pad(Math.floor(s2 % 86400 / 3600))}:${pad(Math.floor(s2 % 3600 / 60))}:${pad(s2 % 60)}`);
+    box.innerHTML = `<div class="evslide"><span class="ev-type">${esc((e.description || '').split(' — ')[0] || T('evTypeDefault'))}</span><b class="ev-title">${esc(e.title)}</b>
+    <span class="ev-cd">${cdTxt(s)}</span><button class="ev-more">${T('evDetails')}</button>
+    ${cur.length > 1 ? `<span class="ev-pg"><button data-evn="-1" aria-label="${T('evPrev')}">›</button>${S.ev + 1} / ${cur.length}<button data-evn="1" aria-label="${T('evNext')}">‹</button></span>` : ''}</div>`; /* ann46: غلاف واحد للتلاشي الناعم */
   };
   draw();
   box.onpointerenter = () => evHold = true;
   box.onpointerleave = () => evHold = false;
   box.onpointerdown = () => evHold = true;
-  evTick = setInterval(() => { const cur = evList(); if (!cur.length) return showEvent(); if ((S.ev || 0) >= cur.length) S.ev = 0; const e = cur[S.ev || 0]; if (!e || e.t - Date.now() <= 0) return draw(); const cd = box.querySelector('.ev-cd'); if (cd) { const s = Math.floor((e.t - Date.now()) / 1000); cd.textContent = `⏳ متبقي ${Math.floor(s / 86400)} يوم و ${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; } }, 1000);
+  evTick = setInterval(() => { const cur = evList(); if (!cur.length) return showEvent(); if ((S.ev || 0) >= cur.length) S.ev = 0; const e = cur[S.ev || 0]; if (!e || e.t - Date.now() <= 0) return draw(); const cd = box.querySelector('.ev-cd'); if (cd) { const s = Math.floor((e.t - Date.now()) / 1000); cd.textContent = T('evLeft').replace('{d}', Math.floor(s / 86400)).replace('{t}', `${pad(Math.floor(s % 86400 / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`); } }, 1000);
   if (L.length > 1) evRot = setInterval(() => { if (!evHold) { const cur = evList(); if (cur.length > 1) { S.ev = ((S.ev || 0) + 1) % cur.length; draw(); } } }, 7000);
 }
 function evDetails(e) {
@@ -256,9 +266,10 @@ function evDetails(e) {
   const d = new Date(e.t || e.event_date), f = (loc, o) => d.toLocaleString(loc, o);
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
   const url = /^https?:\/\//.test(e.location_url || '') ? e.location_url : '';
+  const locGreg = isEn() ? 'en-GB' : 'ar-SA-u-ca-gregory', locHijri = isEn() ? 'en-u-ca-islamic-umalqura' : 'ar-SA-u-ca-islamic-umalqura';
   $('#profile-body').innerHTML = `<h2>${esc(e.title)}</h2><p class="sub">${esc((e.description || '').split('\n')[0].split(' — ')[0])}</p>
-    <dl>${row('الميلادي', esc(f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })))}${row('الهجري', esc(f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })))}
-    ${row('المكان', esc(e.location_name || '') + (url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">الخريطة</a>` : ''))}</dl>
+    <dl>${row(T('evGregDate'), esc(f(locGreg, { dateStyle: 'full', timeStyle: 'short' })))}${row(T('evHijriDate'), esc(f(locHijri, { dateStyle: 'full' })))}
+    ${row(T('evPlace'), esc(e.location_name || '') + (url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">${T('evMapLink')}</a>` : ''))}</dl>
     ${e.description ? `<div class="story">${esc(e.description)}</div>` : ''}
     <div id="ev-rsvp-box"></div>
     <div id="evdoc"></div>`;
@@ -339,7 +350,7 @@ function renderEvDoc(e, items) {
     /* ann81: الحضور من الجيل الرابع فما فوق فقط (الأجيال السابقة توفوا جميعًا) ومن الأحياء فقط — والاسم ثلاثي/رباعي دائمًا */
     const GENORD = { 4: 'الرابع', 5: 'الخامس', 6: 'السادس', 7: 'السابع' };
     const items = S.members.filter(m => !existing.has(m.id) && m.is_alive !== false && gen(m) >= 4 && (!m.name_masked || canEdit() || (S.role === 'branch' && inBranch(m)))).map(m => ({ id: m.id, label: cardLongName(m), sub: m.city || '', group: gen(m) })).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
-    const groups = [...new Set(items.map(i => i.group))].sort((a, b) => a - b).map(g => ({ key: g, label: 'الجيل ' + (GENORD[g] || g) }));
+    const groups = [...new Set(items.map(i => i.group))].sort((a, b) => a - b).map(g => ({ key: g, label: genLabel(g) }));
     if (!items.length) { toast('لا أعضاء متاحين للإضافة'); return; }
     /* ann80: إضافة جماعية — علّم على كل الحاضرين ثم زر واحد */
     openBulkPicker('إضافة حاضرين', items, async ids => {
@@ -452,10 +463,10 @@ function renderGraph(fitView) {
     const all = dispKids(m), ks = kidsOf(m), o = ks.length > 0, hit = S.hit?.has(m.id);
     for (const c of ks) { const q = pos.get(c.id); lines += `<path style="stroke:${COL[(gen(c) - 1) % COL.length]}" d="M${X(x) + W / 2} ${y + H} V${y + H + GY / 2} H${X(q.x) + W / 2} V${q.y}"/>`; }
     nodes += `<div class="gn${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}${m.is_alive === false ? ' dead' : ''}" style="left:${X(x)}px;top:${y}px;--ac:${COL[(gen(m) - 1) % COL.length]};--i:${k++}" data-p="${m.id}" tabindex="0" role="button">
-      <i>الجيل ${gen(m)}</i>${!livingHidden(m) && S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}
+      <i>${T('genWord')} ${gen(m)}</i>${!livingHidden(m) && S.photos.get(m.id) ? `<img class="gimg" src="${S.photos.get(m.id)}" alt="">` : ''}${m.is_alive === false ? '' : '<em class="al"></em>'}
       <b>${esc(cardName(m))}</b><small class="stt ${m.is_alive === false ? 'dead' : 'alive'}">${m.is_alive === false ? ripText(m) : aliveText(m)}${!livingHidden(m) && m.nickname ? ' · ' + esc(m.nickname) : ''}</small>${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}
       <small class="meta">${esc([(m.city && !livingHidden(m) ? '📍 ' + m.city : ''), kidsTxt(m)].filter(Boolean).join(' · '))}</small>
-      ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'} ${all.length}</button>` : ''}</div>`;
+      ${all.length ? `<button class="tg" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? T('collapseWord') : T('showWord')} ${T('branchWord')} ${esc(m.full_name)}">${o ? T('collapseWord') : T('showWord')} ${all.length}</button>` : ''}</div>`;
   }
   const st = $('#stage'); st.style.width = mw + 'px'; st.style.height = mh + 'px';
   $('#lines').setAttribute('width', mw); $('#lines').setAttribute('height', mh);
@@ -501,8 +512,8 @@ $('#z-fit').onclick = fit;
 function node(m) {
   const k = dispKids(m), o = S.open.has(m.id), hit = S.hit?.has(m.id);
   return `<li><div class="card${hit ? ' hit' : ''}${m.id === S.curId ? ' cur' : ''}">
-    ${k.length ? `<button class="tg tgl" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? 'طي' : 'عرض'} فرع ${esc(m.full_name)}">${o ? 'طي' : 'عرض'}</button>` : '<span class="tg dot"></span>'}
-    <div class="nm" data-p="${m.id}" tabindex="0" role="button">${!livingHidden(m) && S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${!livingHidden(m) && m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}<small>الجيل ${gen(m)}${m.city && !livingHidden(m) ? ' · 📍 ' + esc(m.city) : ''}</small></div>
+    ${k.length ? `<button class="tg tgl" data-t="${m.id}" aria-expanded="${o}" aria-label="${o ? T('collapseWord') : T('showWord')} ${T('branchWord')} ${esc(m.full_name)}">${o ? T('collapseWord') : T('showWord')}</button>` : '<span class="tg dot"></span>'}
+    <div class="nm" data-p="${m.id}" tabindex="0" role="button">${!livingHidden(m) && S.photos.get(m.id) ? `<img class="gimg2" src="${S.photos.get(m.id)}" alt="">` : ''}<b>${esc(cardName(m))}</b>${!livingHidden(m) && m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}<small>${T('genWord')} ${gen(m)}${m.city && !livingHidden(m) ? ' · 📍 ' + esc(m.city) : ''}</small></div>
     ${m.achievement_badge && !m.badge_is_job ? `<span class="bd">${esc(m.achievement_badge)}</span>` : ''}${kidsTxt(m) ? `<span class="ct">${kidsTxt(m)}</span>` : ''}${m.is_alive === false ? `<span class="rip">${ripText(m)}</span>` : ''}
   </div>${k.length && o ? `<ul>${k.map(node).join('')}</ul>` : ''}</li>`;
 }
@@ -527,8 +538,8 @@ function render(fitView) {
   }
   const hasQueryOrFilter = !!($('#q')?.value.trim()) || (typeof hasActiveFilter === 'function' && hasActiveFilter());
   $('#qn').hidden = !S.order.length || !hasQueryOrFilter;
-  $('#qc').textContent = $('#qn').hidden ? '' : (S.curId && S.order.includes(S.curId) ? `${S.order.indexOf(S.curId) + 1} / ${S.order.length}` : `${S.order.length} نتيجة`);
-  $('#empty').innerHTML = (S.members.length ? 'لا توجد نتائج لهذا البحث.' : 'لا يوجد أفراد بعد.') + (!S.members.length && canEdit() ? '<br><button id="add-root">➕ إضافة أول فرد</button>' : '');
+  $('#qc').textContent = $('#qn').hidden ? '' : (S.curId && S.order.includes(S.curId) ? `${S.order.indexOf(S.curId) + 1} / ${S.order.length}` : (S.order.length === 1 ? T('resultsOne') : T('resultsMany').replace('{n}', S.order.length)));
+  $('#empty').innerHTML = (S.members.length ? T('emptyMsg') : T('noMembers')) + (!S.members.length && canEdit() ? '<br><button id="add-root">' + T('addRoot') + '</button>' : '');
   $('#empty').hidden = !(none || !S.members.length);
   syncToggles();
 }
@@ -605,15 +616,15 @@ function executeSearchAndFilter() {
   if (activeBar) {
     if (hasFilter) {
       const parts = [];
-      if (S.advFilter.branchId) parts.push(`الفرع: ${S.byId.get(S.advFilter.branchId)?.full_name || ''}`);
-      if (S.advFilter.city) parts.push(`المدينة: ${S.advFilter.city}`);
-      if (S.advFilter.gen) parts.push(`الجيل: ${S.advFilter.gen}`);
-      if (S.advFilter.aliveStatus === 'alive') parts.push('الأحياء فقط');
-      if (S.advFilter.aliveStatus === 'deceased') parts.push('المتوفون رحمهم الله');
+      if (S.advFilter.branchId) parts.push(`${T('advBranch')} ${S.byId.get(S.advFilter.branchId)?.full_name || ''}`);
+      if (S.advFilter.city) parts.push(`${T('advCity')} ${S.advFilter.city}`);
+      if (S.advFilter.gen) parts.push(`${T('advGen')} ${S.advFilter.gen}`);
+      if (S.advFilter.aliveStatus === 'alive') parts.push(T('advAlive'));
+      if (S.advFilter.aliveStatus === 'deceased') parts.push(T('advDead'));
 
       activeBar.innerHTML = `
-        <span>⚙️ تصفية نشطة: <b>${parts.join(' · ')}</b></span>
-        <button type="button" id="adv-clear-filters" style="background:#ef4444;color:#fff;border:none;border-radius:12px;padding:2px 8px;font-size:.72rem;cursor:pointer;margin-right:auto">✕ مسح التصفية</button>
+        <span>${T('advActive')} <b>${parts.join(' · ')}</b></span>
+        <button type="button" id="adv-clear-filters" style="background:#ef4444;color:#fff;border:none;border-radius:12px;padding:2px 8px;font-size:.72rem;cursor:pointer;margin-right:auto">${T('advClear')}</button>
       `;
       activeBar.style.display = 'flex';
       const clrBtn = $('#adv-clear-filters');
@@ -700,7 +711,7 @@ function syncToggles() {
     if (!S.hit) {
       const mx = visibleMaxGen();
       const max = S.members.reduce((x, m) => Math.max(x, gen(m)), 1);
-      $('#genstep-val').textContent = `الأجيال: 1 إلى ${mx}`;
+      $('#genstep-val').textContent = T('genstep').replace('{n}', mx);
       $('#btn-gen-plus').disabled = mx >= max;
       $('#btn-gen-minus').disabled = mx <= 1;
     }
@@ -772,7 +783,7 @@ function profile(id) {
   const meBtn = isMe ? '<button type="button" class="ghost" data-act="unset-me" style="color:#10b981;font-weight:700">⭐ مسجل كـ «أنا» (إلغاء)</button>' : '<button type="button" class="ghost" data-act="set-me">👤 هذا أنا</button>';
   const reorderBtn = canMember(m) && (S.kids.get(m.id) || []).length > 1 ? '<button type="button" class="ghost" data-act="reorder" title="ترتيب أبناء هذا الفرد بالسحب">↕️ ترتيب الأبناء</button>' : '';
   $('#profile-body').innerHTML = `${livingNotice}${!lh && S.photos.get(m.id) ? `<img class="pimg" src="${S.photos.get(m.id)}" alt="">` : ''}<h2>${esc(m.full_name)}</h2>
-    <p class="sub">${!lh && m.nickname ? esc(m.nickname) + ' · ' : ''}الجيل ${gen(m)}${m.is_alive === false ? ' · ' + ripText(m) : ''}</p>
+    <p class="sub">${!lh && m.nickname ? esc(m.nickname) + ' · ' : ''}${T('genWord')} ${gen(m)}${m.is_alive === false ? ' · ' + ripText(m) : ''}</p>
     ${m.achievement_badge ? (m.badge_is_job ? `<p class="sub">الوظيفة: ${esc(m.achievement_badge)}</p>` : `<p><span class="bd">${esc(m.achievement_badge)}</span></p>`) : ''}
     <dl>${row('الأب', father ? esc(father.full_name) : '')}${row('الأم', mother ? (isVisitor ? 'محمية 🔒' : esc(mother.full_name)) : '')}
       ${row(hub && hub.marriage_status === 'divorced' ? 'زوج سابق' : 'الزوج', husband ? esc(husband.full_name) : '')}
@@ -793,7 +804,7 @@ $('#profile-x').onclick = () => {
   if (S.zoomBack) { const z = S.zoomBack; S.zoomBack = null; evZoom(z.e, z.photos, z.idx); }
   else $('#profile').close();
 };
-$('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x').textContent = 'إغلاق'; });
+$('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x').textContent = 'إغلاق'; $('#profile').classList.remove('wide'); });
 
 /* ---------- الإدارة: تعمل عبر دوال الخادم المؤمّنة، وفي التجربة على الذاكرة ---------- */
 /* حالة 2FA الخادمية (A-01): _owner2faToken حامل لرمز صادر من الخادم (15 دقيقة) —
@@ -1173,12 +1184,19 @@ $('#m-settings').onclick = () => {
   verifyOwner2FA(async () => {
     const mode = CFG.DEMO ? 'family_code' : await rpc('get_access_mode');
     const hasPin = _owner2faPinSet;
+    const sec = await (async () => {
+      if (CFG.DEMO) { try { return JSON.parse(localStorage.getItem('almatarid_family_secretary') || 'null') || {}; } catch (e) { return {}; } }
+      try { const r = await rpc('get_family_secretary', {}); return r || {}; }
+      catch (e) { console.warn('[almatarid]', e); try { return JSON.parse(localStorage.getItem('almatarid_family_secretary') || 'null') || {}; } catch (e2) { return {}; } }
+    })();
     openForm('إعدادات الوصول وحساب المالك (2FA)', [
       { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
       { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
       { k: 'pin2fa', label: hasPin ? 'رمز المصادقة الثنائية 2FA الجديد (4-8 أرقام، فارغ = بلا تغيير)' : 'رمز المصادقة الثنائية 2FA الجديد (4-8 أرقام — لم يُعيَّن بعد، أدخله لتفعيله)', val: '', type: 'password' },
       { k: 'fam', label: 'رمز عائلة جديد (فارغ = بلا تغيير، 8 خانات فأكثر غير متسلسلة)', type: 'password' },
-      { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر غير متسلسلة)', type: 'password' }], async d => {
+      { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر غير متسلسلة)', type: 'password' },
+      { k: 'secName', label: 'أمين الأسرة — الاسم (يستقبل آراء «أخرى» في التصويت على واتساب)', val: sec.name || '' },
+      { k: 'secPhone', label: 'أمين الأسرة — الجوال (05xxxxxxxx أو 9665xxxxxxxx، فارغ = بلا تعيين)', val: sec.phone || '' }], async d => {
       if (d.fam) {
         const nf = d.fam.trim();
         if (nf.length < 8) return toast('رمز العائلة يجب ألا يقل عن 8 خانات.');
@@ -1197,6 +1215,23 @@ $('#m-settings').onclick = () => {
       await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
       if (d.fam) await op('secure_set_family_code', { p_new_code: d.fam, p_passcode: S.code }, () => {});
       if (d.ed) await op('secure_set_editor_code', { p_new_code: d.ed, p_passcode: S.code }, () => {});
+      /* الجولة 10 — البند 11: أمين الأسرة — يحفظ الاسم والجوال خادمياً (06)؛
+         عند غياب الدالة (لم يُشغَّل 06 بعد) يُحفظ محلياً كاحتياط ويُعلَّم المالك. */
+      {
+        const ph = (d.secPhone || '').replace(/\D/g, '');
+        if (ph) {
+          const norm = ph.startsWith('0') ? '966' + ph.slice(1) : ph;
+          if (!/^9665\d{8}$/.test(norm)) return toast('جوال أمين الأسرة: 05xxxxxxxx أو 9665xxxxxxxx.');
+        }
+        try {
+          await op('secure_set_family_secretary', { p_passcode: S.code, p_name: (d.secName || '').trim(), p_phone: ph }, () => {
+            localStorage.setItem('almatarid_family_secretary', JSON.stringify({ name: (d.secName || '').trim(), phone: ph }));
+          });
+        } catch (e) {
+          if (/Could not find the function|PGRST202|404/.test(e.message || '')) { toast('تم حفظ باقي الإعدادات، لكن أمين الأسرة لم يُحفظ خادمياً: ملف (06_family_secretary.sql) لم يُشغَّل بعد — شغّله في سوبابيس أولاً ثم أعد تعيينه.'); return; }
+          toast(e.message || 'تعذّر حفظ أمين الأسرة'); return;
+        }
+      }
       /* A-01: حفظ رمز 2FA خادمياً أخيراً — تغييره يبطل كل الرموز السابقة،
          فيلزم أن تسبقه بقية الحفظات وهي تحمل الرمز الحالي */
       if (d.pin2fa) {
@@ -1563,7 +1598,7 @@ $('#m-inbox').onclick = inbox;
 $('#empty').addEventListener('click', e => { if (e.target.id === 'add-root') memberForm(null, null); });
 
 /* ---------- أقسام الاستعراض: الأسماء، المدن، الشرف، القرابة، التصدير ---------- */
-const nameBtn = m => m.name_masked ? '' : `<button class="nl" data-so="${esc(m.id)}">${esc(m.full_name)}<small>الجيل ${gen(m)}${m.city && !livingHidden(m) ? ' · ' + esc(m.city) : ''}</small></button>`;
+const nameBtn = m => m.name_masked ? '' : `<button class="nl" data-so="${esc(m.id)}">${esc(m.full_name)}<small>${T('genWord')} ${gen(m)}${m.city && !livingHidden(m) ? ' · ' + esc(m.city) : ''}</small></button>`;
 const byName = (a, b) => a.full_name.localeCompare(b.full_name, 'ar');
 const menuClose = fn => () => { $('.more').open = false; fn(); };
 
@@ -1947,48 +1982,48 @@ function openFamilyStats() {
   const html = `
     <div class="fstats-wrap">
       <div class="fstats-head">
-        <h2>📊 إحصائيات أسرة آل مطارد الشاملة</h2>
-        <p class="sub">تحليل إحصائي مرئي لبيانات الأسرة وشجرة النسب</p>
+        <h2>${T('stTitle')}</h2>
+        <p class="sub">${T('stSub')}</p>
       </div>
 
       <!-- بطاقات رقمية كبرى -->
       <div class="fstats-cards">
         <div class="fsc gold">
-          <div class="fsc-top"><span>إجمالي الأسرة</span><span>👥</span></div>
+          <div class="fsc-top"><span>${T('stTotal')}</span><span>👥</span></div>
           <div class="fsc-val">${total}</div>
-          <div class="fsc-sub">${maxGen} أجيال موثقة</div>
+          <div class="fsc-sub">${T('stGens').replace('{n}', maxGen)}</div>
         </div>
         <div class="fsc green">
-          <div class="fsc-top"><span>الأحياء (حفظهم الله)</span><span>🌱</span></div>
+          <div class="fsc-top"><span>${T('stAlive')}</span><span>🌱</span></div>
           <div class="fsc-val">${alive}</div>
-          <div class="fsc-sub">${alivePct}% من إجمالي الأسرة</div>
+          <div class="fsc-sub">${T('stAlivePct').replace('{n}', alivePct)}</div>
         </div>
         <div class="fsc blue">
-          <div class="fsc-top"><span>الذكور</span><span>👨</span></div>
+          <div class="fsc-top"><span>${T('stMale')}</span><span>👨</span></div>
           <div class="fsc-val">${males}</div>
-          <div class="fsc-sub">${malePct}% من الأسرة</div>
+          <div class="fsc-sub">${T('stMalePct').replace('{n}', malePct)}</div>
         </div>
         <div class="fsc purple">
-          <div class="fsc-top"><span>الإناث</span><span>👩</span></div>
+          <div class="fsc-top"><span>${T('stFemale')}</span><span>👩</span></div>
           <div class="fsc-val">${females}</div>
-          <div class="fsc-sub">${femalePct}% من الأسرة</div>
+          <div class="fsc-sub">${T('stFemalePct').replace('{n}', femalePct)}</div>
         </div>
       </div>
 
       <!-- توزيع الحالة والحياة -->
       <div class="fstats-section">
         <div class="fstats-sec-title">
-          <span>الحالة والتوزيع</span>
-          <small>${alive} حي · ${dead} متوفى</small>
+          <span>${T('stStatus')}</span>
+          <small>${T('stAliveDead').replace('{a}', alive).replace('{d}', dead)}</small>
         </div>
         <div class="dist-bar-wrap">
           <div class="dist-bar">
-            <div class="dist-segment" style="width:${alivePct}%;background:var(--green)" title="الأحياء: ${alive} (${alivePct}%)"></div>
-            <div class="dist-segment" style="width:${deadPct}%;background:#64748b" title="المتوفون: ${dead} (${deadPct}%)"></div>
+            <div class="dist-segment" style="width:${alivePct}%;background:var(--green)" title="${T('stAliveLine')}${alive} (${alivePct}%)"></div>
+            <div class="dist-segment" style="width:${deadPct}%;background:#64748b" title="${T('stDeadLine')}${dead} (${deadPct}%)"></div>
           </div>
           <div class="dist-labels">
-            <span>🟢 الأحياء: <b>${alive}</b> (${alivePct}%)</span>
-            <span>⚪ المتوفون (رحمهم الله): <b>${dead}</b> (${deadPct}%)</span>
+            <span>${T('stAliveLine')}<b>${alive}</b> (${alivePct}%)</span>
+            <span>${T('stDeadLine')}<b>${dead}</b> (${deadPct}%)</span>
           </div>
         </div>
       </div>
@@ -1996,8 +2031,8 @@ function openFamilyStats() {
       <!-- توزيع الأجيال وتتابع الذرية -->
       <div class="fstats-section">
         <div class="fstats-sec-title">
-          <span>تتابع الذرية عبر الأجيال</span>
-          <small>${maxGen} أجيال</small>
+          <span>${T('stGenSeq')}</span>
+          <small>${T('stGensShort').replace('{n}', maxGen)}</small>
         </div>
         <div class="gen-bars-list">
           ${genRowsHtml}
@@ -2007,8 +2042,8 @@ function openFamilyStats() {
       <!-- أكثر الأسماء شيوعاً بالأسرة -->
       <div class="fstats-section">
         <div class="fstats-sec-title">
-          <span>الأسماء الأكثر شيوعاً بالأسرة</span>
-          <small>اضغط على أي اسم للبحث في المشجر</small>
+          <span>${T('stNames')}</span>
+          <small>${T('stNamesHint')}</small>
         </div>
         <div class="top-names-grid">
           ${topNamesHtml}
@@ -2019,8 +2054,8 @@ function openFamilyStats() {
       ${rootsStats.length > 1 ? `
       <div class="fstats-section">
         <div class="fstats-sec-title">
-          <span>أحجام الفروع الرئيسية</span>
-          <small>${rootsStats.length} فروع</small>
+          <span>${T('stBranches')}</span>
+          <small>${T('stBranchesN').replace('{n}', rootsStats.length)}</small>
         </div>
         <div class="gen-bars-list">
           ${rootsHtml}
@@ -2030,14 +2065,14 @@ function openFamilyStats() {
       <!-- المؤشرات الأسرية والمصاهرة -->
       <div class="fstats-cards">
         <div class="fsc">
-          <div class="fsc-top"><span>متوسط الأبناء لكل أسرة</span><span>👨‍👩‍👧‍👦</span></div>
+          <div class="fsc-top"><span>${T('stAvgKids')}</span><span>👨‍👩‍👧‍👦</span></div>
           <div class="fsc-val">${avgKids}</div>
-          <div class="fsc-sub">${fathers.length} رب أسرة موثق</div>
+          <div class="fsc-sub">${T('stFathers').replace('{n}', fathers.length)}</div>
         </div>
         <div class="fsc">
-          <div class="fsc-top"><span>الزوجات الموثقات</span><span>💍</span></div>
+          <div class="fsc-top"><span>${T('stWives')}</span><span>💍</span></div>
           <div class="fsc-val">${wivesTotal}</div>
-          <div class="fsc-sub">${wivesFromFamily} من الأسرة · ${wivesOutside} مصاهرة</div>
+          <div class="fsc-sub">${T('stWivesLine').replace('{a}', wivesFromFamily).replace('{b}', wivesOutside)}</div>
         </div>
       </div>
 
@@ -2045,8 +2080,8 @@ function openFamilyStats() {
       ${totalBadges ? `
       <div class="fstats-section">
         <div class="fstats-sec-title">
-          <span>أصحاب الإنجازات والشارات</span>
-          <small>${totalBadges} شارة موثقة</small>
+          <span>${T('stBadges')}</span>
+          <small>${T('stBadgesN').replace('{n}', totalBadges)}</small>
         </div>
         <div class="badge-cloud">
           ${badgesHtml}
@@ -2078,9 +2113,10 @@ $('#m-fullstats').onclick = menuClose(() => openFamilyStats());
 
 $('#m-honor').onclick = menuClose(() => {
   const g = new Map(); for (const m of S.members) if (m.achievement_badge && !m.badge_is_job) (g.get(m.achievement_badge) || g.set(m.achievement_badge, []).get(m.achievement_badge)).push(m);
-  showInfo(`<h2>🏅 لوحة الشرف</h2>${[...g].map(([b, L]) => `<h3>${esc(b)} (${L.length})</h3>${L.sort(byName).map(nameBtn).join('')}`).join('') || '<p class="sub">لا توجد شارات بعد. تُضاف الشارة من نموذج تعديل الفرد.</p>'}`);
+  showInfo(`<h2>${T('honorTitle')}</h2>${[...g].map(([b, L]) => `<h3>${esc(b)} (${L.length})</h3>${L.sort(byName).map(nameBtn).join('')}`).join('') || '<p class="sub">' + T('honorEmpty') + '</p>'}`);
 });
-$('#m-rules-biographies').onclick = menuClose(() => openRulesAndBiographiesModal());
+$('#m-rules').onclick = menuClose(() => openFamilyRules());
+$('#m-biographies').onclick = menuClose(() => openNotablesBiographies());
 $('#m-council-decrees').onclick = menuClose(() => openCouncilDecreesModal());
 $('#m-family-fund').onclick = menuClose(() => openFamilyFundModal());
 
@@ -2104,7 +2140,7 @@ function kinView() {
     <div><b>${esc(b.full_name)}</b> هو <b>${esc(r2.term)}</b> لـ <b>${esc(a.full_name)}</b></div>${r1.L ? `<small>الجد المشترك: ${esc(r1.L.full_name)}</small>` : ''}</div>` : '<p class="sub">لا يوجد جد مشترك في الشجرة.</p>';
 }
 $('#m-kin').onclick = menuClose(() => {
-  const opt = S.members.slice().sort(byName).map(m => `<option value="${esc(m.id)}">${esc(m.full_name)} (الجيل ${gen(m)}${S.byId.get(S.byId.get(m.father_id)?.father_id) ? ' · ' + esc(S.byId.get(S.byId.get(m.father_id).father_id).full_name) : ''})</option>`).join('');
+  const opt = S.members.slice().sort(byName).map(m => `<option value="${esc(m.id)}">${esc(m.full_name)} (${T('genWord')} ${gen(m)}${S.byId.get(S.byId.get(m.father_id)?.father_id) ? ' · ' + esc(S.byId.get(S.byId.get(m.father_id).father_id).full_name) : ''})</option>`).join('');
   showInfo(`<h2>🧭 مستكشف القرابة</h2><p class="sub">تُحسب الصلة عبر خط الآباء فقط، وهي تقريبية.</p>
     <label>الشخص الأول<div class="selrow"><input class="selfilter" type="search" placeholder="🔍 ابحث بالاسم…" data-tg="kin-a"><select id="kin-a"><option value="">اختر…</option>${opt}</select></div></label>
     <label>الشخص الثاني<div class="selrow"><input class="selfilter" type="search" placeholder="🔍 ابحث بالاسم…" data-tg="kin-b"><select id="kin-b"><option value="">اختر…</option>${opt}</select></div></label><div id="kin-out"></div>`); kinView();
@@ -3250,8 +3286,101 @@ function branchesList() {
   showInfo(`<h2>👥 مسؤولو الفروع</h2>${S.accessStats ? `<p class="sub">👥 <b>دخولات العائلة آخر 30 يوم: ${S.accessStats.family ?? 0}</b> (كل شبكة تُحسب مرة كل 30 دقيقة — رقم تقريبي للزيارات لا عدد أشخاص بالضبط)</p>` : ''}
     <p class="sub">لكل فرع مسؤول واحد يضيف ويعدّل داخل فرعه فقط، ولا يحذف ولا يصل لفروع الآخرين. ورمز قراءة خاص بكل فرع يوزّعه المسؤول على أهله — إن تسرّب غيّرته وحده.</p>
     ${S.branches.map(b => { const visits = S.accessStats?.by_branch?.[b.root_id] || 0; return `<div class="evrow"><div><b>${esc(S.byId.get(b.root_id)?.full_name || '؟')}</b><small>المسؤول: ${esc(delegateName(b))} · رمز القراءة: ${b.reader_set ? 'مضبوط ✓' : 'غير مضبوط'} · دخولات الفرع آخر 30 يوم: ${visits}</small></div><span><button class="x" data-brc="${esc(b.root_id)}" aria-label="رمز القراءة" title="رمز قراءة الفرع">🔑</button>${b.reader_set ? `<button class="x" data-brx="${esc(b.root_id)}" aria-label="إلغاء رمز القراءة" title="إلغاء رمز القراءة">🚫</button>` : ''}<button class="x" data-bf="${esc(b.root_id)}" aria-label="تعديل">✏️</button><button class="x" data-bx="${esc(b.root_id)}" aria-label="إلغاء">✕</button></span></div>`; }).join('') || '<p class="sub">لم يُعيَّن أحد بعد.</p>'}
-    <div class="row adm"><button data-bf="">➕ تعيين مسؤول لفرع</button></div>`);
+    <div class="row adm"><button data-bf="">➕ تعيين مسؤول لفرع</button> <button type="button" id="btn-branch-perms" class="ghost">📋 صلاحيات مسؤول الفرع</button></div>`);
+  const pb = $('#btn-branch-perms'); if (pb) pb.onclick = () => openBranchPerms();
 }
+
+/* ---------- الجولة 10 — البند 5: لوحة صلاحيات مسؤول الفرع ---------- */
+/* القائمتان مبنيتان حرفياً من الفحوصات الفعلية في الكود وقاعدة البيانات (تدقيق الجولة 10) — لا تُخترع صلاحيات.
+   تصحيح مهم: «إدارة رموز فرعه» ليست صلاحية لمسؤول الفرع إطلاقاً (secure_set_branch_read_code و secure_set_branch_editor للمالك فقط).
+   الصلاحيات ثابتة لكل مسؤولي الفروع حسب الدور؛ التحديد (checkbox) للنسخ والمراجعة والطباعة فقط — لا يمنح ولا يسحب شيئاً. */
+const BRANCH_PERMS_YES = [
+  'عرض الشجرة كاملة (النساء خارج فرعه مقنّعات «ابنة الأسرة»، والهواتف مخفية خارج فرعه؛ ونساء فرعه بأسمائهن الحقيقية)',
+  'تعديل أفراد فرعه دون تغيير الأب',
+  'إضافة أفراد تحت أب في فرعه',
+  'إضافة الزوجات وتعديلها وحذفها وضبط حالة الزواج لأزواج فرعه',
+  'ضبط صور أفراد فرعه',
+  'إعادة ترتيب الإخوة تحت أب في فرعه',
+  'نشر إعلانات مرتبطة بأفراد فرعه فقط',
+  'عرض بطاقات التهاني والتعازي ونشرها داخل فرعه',
+  'إضافة وإزالة حضور المناسبات من أفراد فرعه وعرضهم',
+  'إرسال اقتراحات وتصحيحات',
+  'تأكيد وتعديل الحضور بعد يوم المناسبة لأفراد فرعه',
+  'الاشتراك وإلغاء الاشتراك في Web Push برمزه',
+  'عرض الميزات التي أظهرها له المالك (بلا تبديل أو تثبيت)',
+  'تصدير الشجرة كما تظهر له',
+  'استخدام الميزات الظاهرة ضمن نطاق فرعه',
+  'عرض التقارير الجاهزة ببياناته الظاهرة',
+  'عرض لوحة الصلاحيات هذه نفسها'
+];
+const BRANCH_PERMS_NO = [
+  'حذف أي عضو (للمالك فقط)',
+  'نقل عضو إلى أب آخر (تغيير الأب ممنوع على دور الفرع)',
+  'تعديل أي فرد خارج فرعه',
+  'إنشاء المناسبات أو تعديلها أو حذفها أو وسائطها وقصتها',
+  'نشر إعلانات عامة',
+  'حذف الإعلانات',
+  'عرض صندوق الاقتراحات أو البت فيه',
+  'إدارة مسؤولي الفروع',
+  'إدارة أي رموز — رمز العائلة، رمز المحرر، رموز قراءة الفروع، رموز دخول مسؤولي الفروع (كلها للمالك فقط؛ ولا تغيير ذاتي لرمز الدخول أصلاً)',
+  'إعدادات المالك (وضع الدخول، إظهار أسماء النساء، رمز المصادقة الثنائية، الرموز)',
+  'النسخ الاحتياطي والاستعادة واللقطات',
+  'سجل التغييرات',
+  'إظهار الميزات أو إخفاؤها أو تثبيتها',
+  'إدارة فروع أخرى',
+  'عرض بيانات الزوجات المطلقات (للمالك فقط)',
+  'عرض هواتف وأسماء النساء خارج فرعه'
+];
+function openBranchPerms(rootId) {
+  if (!['owner', 'editor', 'branch'].includes(S.role)) { toast(T('toastVisOwnerOnly')); return; }
+  const branches = S.branches || [];
+  let selRoot = rootId || (S.role === 'branch' ? S.branch?.root_id : (branches[0]?.root_id || ''));
+  const branchName = r => S.byId.get(r)?.full_name || '؟';
+  const renderList = (items, cls, col) => items.map((t, i) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-bottom:1px solid var(--line);font-size:.82rem;cursor:pointer"><input type="checkbox" class="perm-chk" data-col="${col}" data-i="${i}" style="margin-top:3px"><span>${esc(t)}</span></label>`).join('');
+  const scopeLine = () => {
+    if (!selRoot) return `<p class="sub">${T('permEmpty')}</p>`;
+    const b = branches.find(x => x.root_id === selRoot);
+    return `<p class="sub">${T('permScope')} — <b>${esc(branchName(selRoot))}</b>${b ? ` · المسؤول: ${esc(delegateName(b))}` : ''}</p>`;
+  };
+  showInfo(`<h2>${T('permTitle')}</h2>
+    <p class="sub">${T('permSub')}</p>
+    ${S.role === 'branch' ? `<p class="sub">${T('permYourBranch')}: <b>${esc(branchName(selRoot))}</b> — ${T('permScope')}</p>` : `
+    <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap">
+      <label style="font-size:.82rem;color:var(--gold);font-weight:700">${T('permChoose')}</label>
+      <select id="perm-branch-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.82rem">
+        ${branches.map(b => `<option value="${b.root_id}" ${b.root_id === selRoot ? 'selected' : ''}>${esc(branchName(b.root_id))}</option>`).join('') || `<option value="">${T('permEmpty')}</option>`}
+      </select>
+    </div>
+    <div id="perm-scope-line">${scopeLine()}</div>`}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">
+      <button type="button" id="perm-sel-all" class="fstats-btn" style="padding:5px 10px;font-size:.78rem">${T('permSelectAll')}</button>
+      <button type="button" id="perm-sel-none" class="fstats-btn" style="padding:5px 10px;font-size:.78rem">${T('permClearSel')}</button>
+      <button type="button" id="perm-copy" class="fstats-btn" style="padding:5px 10px;font-size:.78rem">${T('permCopySel')}</button>
+      <button type="button" id="perm-print" class="fstats-btn" style="padding:5px 10px;font-size:.78rem">${T('permPrint')}</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><h3 style="color:#10b981;margin:6px 0">${T('permColYes')} <span style="font-size:.7rem;color:var(--mut)">(${T('permFixed')})</span></h3><div style="border:1px solid var(--line);border-radius:8px">${renderList(BRANCH_PERMS_YES, 'yes', 'yes')}</div></div>
+      <div><h3 style="color:#ef4444;margin:6px 0">${T('permColNo')} <span style="font-size:.7rem;color:var(--mut)">(${T('permFixed')})</span></h3><div style="border:1px solid var(--line);border-radius:8px">${renderList(BRANCH_PERMS_NO, 'no', 'no')}</div></div>
+    </div>`);
+  const sel = $('#perm-branch-sel');
+  if (sel) sel.onchange = () => { selRoot = sel.value; const l = $('#perm-scope-line'); if (l) l.innerHTML = scopeLine(); };
+  const checks = () => [...document.querySelectorAll('#profile .perm-chk')];
+  const setAll = v => checks().forEach(c => { c.checked = v; });
+  const bAll = $('#perm-sel-all'); if (bAll) bAll.onclick = () => setAll(true);
+  const bNone = $('#perm-sel-none'); if (bNone) bNone.onclick = () => setAll(false);
+  const bCopy = $('#perm-copy');
+  if (bCopy) bCopy.onclick = async () => {
+    const picked = checks().filter(c => c.checked);
+    const txt = `${T('permTitle')} — ${branchName(selRoot)}\n\n${T('permColYes')}:\n` + picked.filter(c => c.dataset.col === 'yes').map(c => '• ' + BRANCH_PERMS_YES[+c.dataset.i]).join('\n') + `\n\n${T('permColNo')}:\n` + picked.filter(c => c.dataset.col === 'no').map(c => '• ' + BRANCH_PERMS_NO[+c.dataset.i]).join('\n');
+    try { await navigator.clipboard.writeText(txt); toast(T('permCopied')); } catch (e) { toast(txt.slice(0, 120)); }
+  };
+  const bPrint = $('#perm-print');
+  if (bPrint) bPrint.onclick = () => {
+    const rows = (items, mark) => items.map(t => `<div style="padding:4px 0;border-bottom:1px solid #ddd">${mark} ${esc(t)}</div>`).join('');
+    printHtml(T('permTitle'), `<h2>${esc(T('permTitle'))} — ${esc(branchName(selRoot))}</h2><p>${esc(T('permSub'))}</p><h3>${esc(T('permColYes'))}</h3>${rows(BRANCH_PERMS_YES, '✅')}<h3>${esc(T('permColNo'))}</h3>${rows(BRANCH_PERMS_NO, '⛔')}`);
+  };
+}
+$('#m-branch-perms').onclick = () => { $('.more').open = false; openBranchPerms(); };
 function readCodeForm(root) {
   openForm(`رمز قراءة فرع «${S.byId.get(root)?.full_name || ''}»`, [
     { k: 'code', label: 'رمز قراءة جديد (6 خانات فأكثر) — للقراءة فقط، يوزّعه المسؤول على أهل الفرع، وتغييره يبطل القديم فورًا', type: 'password', req: true }], async d => {
@@ -3273,7 +3402,7 @@ function branchForm(rootId) {
   }
   // الخطوة 2: اختيار المسؤول من أفراد الفرع نفسه (قائمة، وليس كتابة)
   const cur = S.branches.find(b => b.root_id === rootId);
-  const opts = [['', 'اختر…'], ...S.members.filter(m => underRoot(m, rootId)).sort(byName).map(m => [m.id, `${m.full_name} (الجيل ${gen(m)})`])];
+  const opts = [['', 'اختر…'], ...S.members.filter(m => underRoot(m, rootId)).sort(byName).map(m => [m.id, `${m.full_name} (${T('genWord')} ${gen(m)})`])];
   openForm(`مسؤول فرع «${S.byId.get(rootId)?.full_name || ''}»`, [
     { k: 'delegate', label: 'المسؤول (اختره من أفراد الفرع)', type: 'select', opts, val: cur?.delegate_id || '' },
     { k: 'code', label: cur ? 'رمز جديد (فارغ = بلا تغيير، 8 خانات فأكثر)' : 'رمز دخول المسؤول (8 خانات فأكثر)', type: 'password', req: !cur }], async d => {
@@ -3449,7 +3578,6 @@ $('#m-family-news').onclick = menuClose(() => openFamilyNewsModal());
 $('#m-family-vote').onclick = menuClose(() => openFamilyVoteModal());
 $('#m-careers-dir').onclick = menuClose(() => openCareersDirectoryModal());
 $('#m-time-capsule').onclick = menuClose(() => openTimeCapsuleModal());
-$('#m-anniversaries').onclick = menuClose(() => openAnniversariesModal());
 $('#m-life-story').onclick = menuClose(() => openLifeStoryModal());
 $('#m-member-stories').onclick = menuClose(() => openMemberStoriesModal());
 
@@ -3666,12 +3794,15 @@ const FEAT = [
   ['cards', '💌 بطاقات التهاني والتعازي', '#m-cards'], ['kin', '🧭 مستكشف القرابة', '#m-kin'],
   ['suggest', '📝 اقتراح وتصحيح', '#m-suggest'], ['csv', '📊 تصدير إكسل', '#m-csv']
 ];
+/* الجولة 10: هاتان الميزتان لهما زر مخصص في الترويسة أصلاً (btn-lang / btn-alerts) — لا تُثبَّتا في الشريط حتى لا يظهر زرّان */
+const NO_STRIP_PIN = ['lang-toggle', 'branch-alerts'];
+const featLabel = (k, arLabel) => isEn() ? ((FEAT_EN && FEAT_EN[k]) || arLabel) : arLabel;
 function renderFeat() {
   const nav = $('#feat');
   if (nav) {
-    const list = FEAT.filter(([k]) => (S.featured || []).includes(k) && (k !== 'cards' || ['owner', 'editor', 'branch'].includes(S.role))); /* ann44 */
+    const list = FEAT.filter(([k]) => (S.featured || []).includes(k) && (k !== 'cards' || ['owner', 'editor', 'branch'].includes(S.role))).map(([k, label]) => [k, featLabel(k, label)]); /* ann44 */
     /* نظام الإخفاء: بطاقات الميزات المثبّتة (من الـ64) تُلحق ببطاقات الأقسام الأساسية — المجموع سقفه 6 */
-    const pins = (S.pinnedFeatures || []).filter(k => { const f = FEATURES.find(x => x.key === k); return f && f.btn && featOn(k) && featRoleOk(f); }).map(k => [k, FEATURES.find(x => x.key === k).name]);
+    const pins = (S.pinnedFeatures || []).filter(k => { const f = FEATURES.find(x => x.key === k); return f && f.btn && featOn(k) && featRoleOk(f) && !NO_STRIP_PIN.includes(k); }).map(k => [k, fname(FEATURES.find(x => x.key === k))]);
     const all = list.concat(pins);
     nav.hidden = !all.length;
     nav.innerHTML = all.map(([k, label]) => `<button type="button" class="feat-btn" data-feat-go="${k}">${esc(label)}</button>`).join('');
@@ -3680,12 +3811,12 @@ function renderFeat() {
   document.querySelectorAll('.feat-tg').forEach(s => {
     const on = (S.featured || []).includes(s.dataset.featTg);
     s.textContent = on ? '⭐' : '☆'; s.classList.toggle('on', on);
-    s.title = on ? 'مُبرز بالصفحة — اضغط للإخفاء' : 'إبراز بالصفحة';
+    s.title = on ? T('featTgOn') : T('featTgOff');
   });
 }
 async function toggleFeat(key) {
   const cur = new Set(S.featured || []);
-  if (!cur.has(key) && pinTotal() >= 6) { toast('الشريط يتسع لست بطاقات فقط — ألغِ تثبيت بطاقة أولاً'); return; } /* سقف 6 بطاقات (أساسية + ميزات) */
+  if (!cur.has(key) && pinTotal() >= 6) { toast(T('toastStripFull')); return; } /* سقف 6 بطاقات (أساسية + ميزات) */
   cur.has(key) ? cur.delete(key) : cur.add(key);
   S.featured = FEAT.map(([k]) => k).filter(k => cur.has(k));
   renderFeat();
@@ -3750,7 +3881,6 @@ const FEATURES = [
   { key: 'events-map', btn: '#m-events-map', cat: 'events', name: '📍 خريطة مناسبات العائلة', desc: 'أماكن المناسبات على الخريطة مع فلتر زمني' },
   { key: 'branch-alerts', btn: '#m-branch-alerts', cat: 'events', name: '🔔 تنبيهات فرعك', desc: 'تنبيه عند تعديل فرعك أو إضافة قريب جديد' },
   { key: 'web-push', btn: '#m-web-push', cat: 'events', name: '📲 إشعارات المتصفح (Web Push)', desc: 'اشترك ليصلك تنبيه عند مناسبة أو قريب جديد — التقاط الاشتراكات فقط؛ الإرسال يحتاج خادماً خارجياً بمفتاح VAPID الخاص' },
-  { key: 'anniversaries', btn: '#m-anniversaries', cat: 'events', name: '💍 تذكير بذكرى الزواج', desc: 'تذكير سنوي بذكرى زواج أفراد العائلة' },
   { key: 'events-reminders', btn: '#m-events', cat: 'events', name: '🎉 تذكير المناسبات والعد التنازلي', desc: 'مناسبات قادمة مع عد تنازلي' },
   { key: 'annual-calendar', btn: '#m-calendar', cat: 'events', name: '🗓️ التقويم السنوي', desc: 'تقويم العائلة هجري وميلادي' },
   { key: 'dua-deceased', btn: '#m-dua-deceased', cat: 'events', name: '🤲 تذكير الدعاء للمتوفين', desc: 'تذكير بالدعاء لمن رحلوا' },
@@ -3759,7 +3889,8 @@ const FEATURES = [
   { key: 'surname-origin', btn: '#m-surname-origin', cat: 'heritage', name: '🏺 أصل لقب «آل مطارد»', desc: 'صفحة تاريخ اللقب والجذور' },
   { key: 'life-story', btn: '#m-life-story', cat: 'heritage', name: '📖 صفحة «قصة حياة»', desc: 'محطات حياة كل عضو من بياناته المسجلة' },
   { key: 'member-stories', btn: '#m-member-stories', cat: 'heritage', name: '📜 قصص مكتوبة', desc: 'قصص أفراد العائلة مربوطة بأصحابها' },
-  { key: 'rules-biographies', btn: '#m-rules-biographies', cat: 'heritage', name: '📜 قواعد العائلة وتراجم الأعلام', desc: 'ميثاق العائلة وتراجم أعلامها' },
+  { key: 'family-rules', btn: '#m-rules', cat: 'heritage', name: '⚖️ ميثاق وقواعد العائلة', desc: 'ميثاق العائلة وقواعدها الداخلية' },
+  { key: 'notables-biographies', btn: '#m-biographies', cat: 'heritage', name: '🏅 تراجم أعلام ورجالات آل مطارد', desc: 'تراجم يكتبها أفراد العائلة لأعلامهم' },
   { key: 'timeline', btn: '#m-timeline', cat: 'heritage', name: '⏳ الخط الزمني التفاعلي', desc: 'أحداث العائلة على خط زمني' },
   { key: 'audio-stories', btn: '#m-audio-stories', cat: 'heritage', name: '🎙️ مكتبة القصص الصوتية', desc: 'قصص العائلة مسموعة' },
   { key: 'doc-archive', btn: '#m-archive', cat: 'heritage', name: '🗄️ أرشيف الوثائق', desc: 'وثائق العائلة القديمة محفوظة' },
@@ -3783,7 +3914,7 @@ const FEATURES = [
   { key: 'women-portal', btn: '#m-women-portal', cat: 'share', name: '🚺 بوابة النساء', desc: 'بوابة النساء بأكواد فردية' },
   { key: 'digital-card', btn: '#m-lcard', cat: 'share', name: '📇 بطاقة النسب الرقمية', desc: 'بطاقتك الرقمية في العائلة' },
   /* المجلس والتقارير */
-  { key: 'council-decrees', btn: '#m-council-decrees', cat: 'council', name: '🏛️ صفحة مجلس العائلة', desc: 'قرارات ومحاضر مجلس العائلة' },
+  { key: 'council-decrees', btn: '#m-council-decrees', cat: 'council', name: '🏛️ صفحة مجلس العائلة', desc: 'الأعضاء والأمناء والقرارات والتعاميم' },
   { key: 'family-fund', btn: '#m-family-fund', cat: 'council', name: '💰 صندوق العائلة', desc: 'مساهمات الصندوق وحملاته' },
   { key: 'blank-tree', btn: '#m-blank-tree', cat: 'council', name: '🖨️ شجرة فارغة للطباعة', desc: 'شجرة فارغة 3–5 أجيال للطباعة والتعبئة' },
   { key: 'ready-reports', btn: '#m-ready-reports', cat: 'council', name: '📑 تقارير جاهزة', desc: 'تقارير جاهزة عن الشجرة والأعضاء' },
@@ -3803,7 +3934,7 @@ async function loadFeatureFlags() {
   if (!CFG.DEMO) { try { const r = await rpc('get_feature_flags', {}); if (r && r.success !== false) { v = r.visible; p = r.pinned; } } catch (e) { console.warn('[almatarid]', e); /* SQL التجريبي لم يُشغَّل بعد — احتياط localStorage */ } }
   if (v == null) { try { v = JSON.parse(localStorage.getItem(LS_VIS) || 'null'); p = JSON.parse(localStorage.getItem(LS_PIN) || 'null'); } catch (e) { console.warn('[almatarid]', e); } }
   if (Array.isArray(v)) S.visibleFeatures = v.filter(k => featByKey(k));
-  if (Array.isArray(p)) S.pinnedFeatures = p.filter(k => { const f = featByKey(k); return f && f.btn; });
+  if (Array.isArray(p)) S.pinnedFeatures = p.filter(k => { const f = featByKey(k); return f && f.btn && !NO_STRIP_PIN.includes(k); });
   applyFeatureVisibility(); renderFeat();
 }
 async function saveFeatureFlags() {
@@ -3828,14 +3959,14 @@ function applyFeatureVisibility() {
 }
 function openFeature(key) {
   const f = featByKey(key); if (!f) return;
-  if (!featOn(key)) { toast('هذه الميزة مخفية — أظهرها أولاً من جدول الميزات'); return; }
+  if (!featOn(key)) { toast(T('toastFeatHidden')); return; }
   const p = $('#profile'); if (p && p.open) p.close(); /* إغلاق الجدول ليرى المستخدم الميزة */
   if (f.btn) { const b = $(f.btn); if (b) { b.click(); return; } }
   if (f.kind === 'profile') { const r = S.roots && S.roots[0]; if (r) profile(r.id); return; }
   toast(f.desc);
 }
 async function toggleFeatureVisibility(key) {
-  if (S.role !== 'owner') { toast('الإظهار والإخفاء للمالك فقط'); return; }
+  if (S.role !== 'owner') { toast(T('toastVisOwnerOnly')); return; }
   const f = featByKey(key); if (!f) return;
   const vis = new Set(S.visibleFeatures || []);
   vis.has(key) ? vis.delete(key) : vis.add(key);
@@ -3843,19 +3974,20 @@ async function toggleFeatureVisibility(key) {
   S.visibleFeatures = FEATURES.map(x => x.key).filter(k => vis.has(k));
   applyFeatureVisibility(); renderFeat(); openFeaturesTable();
   await saveFeatureFlags();
-  toast(vis.has(key) ? 'أُظهرت الميزة: ' + f.name : 'أُخفيت الميزة: ' + f.name);
+  toast(vis.has(key) ? T('toastShown') + fname(f) : T('toastHidden') + fname(f));
 }
 async function toggleFeaturePin(key) {
-  if (S.role !== 'owner') { toast('التثبيت للمالك فقط'); return; }
+  if (S.role !== 'owner') { toast(T('toastPinOwnerOnly')); return; }
   const f = featByKey(key); if (!f || !f.btn) return;
-  if (!featOn(key)) { toast('أظهر الميزة أولاً لتثبيتها'); return; }
+  if (NO_STRIP_PIN.includes(key)) { toast(T('toastPinHeader')); return; }
+  if (!featOn(key)) { toast(T('toastPinFirst')); return; }
   const pins = new Set(S.pinnedFeatures || []);
-  if (!pins.has(key) && pinTotal() >= 6) { toast('الشريط يتسع لست بطاقات فقط — ألغِ تثبيت بطاقة أولاً'); return; }
+  if (!pins.has(key) && pinTotal() >= 6) { toast(T('toastStripFull')); return; }
   pins.has(key) ? pins.delete(key) : pins.add(key);
   S.pinnedFeatures = FEATURES.map(x => x.key).filter(k => pins.has(k));
   renderFeat(); openFeaturesTable();
   await saveFeatureFlags();
-  toast(pins.has(key) ? 'ثُبّتت في الشريط: ' + f.name : 'أُلغي تثبيتها من الشريط');
+  toast(pins.has(key) ? T('pinAdded') + fname(f) : T('pinRemoved'));
 }
 /* جدول الميزات المنبثق: مجمّع حسب الفئة + بحث أعلى الصفحة؛ الصف قابل للنقر لفتح الميزة؛
    للمالك مفتاح إظهار/إخفاء + زر تثبيت في كل صف — الجدول نفسه لوحة تحكم الإظهار. */
@@ -3864,15 +3996,16 @@ function openFeaturesTable() {
   const prevQ = document.getElementById('feat-search')?.value || ''; /* حفظ نص البحث عند إعادة رسم الجدول بعد مفتاح */
   const rows = f => {
     const vis = featOn(f.key), pinned = (S.pinnedFeatures || []).includes(f.key);
-    const kindBadge = f.kind === 'setting' ? '<span class="ftag">إعداد</span>' : f.kind === 'profile' ? '<span class="ftag">في الملف</span>' : '';
-    const visBtn = isOwner ? `<button type="button" class="ftg ${vis ? 'on' : ''}" data-vis="${f.key}" title="${vis ? 'ظاهرة — اضغط للإخفاء' : 'مخفية — اضغط للإظهار'}">${vis ? '👁️ ظاهرة' : '🚫 مخفية'}</button>` : (vis ? '<span class="ftag on">ظاهرة</span>' : '');
-    const pinBtn = isOwner && f.btn ? `<button type="button" class="ftg ${pinned ? 'on' : ''}" data-pin="${f.key}" title="${pinned ? 'مثبّتة في الشريط — اضغط للإلغاء' : 'تثبيت في الشريط'}">${pinned ? '📌 مثبّتة' : '☆ تثبيت'}</button>` : '';
-    return `<tr data-fkey="${f.key}" data-ftext="${esc(stripKin(normAr(f.name + ' ' + f.desc)))}"><td class="fname" data-open="${f.key}"><b>${esc(f.name)}</b><small>${esc(f.desc)}</small>${kindBadge}</td><td class="fctl">${visBtn}${pinBtn}</td></tr>`;
+    const kindBadge = f.kind === 'setting' ? `<span class="ftag">${T('ftKindSetting')}</span>` : f.kind === 'profile' ? `<span class="ftag">${T('ftKindProfile')}</span>` : '';
+    const visBtn = isOwner ? `<button type="button" class="ftg ${vis ? 'on' : ''}" data-vis="${f.key}" title="${vis ? T('ftVisOn') : T('ftVisOff')}">${vis ? T('ftVisible') : T('ftHidden')}</button>` : (vis ? `<span class="ftag on">${T('ftVisible')}</span>` : '');
+    const pinBtn = isOwner && f.btn ? (NO_STRIP_PIN.includes(f.key) ? `<span class="ftag" title="${T('ftInHeaderTitle')}">${T('ftInHeader')}</span>` : `<button type="button" class="ftg ${pinned ? 'on' : ''}" data-pin="${f.key}" title="${pinned ? T('ftPinOn') : T('ftPinOff')}">${pinned ? T('ftPinned') : T('ftPin')}</button>`) : '';
+    return `<tr data-fkey="${f.key}" data-ftext="${esc(stripKin(normAr(fname(f) + ' ' + fdesc(f))))}"><td class="fname" data-open="${f.key}"><b>${esc(fname(f))}</b><small>${esc(fdesc(f))}</small>${kindBadge}</td><td class="fctl">${visBtn}${pinBtn}</td></tr>`;
   };
   const cats = FEAT_CATS.map(([ck, cl]) => {
     const list = FEATURES.filter(f => f.cat === ck && (isOwner || (featOn(f.key) && featRoleOk(f))));
     if (!list.length) return '';
-    return `<div class="fcat" data-cat="${ck}"><h4>${esc(cl)} <span class="fcnt">(${list.length})</span></h4><table class="ftbl"><tbody>${list.map(rows).join('')}</tbody></table></div>`;
+    const collapsed = (S.featCollapsed || new Set()).has(ck);
+    return `<div class="fcat${collapsed ? ' collapsed' : ''}" data-cat="${ck}"><h4 class="fcat-h" data-cat-toggle="${ck}">${esc(fcatName(ck))} <span class="fcnt">(${list.length})</span></h4><table class="ftbl"><tbody>${list.map(rows).join('')}</tbody></table></div>`;
   }).join('');
   const total = FEATURES.filter(f => isOwner || (featOn(f.key) && featRoleOk(f))).length;
   showInfo(`<style>
@@ -3887,24 +4020,39 @@ function openFeaturesTable() {
     .ftg.on{border-color:var(--gold);color:var(--gold)}
     .ftag{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:.72rem;color:var(--mut);margin-top:4px}
     .ftag.on{color:var(--gold);border-color:var(--gold)}
-    .fcat h4{margin:14px 0 4px;color:var(--gold)}
+    .fcat h4{margin:14px 0 4px;color:var(--gold);cursor:pointer}
+    .fcat-h::before{content:'▾';color:var(--mut);font-size:.8rem;margin-inline-end:4px}
+    .fcat.collapsed .fcat-h::before{content:'▸'}
+    .fcat.collapsed table{display:none}
     .fcnt{color:var(--mut);font-size:.8rem}
     #feat-search{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);color:var(--tx);font-size:1rem;margin:6px 0 4px}
     @media (max-width:640px){.ftbl,.ftbl tbody,.ftbl tr,.ftbl td{display:block;width:100%}.ftbl tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;padding:4px 8px}.ftbl td{border-bottom:none}.ftbl .fctl{width:auto;text-align:right;padding-top:0}}
   </style>
-  <h2>✨ جدول الميزات</h2><p class="sub">${isOwner ? 'اضغط على اسم الميزة لفتحها، وعلى «ظاهرة/مخفية» لإظهارها أو إخفائها، وعلى «تثبيت» لإظهارها في الشريط أعلى الصفحة (حتى 6 بطاقات).' : 'الميزات التي أظهرها المالك — اضغط على اسم الميزة لفتحها.'} · ${total} من ${FEATURES.length} ميزة</p>
-  <input id="feat-search" type="search" placeholder="🔍 ابحث عن ميزة…" autocomplete="off">
-  <div id="feat-list">${cats || '<p class="sub">لا ميزات ظاهرة بعد.</p>'}</div>`);
+  <h2>${T('ftTitle')}</h2><p class="sub">${isOwner ? T('ftHintOwner') : T('ftHintVisitor')} · ${T('ftCount').replace('{v}', total).replace('{t}', FEATURES.length)}</p>
+  <input id="feat-search" type="search" placeholder="${T('ftSearchPh')}" autocomplete="off">
+  <div id="feat-list">${cats || `<p class="sub">${T('ftNoVisible')}</p>`}</div>`);
   const body = $('#profile-body'), inp = $('#feat-search');
   if (inp) inp.oninput = () => {
     const q = stripKin(normAr(inp.value || ''));
     body.querySelectorAll('tr[data-fkey]').forEach(tr => { tr.style.display = !q || (tr.dataset.ftext || '').includes(q) ? '' : 'none'; });
-    body.querySelectorAll('.fcat').forEach(c => { c.style.display = [...c.querySelectorAll('tr[data-fkey]')].some(tr => tr.style.display !== 'none') ? '' : 'none'; });
+    body.querySelectorAll('.fcat').forEach(c => {
+      const hasMatch = [...c.querySelectorAll('tr[data-fkey]')].some(tr => tr.style.display !== 'none');
+      c.style.display = hasMatch ? '' : 'none';
+      /* الجولة 10 — البند 16: أثناء البحث تُفتح المجموعات ذات النتائج؛ وعند مسح البحث يعود الطي المحفوظ */
+      c.classList.toggle('collapsed', q ? false : (S.featCollapsed || new Set()).has(c.dataset.cat));
+    });
   };
   if (inp && prevQ) { inp.value = prevQ; inp.oninput(); }
   body.querySelectorAll('[data-open]').forEach(td => td.onclick = () => openFeature(td.dataset.open));
   body.querySelectorAll('[data-vis]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFeatureVisibility(b.dataset.vis); });
   body.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFeaturePin(b.dataset.pin); });
+  /* الجولة 10 — البند 16: طيّ/فتح مجموعة — الحالة في ذاكرة الصفحة فقط */
+  body.querySelectorAll('[data-cat-toggle]').forEach(h => h.onclick = () => {
+    if (!S.featCollapsed) S.featCollapsed = new Set();
+    const ck = h.dataset.catToggle;
+    S.featCollapsed.has(ck) ? S.featCollapsed.delete(ck) : S.featCollapsed.add(ck);
+    openFeaturesTable();
+  });
 }
 /* ربط زرّي جدول الميزات بتفويض نقر على مستوى المستند (بدل onclick مباشر على الزر):
    يبقى يعمل حتى لو أُعيد بناء الترويسة أو القائمة لاحقاً، ويستدعي openFeaturesTable مرة واحدة لكل نقرة.
@@ -3953,7 +4101,7 @@ placeMore();
 BBAR_MQ.addEventListener('change', placeMore);
 /* ann67: زر تبديل مخطط/قائمة بالشريط (يعرض العرض الآخر)، وزر بحث يُظهر/يخفي صف البحث */
 const BB_TREE = '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>', BB_LIST = '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>'; /* nav-redesign: أيقونات Lucide */
-function syncBbView() { const b = $('#bb-view'); if (!b) return; const g = S.view === 'graph'; b.innerHTML = `<svg class="bb-ic" viewBox="0 0 24 24" aria-hidden="true">${g ? BB_LIST : BB_TREE}</svg><span>${g ? 'قائمة' : 'مخطط'}</span>`; }
+function syncBbView() { const b = $('#bb-view'); if (!b) return; const g = S.view === 'graph'; b.innerHTML = `<svg class="bb-ic" viewBox="0 0 24 24" aria-hidden="true">${g ? BB_LIST : BB_TREE}</svg><span>${g ? T('vList') : T('bbTree')}</span>`; }
 $('#bb-view').onclick = () => { if (S.view === 'graph') $('#v-list').click(); else $('#v-graph').click(); syncBbView(); document.querySelector('main').scrollTo({ top: 0 }); };
 $('#v-graph').addEventListener('click', syncBbView);
 $('#v-list').addEventListener('click', syncBbView);
@@ -4025,7 +4173,7 @@ function openLineageCard(targetId = null) {
       <div style="display:flex;gap:8px;align-items:center;margin:6px 0">
         <label for="lcard-sel" style="font-size:.84rem;font-weight:700">اختر العضو:</label>
         <select id="lcard-sel" style="flex:1;padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--txt)">
-          ${members.map(m => `<option value="${m.id}" ${m.id === target.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>`).join('')}
+          ${members.map(m => `<option value="${m.id}" ${m.id === target.id ? 'selected' : ''}>${esc(m.full_name)} (${T('genWord')} ${gen(m)})</option>`).join('')}
         </select>
       </div>
 
@@ -4117,7 +4265,21 @@ function getEventRsvps(evId) {
   return [];
 }
 
-function saveEventRsvp(evId, entry) {
+/* الجولة 10 — البند 4: قواعد إغلاق تأكيد الحضور */
+const rsvpEventDay = e => { const d = new Date(e.t || e.event_date); if (isNaN(d)) return null; return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+const rsvpClosed = e => { const day = rsvpEventDay(e); if (!day) return false; const today = new Date(); today.setHours(0, 0, 0, 0); return today >= day; };
+const rsvpCanStill = (e, name) => {
+  if (!rsvpClosed(e)) return true;
+  if (S.role === 'owner' || S.role === 'editor') return true;
+  if (S.role === 'branch' && name) { const m = S.members.find(x => x.full_name === String(name).trim()); return !!(m && inBranch(m)); }
+  return false;
+};
+const rsvpPrivilegeNote = () => S.role === 'owner' ? T('rsvpNoteOwner') : S.role === 'editor' ? T('rsvpNoteEditor') : S.role === 'branch' ? T('rsvpNoteBranch') : '';
+
+function saveEventRsvp(evId, entry, ev) {
+  /* الجولة 10 — البند 4: إغلاق تأكيد الحضور من بداية يوم المناسبة (مقارنة تاريخ فقط)؛
+     الاستثناء: المالك (الكل)، المحرر (حسب صلاحياته)، مسؤول الفرع (أفراد فرعه فقط — يُطابَق الاسم بعضو في فرعه، ويرفض عند عدم المطابقة). */
+  if (ev && rsvpClosed(ev) && !rsvpCanStill(ev, entry.name)) return null;
   const list = getEventRsvps(evId);
   const idx = list.findIndex(x => x.name.trim() === entry.name.trim());
   if (idx >= 0) list[idx] = entry;
@@ -4236,6 +4398,21 @@ function renderEventRSVP(e, container) {
   `;
 
   const form = container.querySelector('#rsvp-form');
+  /* الجولة 10 — البند 4: بعد إغلاق المهلة يُخفى النموذج عن الأفراد العاديين وتظهر رسالة القفل؛
+     ويبقى مفتوحاً للمالك/المحرر/مسؤول الفرع مع ملاحظة الاستثناء. */
+  const closed = rsvpClosed(e);
+  const privileged = closed && ['owner', 'editor', 'branch'].includes(S.role);
+  if (form && closed && !privileged) {
+    const div = document.createElement('div');
+    div.style.cssText = 'background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;font-size:.85rem;color:var(--mut);text-align:center';
+    div.textContent = T('rsvpClosed');
+    form.replaceWith(div);
+  } else if (form && privileged) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:.78rem;color:var(--gold);margin-bottom:8px';
+    note.textContent = rsvpPrivilegeNote();
+    form.before(note);
+  }
   if (form) {
     form.onsubmit = ev => {
       ev.preventDefault();
@@ -4245,7 +4422,8 @@ function renderEventRSVP(e, container) {
       const note = container.querySelector('#rsvp-note').value.trim();
       if (!name) return;
 
-      saveEventRsvp(evId, { name, status, guests, note, time: Date.now() });
+      const saved = saveEventRsvp(evId, { name, status, guests, note, time: Date.now() }, e);
+      if (!saved) { toast(T('rsvpRefused')); return; }
       toast('تم حفظ تأكيد الحضور بنجاح!');
       renderEventRSVP(e, container);
     };
@@ -4264,8 +4442,8 @@ function openInvites(selectedEventId = null) {
   if (!activeEvents.length) {
     showInfo(`
       <div class="fstats-head">
-        <h2>💌 دعوات الاجتماعات وتأكيد الحضور</h2>
-        <p class="sub">لا توجد اجتماعات أو مناسبات معلنة حالياً في شجرة العائلة.</p>
+        <h2>${T('invTitle')}</h2>
+        <p class="sub">${T('invEmpty')}</p>
       </div>`);
     return;
   }
@@ -4277,31 +4455,31 @@ function openInvites(selectedEventId = null) {
   const html = `
     <div class="lcard-wrap">
       <div class="fstats-head">
-        <h2>💌 بطاقات الدعوة وتأكيد حضور الاجتماعات</h2>
-        <p class="sub">دعوات اجتماعات ولقاءات الأسرة مع متابعة الحضور والاعتذار ومشاركة الدعوة عبر واتساب</p>
+        <h2>${T('invTitle2')}</h2>
+        <p class="sub">${T('invSub')}</p>
       </div>
 
       <div style="display:flex;gap:8px;align-items:center;margin:6px 0">
-        <label for="invite-sel" style="font-size:.84rem;font-weight:700">اختر الاجتماع:</label>
+        <label for="invite-sel" style="font-size:.84rem;font-weight:700">${T('invChoose')}</label>
         <select id="invite-sel" style="flex:1;padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--txt)">
-          ${activeEvents.map(e => `<option value="${e.id}" ${e.id === curEv.id ? 'selected' : ''}>${esc(e.title)} (${new Date(e.event_date).toLocaleDateString('ar-SA')})</option>`).join('')}
+          ${activeEvents.map(e => `<option value="${e.id}" ${e.id === curEv.id ? 'selected' : ''}>${esc(e.title)} (${new Date(e.event_date).toLocaleDateString(isEn() ? 'en-GB' : 'ar-SA')})</option>`).join('')}
         </select>
       </div>
 
       <div class="invite-card">
         <div class="invite-head">
           <div>
-            <div style="font-size:.78rem;color:var(--gold);font-weight:700">دعوة عامة لأبناء وأسر آل مطارد - بنو عمرو</div>
+            <div style="font-size:.78rem;color:var(--gold);font-weight:700">${T('invHead')}</div>
             <h3 style="font-size:1.15rem;color:#fff;margin:4px 0">${esc(curEv.title)}</h3>
           </div>
           <span style="font-size:1.8rem">💌</span>
         </div>
 
         <div style="background:rgba(0,0,0,.3);border-radius:8px;padding:10px;font-size:.84rem;line-height:1.7;color:#cbd5e1;margin-bottom:8px">
-          <div>📅 <b>الموعد:</b> ${f('ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })}</div>
-          <div>🗓️ <b>الموافق:</b> ${f('ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })}</div>
-          ${curEv.location_name ? `<div>📍 <b>المقر:</b> ${esc(curEv.location_name)}</div>` : ''}
-          ${curEv.location_url ? `<div>🗺️ <b>الخريطة:</b> <a href="${esc(curEv.location_url)}" target="_blank" rel="noopener" style="color:var(--gold)">فتح موقع اللقاء على Google Maps</a></div>` : ''}
+          <div>${T('invDate')} ${f(isEn() ? 'en-u-ca-islamic-umalqura' : 'ar-SA-u-ca-islamic-umalqura', { dateStyle: 'full' })}</div>
+          <div>${T('invGreg')} ${f(isEn() ? 'en-GB' : 'ar-SA-u-ca-gregory', { dateStyle: 'full', timeStyle: 'short' })}</div>
+          ${curEv.location_name ? `<div>${T('invPlace')} ${esc(curEv.location_name)}</div>` : ''}
+          ${curEv.location_url ? `<div>${T('invMap')} <a href="${esc(curEv.location_url)}" target="_blank" rel="noopener" style="color:var(--gold)">${T('invOpenMap')}</a></div>` : ''}
           ${curEv.description ? `<div style="margin-top:6px;border-top:1px dashed rgba(255,255,255,.1);padding-top:6px">${esc(curEv.description).replace(/\n/g, '<br>')}</div>` : ''}
         </div>
 
@@ -4741,7 +4919,7 @@ function openKioskMode() {
             ${elders.slice(0, 6).map(m => `
               <div style="background:rgba(15,23,42,.75);border:1px solid var(--gold);border-radius:12px;padding:14px;text-align:center">
                 <div style="font-size:1.15rem;font-weight:800;color:var(--gold)">${esc(m.full_name)}</div>
-                <div style="font-size:.82rem;color:#cbd5e1;margin-top:4px">الجيل ${gen(m)} · ${m.is_alive === false ? 'رحمه الله' : 'حفظه الله'}</div>
+                <div style="font-size:.82rem;color:#cbd5e1;margin-top:4px">${T('genWord')} ${gen(m)} · ${m.is_alive === false ? ripText(m) : keepText(m)}</div>
                 <div style="font-size:.76rem;color:var(--mut);margin-top:4px">${m.city || 'الجنوب'}</div>
               </div>
             `).join('')}
@@ -4974,7 +5152,7 @@ function openFamilyBook(activeTab = 'births') {
                 <tr>
                   <td>${i + 1}</td>
                   <td><b>${nameBtn(m)}</b></td>
-                  <td>الجيل ${gen(m)}</td>
+                  <td>${T('genWord')} ${gen(m)}</td>
                   <td>${esc(bYear)}</td>
                   <td>${father ? nameBtn(father) : '—'}</td>
                   <td>${m.birth_order || '—'}</td>
@@ -5022,7 +5200,7 @@ function openFamilyBook(activeTab = 'births') {
                 <tr>
                   <td>${i + 1}</td>
                   <td><b>${nameBtn(m)}</b></td>
-                  <td>الجيل ${gen(m)}</td>
+                  <td>${T('genWord')} ${gen(m)}</td>
                   <td>${esc(dYear)}</td>
                   <td>${root ? esc(root.full_name) : 'آل مطارد'}</td>
                   <td style="color:#6ee7b7">رحمه الله وأسكنه الفردوس الأعلى 🤲</td>
@@ -5130,7 +5308,7 @@ function renderDuaCards(list, sampleDua) {
       <div class="dua-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div class="dua-card-title">${nameBtn(m)}</div>
-          <span class="bd" style="background:rgba(52,211,153,.15);border:1px solid #34d399;color:#34d399;padding:2px 8px;border-radius:99px;font-size:.7rem">الجيل ${gen(m)}</span>
+          <span class="bd" style="background:rgba(52,211,153,.15);border:1px solid #34d399;color:#34d399;padding:2px 8px;border-radius:99px;font-size:.7rem">${T('genWord')} ${gen(m)}</span>
         </div>
         <div class="dua-card-chain">
           <b>النسب:</b> ${esc(chainNames)}
@@ -5733,7 +5911,7 @@ function showWomenDirectory() {
           </div>
         </div>
         <button type="button" class="btn ghost" id="btn-women-logout" style="border-color:#f472b6;color:#fbcfe8;font-size:.78rem;padding:6px 12px">
-          🔒 إغلاق الجلسة
+          ${T('womenLogout')}
         </button>
       </div>
 
@@ -5759,7 +5937,7 @@ function showWomenDirectory() {
   if (logoutBtn) {
     logoutBtn.onclick = () => {
       sessionStorage.removeItem('almatarid_women_auth');
-      toast('تم إغلاق جلسة بوابة النساء');
+      toast(T('womenLogoutDone'));
       $('#profile').close();
     };
   }
@@ -6799,7 +6977,7 @@ function renderFanChartSvg(m) {
   // Center hub for subject
   svg += `<circle cx="${cx}" cy="${cy}" r="55" fill="#f59e0b" opacity="0.9"/>`;
   svg += `<text x="${cx}" y="${cy - 20}" fill="#1c1204" font-size="12" font-weight="800" text-anchor="middle">${esc(m.first || m.full_name.split(' ')[0])}</text>`;
-  svg += `<text x="${cx}" y="${cy - 6}" fill="#1c1204" font-size="10" text-anchor="middle">الجيل ${gen(m)}</text>`;
+  svg += `<text x="${cx}" y="${cy - 6}" fill="#1c1204" font-size="10" text-anchor="middle">${T('genWord')} ${gen(m)}</text>`;
 
   // Draw fan slices for ancestors in chain
   const levels = chain.slice(1, 5);
@@ -6922,10 +7100,11 @@ function openAlternativeCharts(memberId = null, chartType = 'fan') {
         </div>
 
         <div style="display:flex;gap:6px;align-items:center">
+          <button type="button" class="fstats-btn" id="btn-alt-wide" style="padding:5px 12px;font-size:.78rem">${$('#profile').classList.contains('wide') ? '↩ عرض عادي' : '⛶ ملء الشاشة'}</button>
           <label style="font-size:.8rem;color:var(--gold);font-weight:700">الفرد:</label>
           <select id="alt-chart-mem-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
             ${S.members.filter(m => !m.name_masked).slice(0, 100).map(m => `
-              <option value="${m.id}" ${m.id === member.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+              <option value="${m.id}" ${m.id === member.id ? 'selected' : ''}>${esc(m.full_name)} (${T('genWord')} ${gen(m)})</option>
             `).join('')}
           </select>
         </div>
@@ -6938,6 +7117,16 @@ function openAlternativeCharts(memberId = null, chartType = 'fan') {
   `;
 
   showInfo(html);
+
+  /* الجولة 10 — البند 14: تبديل ملء الشاشة — الصنف على النافذة نفسها فيبقى عند تبديل التبويبات، ويُزال عند الإغلاق */
+  const wideBtn = $('#btn-alt-wide');
+  if (wideBtn) {
+    wideBtn.onclick = () => {
+      const p = $('#profile');
+      p.classList.toggle('wide');
+      wideBtn.textContent = p.classList.contains('wide') ? '↩ عرض عادي' : '⛶ ملء الشاشة';
+    };
+  }
 
   document.querySelectorAll('[data-ct]').forEach(b => {
     b.onclick = () => openAlternativeCharts(member.id, b.dataset.ct);
@@ -6958,14 +7147,30 @@ let _netAnimId = null;
 let _netRedraw = null;
 let _netReset = null;
 
-function initNetworkCanvas(focalId) {
+/* الجولة 10 — البند 18: حماية دفاعية لشبكة العلاقات — أي خطأ أثناء الرسم يظهر رسالة
+   داخل الصندوق بدل مساحة سوداء صامتة؛ وإن كان الصندوق بلا مقاس بعد تُعاد المحاولة في الإطار التالي. */
+function showNetError(msg) {
+  if (_netAnimId) { cancelAnimationFrame(_netAnimId); _netAnimId = null; }
+  const box = $('#net-box');
+  if (box) box.innerHTML = `<div style="padding:28px 16px;text-align:center;color:var(--gold);font-size:.92rem;line-height:1.9">⚠️ تعذّر رسم شبكة العلاقات<br><span style="font-size:.78rem;color:var(--mut)">${esc(String(msg || 'خطأ غير معروف'))}</span><br><span style="font-size:.74rem;color:var(--mut)">أغلق اللوحة وأعد فتحها، أو أبلغ المالك بالرسالة أعلاه.</span></div>`;
+}
+function initNetworkCanvas(focalId, _retried) {
+  const box = $('#net-box');
+  if (box && (box.clientWidth === 0 || box.clientHeight === 0) && !_retried) {
+    requestAnimationFrame(() => initNetworkCanvas(focalId, true));
+    return;
+  }
+  try { initNetworkCanvasInner(focalId); }
+  catch (e) { console.warn('[almatarid] network graph failed', e); showNetError(e && e.message); }
+}
+function initNetworkCanvasInner(focalId) {
   if (_netAnimId) { cancelAnimationFrame(_netAnimId); _netAnimId = null; }
   const canvas = $('#net-canvas');
   const box = $('#net-box');
   if (!canvas || !box) return;
 
   const focal = S.byId.get(focalId) || S.roots[0] || S.members[0];
-  if (!focal) return;
+  if (!focal) { showNetError('لا توجد بيانات أعضاء لعرضها'); return; }
 
   const depthVal = $('#net-depth-sel')?.value || '3';
   const maxDepth = depthVal === 'all' ? 99 : parseInt(depthVal, 10);
@@ -7076,6 +7281,7 @@ function initNetworkCanvas(focalId) {
   });
 
   const nodes = Array.from(nodeMap.values());
+  if (!nodes.length) { showNetError('لا توجد بيانات لعرضها في شبكة العلاقات'); return; }
   const focalNode = nodeMap.get(focal.id);
   if (focalNode) {
     focalNode.x = 0;
@@ -7313,15 +7519,17 @@ function initNetworkCanvas(focalId) {
   // Animation loop for smooth gentle settle
   let simTicks = 0;
   function animate() {
-    if (simTicks < 50) {
-      stepPhysics();
-      simTicks++;
-      draw();
-      _netAnimId = requestAnimationFrame(animate);
-    } else {
-      draw();
-      _netAnimId = null;
-    }
+    try {
+      if (simTicks < 50) {
+        stepPhysics();
+        simTicks++;
+        draw();
+        _netAnimId = requestAnimationFrame(animate);
+      } else {
+        draw();
+        _netAnimId = null;
+      }
+    } catch (e) { console.warn('[almatarid] network graph tick failed', e); _netAnimId = null; showNetError(e && e.message); }
   }
   animate();
 
@@ -7431,7 +7639,7 @@ function openNetworkGraph(focalId) {
           <label style="font-size:.8rem;color:var(--gold);font-weight:700">المركز:</label>
           <select id="net-focal-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
             ${S.members.filter(m => !m.name_masked).slice(0, 100).map(m => `
-              <option value="${m.id}" ${m.id === focal.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+              <option value="${m.id}" ${m.id === focal.id ? 'selected' : ''}>${esc(m.full_name)} (${T('genWord')} ${gen(m)})</option>
             `).join('')}
           </select>
           <select id="net-depth-sel" style="padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);font-size:.8rem">
@@ -7612,7 +7820,7 @@ function openAncestorsDescendantsModal(selectedId) {
           <label style="font-weight:700;color:var(--gold);display:block;margin-bottom:6px">اختر الفرد المطلوب:</label>
           <select id="anc-desc-sel" style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.9rem">
             ${S.members.filter(m => !m.name_masked).slice(0, 150).map(m => `
-              <option value="${m.id}" ${m.id === current.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+              <option value="${m.id}" ${m.id === current.id ? 'selected' : ''}>${esc(m.full_name)} (${T('genWord')} ${gen(m)})</option>
             `).join('')}
           </select>
         </div>
@@ -7766,7 +7974,7 @@ function openSetMeModal() {
         <input type="text" id="me-search-input" placeholder="اكتب اسمك للبحث السريع..." style="width:100%;padding:8px 12px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.88rem;box-sizing:border-box;margin-bottom:8px">
         <select id="me-member-sel" size="6" style="width:100%;padding:6px;border-radius:8px;background:var(--bg);border:1.5px solid var(--line);color:var(--txt);font-size:.85rem;box-sizing:border-box">
           ${S.members.filter(m => !m.name_masked).slice(0, 100).map(m => `
-            <option value="${m.id}" ${currentMe && m.id === currentMe.id ? 'selected' : ''}>${esc(m.full_name)} (الجيل ${gen(m)})</option>
+            <option value="${m.id}" ${currentMe && m.id === currentMe.id ? 'selected' : ''}>${esc(m.full_name)} (${T('genWord')} ${gen(m)})</option>
           `).join('')}
         </select>
       </div>
@@ -7794,7 +8002,7 @@ function openSetMeModal() {
       const q = normAr(searchInp.value.trim().toLowerCase());
       const filtered = S.members.filter(m => !m.name_masked && (!q || normAr(m.full_name.toLowerCase()).includes(q))).slice(0, 80);
       sel.innerHTML = filtered.map(m => `
-        <option value="${m.id}">${esc(m.full_name)} (الجيل ${gen(m)})</option>
+        <option value="${m.id}">${esc(m.full_name)} (${T('genWord')} ${gen(m)})</option>
       `).join('');
       if (filtered.length > 0) sel.selectedIndex = 0;
     };
@@ -7879,8 +8087,8 @@ function renderDirectoryList() {
       html += `
         <div class="dir-group-section">
           <div class="dir-group-head" data-toggle-gen="${g}" tabindex="0" role="button">
-            <span>${g === 1 ? '👑 الجيل الأول (الآباء المؤسسون)' : `🌿 الجيل ${g}`}</span>
-            <span class="dir-group-count">${mems.length} فرد ${isCollapsed ? '◀' : '▼'}</span>
+            <span>${g === 1 ? T('dirGenFirst') : T('dirGenN').replace('{n}', g)}</span>
+            <span class="dir-group-count">${(mems.length === 1 ? T('dirGroupCountOne') : T('dirGroupCountMany')).replace('{n}', mems.length)} ${isCollapsed ? '◀' : '▼'}</span>
           </div>
           ${!isCollapsed ? `
             <div class="dir-grid">
@@ -7890,7 +8098,7 @@ function renderDirectoryList() {
         </div>
       `;
     });
-    treeEl.innerHTML = html || '<p style="text-align:center;color:var(--mut);padding:20px">لا توجد نتائج مطابقة</p>';
+    treeEl.innerHTML = html || '<p style="text-align:center;color:var(--mut);padding:20px">' + T('dirNoMatch') + '</p>';
   } else if (mode === 'alpha') {
     const groups = new Map();
     list.forEach(m => {
@@ -7908,8 +8116,8 @@ function renderDirectoryList() {
       html += `
         <div class="dir-group-section">
           <div class="dir-group-head" data-toggle-letter="${char}" tabindex="0" role="button">
-            <span>حرف (${char})</span>
-            <span class="dir-group-count">${mems.length} فرد ${isCollapsed ? '◀' : '▼'}</span>
+            <span>${T('dirLetter').replace('{c}', char)}</span>
+            <span class="dir-group-count">${(mems.length === 1 ? T('dirGroupCountOne') : T('dirGroupCountMany')).replace('{n}', mems.length)} ${isCollapsed ? '◀' : '▼'}</span>
           </div>
           ${!isCollapsed ? `
             <div class="dir-grid">
@@ -7919,7 +8127,7 @@ function renderDirectoryList() {
         </div>
       `;
     });
-    treeEl.innerHTML = html || '<p style="text-align:center;color:var(--mut);padding:20px">لا توجد نتائج مطابقة</p>';
+    treeEl.innerHTML = html || '<p style="text-align:center;color:var(--mut);padding:20px">' + T('dirNoMatch') + '</p>';
   }
 }
 
@@ -7934,7 +8142,7 @@ function renderDirCard(m) {
       <div style="flex:1;min-width:0">
         <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem;color:var(--txt)">${esc(cardName(m))}</b>
         <div style="font-size:.72rem;color:var(--mut);display:flex;gap:6px;align-items:center;margin-top:2px;flex-wrap:wrap">
-          <span style="color:var(--gold)">الجيل ${gen(m)}</span>
+          <span style="color:var(--gold)">${T('genWord')} ${gen(m)}</span>
           ${m.city && !livingHidden(m) ? `<span>· 📍 ${esc(m.city)}</span>` : ''}
           ${isDead ? `<span style="color:#94a3b8">· ${ripText(m)}</span>` : '<span style="color:#10b981">· حي</span>'}
           ${isMe ? '<span style="color:#fbbf24;font-weight:700">· أنت ⭐</span>' : ''}
@@ -8367,10 +8575,16 @@ if (mReorderTree) {
 /* ============================================================
    73) واجهة ثنائية اللغة (AR / EN)
    ============================================================ */
-const I18N = {
+/* ============================================================
+   73) واجهة ثنائية اللغة (AR / EN) — الجولة 10: القاموس الكامل
+   ============================================================ */
+I18N = {
   ar: {
     title: 'شجرة آل مطارد',
     sub: 'بنو عمرو · النماص',
+    tagline: 'AL MUTARID · توثيق الأنساب والتراث وصلة الأرحام',
+    beta: 'موقع تجريبي',
+    docTitle: 'أسرة آل مطارد - بنو عمرو',
     searchPlaceholder: 'ابحث بالاسم أو الكنية',
     btnOpen: 'فتح الكل',
     btnClose: 'طي الكل',
@@ -8380,17 +8594,253 @@ const I18N = {
     thisIsMe: 'هذا أنا',
     login: 'دخول',
     logout: 'خروج',
+    confirmLogout: 'تسجيل الخروج؟',
     langToggle: 'English 🌐',
     emptyMsg: 'لا توجد نتائج لهذا البحث.',
     dirGen: '🔢 حسب الجيل',
     dirAlpha: '🔤 حسب الأبجدية (أ-ي)',
     dirTree: '🌳 عرض الشجرة الهرمي',
     branchTrees: '🌿 فروع الشجرة:',
-    showAll: 'إظهار الكل'
+    showAll: 'إظهار الكل',
+    statTotal: 'الإجمالي',
+    statMale: 'الذكور',
+    statFemale: 'الإناث',
+    statAlive: 'الأحياء',
+    statDead: 'المتوفون',
+    statGens: 'الأجيال',
+    chipsTitle: 'اضغط لفتح إحصائيات العائلة الشاملة',
+    treeLocked: 'الشجرة محمية برمز العائلة',
+    connFail: 'تعذر الاتصال بالخادم',
+    genstep: 'الأجيال: 1 إلى {n}',
+    evLeft: '⏳ متبقي {d} يوم و {t}',
+    evDetails: '📍 تفاصيل الدعوة والموقع',
+    evTypeDefault: 'مناسبة',
+    evPrev: 'السابقة',
+    evNext: 'التالية',
+    menuSummary: 'الأقسام',
+    btnFeatures: '✨ الميزات',
+    tglSec: 'إظهار / إخفاء العناصر',
+    dirMember: 'عضو',
+    dirMembers: 'عضو',
+    dirGenFirst: '👑 الجيل الأول (الآباء المؤسسون)',
+    dirGenN: '🌿 الجيل {n}',
+    dirLetter: 'حرف ({c})',
+    dirGroupCountOne: '{n} فرد',
+    dirGroupCountMany: '{n} فرد',
+    dirNoMatch: 'لا توجد نتائج مطابقة',
+    bbTree: 'مخطط',
+    bbSearch: 'بحث',
+    bbEvents: 'المناسبات',
+    resultsOne: 'نتيجة واحدة',
+    resultsMany: '{n} نتيجة',
+    noMembers: 'لا يوجد أفراد بعد.',
+    addRoot: '➕ إضافة أول فرد',
+    genWord: 'الجيل',
+    branchWord: 'فرع',
+    keepM: 'حفظه الله',
+    keepF: 'حفظها الله',
+    showWord: 'عرض',
+    collapseWord: 'طي',
+    ripM: 'رحمه الله',
+    ripF: 'رحمها الله',
+    aliveM: 'حي يرزق',
+    aliveF: 'حية ترزق',
+    advBranch: 'الفرع:',
+    advCity: 'المدينة:',
+    advGen: 'الجيل:',
+    advAlive: 'الأحياء فقط',
+    advDead: 'المتوفون رحمهم الله',
+    advActive: '⚙️ تصفية نشطة:',
+    advClear: '✕ مسح التصفية',
+    ftTitle: '✨ جدول الميزات',
+    ftHintOwner: 'اضغط على اسم الميزة لفتحها، وعلى «ظاهرة/مخفية» لإظهارها أو إخفائها، وعلى «تثبيت» لإظهارها في الشريط أعلى الصفحة (حتى 6 بطاقات).',
+    ftHintVisitor: 'الميزات التي أظهرها المالك — اضغط على اسم الميزة لفتحها.',
+    ftCount: '{v} من {t} ميزة',
+    ftSearchPh: '🔍 ابحث عن ميزة…',
+    ftNoVisible: 'لا ميزات ظاهرة بعد.',
+    ftVisible: '👁️ ظاهرة',
+    ftHidden: '🚫 مخفية',
+    ftPin: '☆ تثبيت',
+    ftPinned: '📌 مثبّتة',
+    ftKindSetting: 'إعداد',
+    ftKindProfile: 'في الملف',
+    ftVisOn: 'ظاهرة — اضغط للإخفاء',
+    ftVisOff: 'مخفية — اضغط للإظهار',
+    ftPinOn: 'مثبّتة في الشريط — اضغط للإلغاء',
+    ftPinOff: 'تثبيت في الشريط',
+    ftInHeader: '📌 في الترويسة',
+    ftInHeaderTitle: 'زرها موجود أصلاً في الترويسة',
+    featTgOn: 'مُبرز بالصفحة — اضغط للإخفاء',
+    featTgOff: 'إبراز بالصفحة',
+    pinAdded: 'ثُبّتت في الشريط: ',
+    pinRemoved: 'أُلغي تثبيتها من الشريط',
+    honorTitle: '🏅 لوحة الشرف',
+    honorEmpty: 'لا توجد شارات بعد. تُضاف الشارة من نموذج تعديل الفرد.',
+    gateTitle: 'أدخل الرمز',
+    gateHint: 'رمز العائلة يفتح الشجرة. رمز المحرر أو المالك يفتح التعديل.',
+    gateCodePh: 'الرمز',
+    gateSubmit: 'دخول',
+    cancelBtn: 'إلغاء',
+    saveBtn: 'حفظ',
+    closeBtn: 'إغلاق',
+    addSelected: '➕ إضافة المحددين',
+    pickSearchPh: '🔍 ابحث بالاسم…',
+    okBtn: 'موافق',
+    demoBanner: 'نسخة تجريبية ببيانات وهمية لتجربة التصميم فقط',
+    offlineBanner: '📶 دون اتصال — تُعرض آخر نسخة محفوظة (قد لا تكون الأحدث)',
+    evGregDate: 'الميلادي',
+    evHijriDate: 'الهجري',
+    evPlace: 'المكان',
+    evMapLink: 'الخريطة',
+    toastFeatHidden: 'هذه الميزة مخفية — أظهرها أولاً من جدول الميزات',
+    toastPinFirst: 'أظهر الميزة أولاً لتثبيتها',
+    toastStripFull: 'الشريط يتسع لست بطاقات فقط — ألغِ تثبيت بطاقة أولاً',
+    toastPinHeader: 'هذه الميزة زرها في الترويسة أصلاً — لا تُثبَّت في الشريط',
+    toastLangEn: '🌐 Language switched to English',
+    toastLangAr: '🌐 تم تغيير اللغة إلى العربية',
+    roleOwner: 'مالك',
+    roleEditor: 'محرر',
+    roleBranch: 'مسؤول فرع',
+    womenLogout: '🔒 إغلاق الجلسة',
+    womenLogoutDone: 'تم إغلاق جلسة بوابة النساء',
+    stTitle: '📊 إحصائيات أسرة آل مطارد الشاملة',
+    stSub: 'تحليل إحصائي مرئي لبيانات الأسرة وشجرة النسب',
+    stTotal: 'إجمالي الأسرة',
+    stGens: '{n} أجيال موثقة',
+    stAlive: 'الأحياء (حفظهم الله)',
+    stAlivePct: '{n}% من إجمالي الأسرة',
+    stMale: 'الذكور',
+    stMalePct: '{n}% من الأسرة',
+    stFemale: 'الإناث',
+    stFemalePct: '{n}% من الأسرة',
+    stStatus: 'الحالة والتوزيع',
+    stAliveDead: '{a} حي · {d} متوفى',
+    stAliveLine: '🟢 الأحياء: ',
+    stDeadLine: '⚪ المتوفون (رحمهم الله): ',
+    stGenSeq: 'تتابع الذرية عبر الأجيال',
+    stGensShort: '{n} أجيال',
+    stNames: 'الأسماء الأكثر شيوعاً بالأسرة',
+    stNamesHint: 'اضغط على أي اسم للبحث في المشجر',
+    stBranches: 'أحجام الفروع الرئيسية',
+    stBranchesN: '{n} فروع',
+    stAvgKids: 'متوسط الأبناء لكل أسرة',
+    stFathers: '{n} رب أسرة موثق',
+    stWives: 'الزوجات الموثقات',
+    stWivesLine: '{a} من الأسرة · {b} مصاهرة',
+    stBadges: 'أصحاب الإنجازات والشارات',
+    stBadgesN: '{n} شارة موثقة',
+    rsvpTitle: '📋 تأكيد الحضور (RSVP)',
+    rsvpShare: '💬 إرسال بطاقة الدعوة للواتساب',
+    rsvpYes: '✅ مؤكد',
+    rsvpMaybe: '⏳ ربما',
+    rsvpNo: '❌ معتذر',
+    rsvpExpected: '👥 إجمالي الحضور المتوقع:',
+    rsvpFormHint: 'سجّل تأكيد حضورك للاجتماع:',
+    rsvpNameL: 'الاسم:',
+    rsvpNamePh: 'ابحث أو اكتب اسمك',
+    rsvpStatusL: 'حالة الحضور:',
+    rsvpStYes: 'سأحضر بإذن الله ✅',
+    rsvpStMaybe: 'حضور محتمل ⏳',
+    rsvpStNo: 'أعتذر لظرف ❌',
+    rsvpGuestsL: 'عدد المرافقين (من الأسرة/الأبناء):',
+    rsvpNoteL: 'ملاحظة أو تبريكات:',
+    rsvpNotePh: 'مثلاً: سنحضر بعد صلاة المغرب',
+    rsvpSave: '✓ حفظ تأكيد الحضور',
+    rsvpList: 'قائمة المسجلين',
+    rsvpPresent: 'حاضر ✅',
+    rsvpMaybeP: 'محتمل ⏳',
+    rsvpAbsent: 'معتذر ❌',
+    rsvpGuests: '(+{n} مرافقين)',
+    rsvpEmpty: 'كن أول من يؤكد حضوره!',
+    rsvpClosed: '🔒 انتهى تأكيد الحضور لهذه المناسبة — لا يمكن تأكيد حضور جديد أو تعديل تأكيد سابق.',
+    rsvpNoteOwner: '👑 أنت المالك — يمكنك التأكيد والتعديل رغم انتهاء المهلة.',
+    rsvpNoteEditor: '✏️ أنت المحرر — يمكنك التأكيد والتعديل رغم انتهاء المهلة.',
+    rsvpNoteBranch: '🌿 أنت مسؤول فرع — يمكنك التأكيد والتعديل لأعضاء فرعك فقط.',
+    rsvpRefused: '🔒 انتهى تأكيد الحضور لهذه المناسبة.',
+    rsvpSaved: 'تم حفظ تأكيد الحضور بنجاح!',
+    invTitle: '💌 دعوات الاجتماعات وتأكيد الحضور',
+    invEmpty: 'لا توجد اجتماعات أو مناسبات معلنة حالياً في شجرة العائلة.',
+    invTitle2: '💌 بطاقات الدعوة وتأكيد حضور الاجتماعات',
+    invSub: 'دعوات اجتماعات ولقاءات الأسرة مع متابعة الحضور والاعتذار ومشاركة الدعوة عبر واتساب',
+    invChoose: 'اختر الاجتماع:',
+    invHead: 'دعوة عامة لأبناء وأسر آل مطارد - بنو عمرو',
+    invDate: '📅 الموعد:',
+    invGreg: '🗓️ الموافق:',
+    invPlace: '📍 المقر:',
+    invMap: '🗺️ الخريطة:',
+    invOpenMap: 'فتح موقع اللقاء على Google Maps',
+    permTitle: '📋 صلاحيات مسؤول الفرع',
+    permSub: 'ما يجوز لمسؤول الفرع فعله وما لا يجوز — حسب الفحوصات الفعلية في الكود وقاعدة البيانات. الصلاحيات ثابتة لكل مسؤولي الفروع حسب الدور في النظام، ولا تُمنح أو تُسحب لكل فرد على حدة؛ التحديد هنا للنسخ والمراجعة والطباعة.',
+    permChoose: 'اختر الفرع:',
+    permColYes: '✅ يجوز',
+    permColNo: '⛔ لا يجوز',
+    permFixed: 'ثابتة في النظام',
+    permSelectAll: 'تحديد الكل',
+    permClearSel: 'إلغاء التحديد',
+    permCopySel: '📋 نسخ المحدد',
+    permCopied: 'تم النسخ',
+    permPrint: '🖨️ طباعة القائمة',
+    permYourBranch: 'فرعك',
+    permScope: 'النطاق: فرعه فقط',
+    permAllBranches: 'كل الفروع',
+    permEmpty: 'لا توجد فروع مسجلة بعد.',
+    councilTabDecrees: '📜 سجل القرارات والتعاميم',
+    councilTabMembers: '👥 أعضاء وهيئة المجلس واللجان',
+    councilTabSec: '🗝️ أمناء المجلس',
+    councilCur: 'الحاليون',
+    councilFormer: 'السابقون',
+    councilEndMem: 'إنهاء العضوية',
+    councilEndMemConfirm: 'إنهاء عضوية «{n}»؟ سيبقى في قائمة السابقين مع دورته وتواريخه.',
+    councilRejoin: 'إعادة للعضوية',
+    councilTerm: 'الدورة/الفترة',
+    councilStartDate: 'تاريخ بداية العضوية',
+    councilEndDate: 'تاريخ نهاية العضوية',
+    councilAppointSec: 'تعيين أمين',
+    councilChangeSec: 'تغيير الأمين',
+    councilVacant: 'شاغر — لم يُعيَّن بعد',
+    councilSecNote: 'بقية الأمناء بانتظار قائمة عمر — يُضاف كل منصب جديد هنا.',
+    councilFormerEmpty: 'لا يوجد أعضاء سابقون بعد.',
+    councilCurrentEmpty: 'لم يُشكَّل المجلس بعد — يضيف المالك أو المحرر أعضاءه من أفراد الشجرة.',
+    rulesTitle: '⚖️ ميثاق وقواعد العائلة',
+    rulesIntro: 'قواعد مقترحة لتنظيم مجالس وشؤون أسرة آل مطارد.',
+    rulesBanner: '«ميثاق الشرف والتكاتف الأسري لآل مطارد»',
+    rulesBannerSub: 'مسودة مقترحة للمناقشة والاعتماد من مجلس العائلة — ليست وثيقة معتمدة بعد.',
+    biosTitle: '🏅 تراجم أعلام ورجالات آل مطارد',
+    biosIntro: 'سير كبار الأجداد وأعيان الأسرة عبر الأجيال',
+    biosAdd: '➕ إضافة ترجمة عَلَم',
+    biosEmpty: 'لا توجد تراجم بعد — أضف أول ترجمة عبر الزر أعلاه.',
+    biosHome: '📍 موطن الاستقرار:',
+    biosAch: '• المآثر والخصال:',
+    biosDesc: '• الامتداد والذرية:',
+    biosLegacy: '• الأثر الباقي:',
+    biosProfile: '👤 ملف العَلَم',
+    shareWa: '📲 مشاركة بالواتساب',
+    copyText: '📋 نسخ النص',
+    toastCopied: '✅ تم نسخ المحتوى بنجاح!',
+    toastBioAdded: '✅ تمت إضافة ترجمة العَلَم بنجاح!',
+    toastVisOwnerOnly: 'الإظهار والإخفاء للمالك فقط',
+    toastPinOwnerOnly: 'التثبيت للمالك فقط',
+    toastShown: 'أُظهرت الميزة: ',
+    toastHidden: 'أُخفيت الميزة: ',
+    bioFMember: 'العَلَم (من أفراد الشجرة)',
+    bioFMemberPick: '— اختر من الشجرة —',
+    bioFName: 'الاسم (إن لم يكن في الشجرة)',
+    bioFTitle: 'اللقب أو الصفة (مثال: وجيه الفرع / قاضي الناحية)',
+    bioFTitleDef: 'عَلَم من أعلام الأسرة',
+    bioFEra: 'الحقبة التاريخية',
+    bioFEraDef: 'العصر الحديث',
+    bioFLocation: 'موطن الاستقرار',
+    bioFAch: 'أبرز المآثر والخصال',
+    bioFDesc: 'الامتداد والذرية',
+    bioFLegacy: 'الأثر الباقي',
+    bioErrNoName: 'اختر العَلَم من الشجرة أو اكتب اسمه',
   },
   en: {
     title: 'Al-Mutarid Tree',
     sub: 'Banu Amr · Al-Namas',
+    tagline: 'AL MUTARID · Documenting lineages, heritage, and kinship',
+    beta: 'Trial site',
+    docTitle: 'Al-Mutarid Family - Banu Amr',
     searchPlaceholder: 'Search by name or nickname...',
     btnOpen: 'Expand All',
     btnClose: 'Collapse All',
@@ -8400,30 +8850,448 @@ const I18N = {
     thisIsMe: 'This is Me',
     login: 'Login',
     logout: 'Logout',
+    confirmLogout: 'Log out?',
     langToggle: 'عربي 🌐',
     emptyMsg: 'No results found for this search.',
     dirGen: '🔢 By Generation',
     dirAlpha: '🔤 Alphabetical (A-Z)',
     dirTree: '🌳 Hierarchical Tree',
     branchTrees: '🌿 Family Branches:',
-    showAll: 'Show All'
+    showAll: 'Show All',
+    statTotal: 'Total',
+    statMale: 'Males',
+    statFemale: 'Females',
+    statAlive: 'Living',
+    statDead: 'Deceased',
+    statGens: 'Generations',
+    chipsTitle: 'Click to open the full family statistics',
+    treeLocked: 'The tree is protected by the family code',
+    connFail: 'Could not reach the server',
+    genstep: 'Generations: 1 to {n}',
+    evLeft: '⏳ {d} days left, {t}',
+    evDetails: '📍 Invitation details & location',
+    evTypeDefault: 'Event',
+    evPrev: 'Previous',
+    evNext: 'Next',
+    menuSummary: 'Sections',
+    btnFeatures: '✨ Features',
+    tglSec: 'Show / Hide Items',
+    dirMember: 'member',
+    dirMembers: 'members',
+    dirGenFirst: '👑 First Generation (Founding Fathers)',
+    dirGenN: '🌿 Generation {n}',
+    dirLetter: 'Letter ({c})',
+    dirGroupCountOne: '{n} member',
+    dirGroupCountMany: '{n} members',
+    dirNoMatch: 'No matching results',
+    bbTree: 'Tree',
+    bbSearch: 'Search',
+    bbEvents: 'Events',
+    resultsOne: '1 result',
+    resultsMany: '{n} results',
+    noMembers: 'No members yet.',
+    addRoot: '➕ Add the first member',
+    genWord: 'Gen',
+    branchWord: 'branch',
+    keepM: 'May Allah protect him',
+    keepF: 'May Allah protect her',
+    showWord: 'Show',
+    collapseWord: 'Collapse',
+    ripM: 'May Allah have mercy on him',
+    ripF: 'May Allah have mercy on her',
+    aliveM: 'Alive',
+    aliveF: 'Alive',
+    advBranch: 'Branch:',
+    advCity: 'City:',
+    advGen: 'Generation:',
+    advAlive: 'Living only',
+    advDead: 'Deceased only',
+    advActive: '⚙️ Active filter:',
+    advClear: '✕ Clear filters',
+    ftTitle: '✨ Features Table',
+    ftHintOwner: 'Click a feature name to open it, “Visible/Hidden” to show or hide it, and “Pin” to show it in the strip at the top of the page (up to 6 cards).',
+    ftHintVisitor: 'Features shown by the owner — click a feature name to open it.',
+    ftCount: '{v} of {t} features',
+    ftSearchPh: '🔍 Search for a feature…',
+    ftNoVisible: 'No features shown yet.',
+    ftVisible: '👁️ Visible',
+    ftHidden: '🚫 Hidden',
+    ftPin: '☆ Pin',
+    ftPinned: '📌 Pinned',
+    ftKindSetting: 'Setting',
+    ftKindProfile: 'In profile',
+    ftVisOn: 'Visible — click to hide',
+    ftVisOff: 'Hidden — click to show',
+    ftPinOn: 'Pinned in the strip — click to unpin',
+    ftPinOff: 'Pin to the strip',
+    ftInHeader: '📌 In header',
+    ftInHeaderTitle: 'Its button is already in the header',
+    featTgOn: 'Featured on the page — click to hide',
+    featTgOff: 'Feature on the page',
+    pinAdded: 'Pinned to the strip: ',
+    pinRemoved: 'Unpinned from the strip',
+    honorTitle: '🏅 Honor Board',
+    honorEmpty: 'No badges yet. Badges are added from the member edit form.',
+    gateTitle: 'Enter the code',
+    gateHint: 'The family code opens the tree. The editor or owner code opens editing.',
+    gateCodePh: 'Code',
+    gateSubmit: 'Login',
+    cancelBtn: 'Cancel',
+    saveBtn: 'Save',
+    closeBtn: 'Close',
+    addSelected: '➕ Add selected',
+    pickSearchPh: '🔍 Search by name…',
+    okBtn: 'OK',
+    demoBanner: 'Demo version with fake data for design testing only',
+    offlineBanner: '📶 Offline — showing the last saved copy (may not be the latest)',
+    evGregDate: 'Gregorian',
+    evHijriDate: 'Hijri',
+    evPlace: 'Place',
+    evMapLink: 'Map',
+    toastFeatHidden: 'This feature is hidden — show it first from the features table',
+    toastPinFirst: 'Show the feature first to pin it',
+    toastStripFull: 'The strip fits only six cards — unpin a card first',
+    toastPinHeader: 'This feature already has its button in the header — it is not pinned to the strip',
+    toastLangEn: '🌐 Language switched to English',
+    toastLangAr: '🌐 تم تغيير اللغة إلى العربية',
+    roleOwner: 'Owner',
+    roleEditor: 'Editor',
+    roleBranch: 'Branch Manager',
+    womenLogout: '🔒 Close Session',
+    womenLogoutDone: 'Women’s portal session closed',
+    stTitle: '📊 Al-Matarid Family Full Statistics',
+    stSub: 'Visual statistical analysis of family data and lineage',
+    stTotal: 'Total Family',
+    stGens: '{n} documented generations',
+    stAlive: 'Living (may God protect them)',
+    stAlivePct: '{n}% of the whole family',
+    stMale: 'Males',
+    stMalePct: '{n}% of the family',
+    stFemale: 'Females',
+    stFemalePct: '{n}% of the family',
+    stStatus: 'Status & Distribution',
+    stAliveDead: '{a} alive · {d} deceased',
+    stAliveLine: '🟢 Living: ',
+    stDeadLine: '⚪ Deceased (may God have mercy on them): ',
+    stGenSeq: 'Descendants Across Generations',
+    stGensShort: '{n} generations',
+    stNames: 'Most Common Names in the Family',
+    stNamesHint: 'Tap any name to search the tree',
+    stBranches: 'Main Branch Sizes',
+    stBranchesN: '{n} branches',
+    stAvgKids: 'Average Children per Family',
+    stFathers: '{n} documented heads of family',
+    stWives: 'Documented Wives',
+    stWivesLine: '{a} from the family · {b} by marriage',
+    stBadges: 'Achievements & Badges Holders',
+    stBadgesN: '{n} documented badges',
+    rsvpTitle: '📋 Attendance Confirmation (RSVP)',
+    rsvpShare: '💬 Send the invite card via WhatsApp',
+    rsvpYes: '✅ Confirmed',
+    rsvpMaybe: '⏳ Maybe',
+    rsvpNo: '❌ Declined',
+    rsvpExpected: '👥 Total expected attendance:',
+    rsvpFormHint: 'Register your attendance for the meeting:',
+    rsvpNameL: 'Name:',
+    rsvpNamePh: 'Search or type your name',
+    rsvpStatusL: 'Attendance status:',
+    rsvpStYes: 'I will attend, God willing ✅',
+    rsvpStMaybe: 'Maybe attending ⏳',
+    rsvpStNo: 'Sorry, I cannot attend ❌',
+    rsvpGuestsL: 'Number of companions (family/children):',
+    rsvpNoteL: 'Note or congratulations:',
+    rsvpNotePh: 'E.g.: we will come after Maghrib prayer',
+    rsvpSave: '✓ Save attendance confirmation',
+    rsvpList: 'Registered list',
+    rsvpPresent: 'Attending ✅',
+    rsvpMaybeP: 'Maybe ⏳',
+    rsvpAbsent: 'Declined ❌',
+    rsvpGuests: '(+{n} companions)',
+    rsvpEmpty: 'Be the first to confirm attendance!',
+    rsvpClosed: '🔒 Attendance confirmation for this event has closed — no new confirmations or changes.',
+    rsvpNoteOwner: '👑 You are the owner — you can confirm and edit even after the deadline.',
+    rsvpNoteEditor: '✏️ You are the editor — you can confirm and edit even after the deadline.',
+    rsvpNoteBranch: '🌿 You are a branch manager — you can confirm and edit for your branch members only.',
+    rsvpRefused: '🔒 Attendance confirmation for this event has closed.',
+    rsvpSaved: 'Attendance confirmation saved!',
+    invTitle: '💌 Meeting Invites & Attendance Confirmation',
+    invEmpty: 'There are no meetings or events announced in the family tree right now.',
+    invTitle2: '💌 Invite Cards & Meeting Attendance Confirmation',
+    invSub: 'Family meeting and gathering invites with attendance, apologies, and WhatsApp sharing',
+    invChoose: 'Choose the meeting:',
+    invHead: 'A general invitation to the sons and families of Al-Mutarid – Banu Amr',
+    invDate: '📅 Date:',
+    invGreg: '🗓️ Gregorian:',
+    invPlace: '📍 Venue:',
+    invMap: '🗺️ Map:',
+    invOpenMap: 'Open the meeting location on Google Maps',
+    permTitle: '📋 Branch Manager Permissions',
+    permSub: 'What a branch manager may and may not do — per the actual checks in the code and database. Permissions are fixed for all branch managers by the system role; they cannot be granted or revoked per person. Selection here is for copying, review, and printing.',
+    permChoose: 'Choose the branch:',
+    permColYes: '✅ Allowed',
+    permColNo: '⛔ Not allowed',
+    permFixed: 'Fixed by the system',
+    permSelectAll: 'Select all',
+    permClearSel: 'Clear selection',
+    permCopySel: '📋 Copy selected',
+    permCopied: 'Copied',
+    permPrint: '🖨️ Print list',
+    permYourBranch: 'Your branch',
+    permScope: 'Scope: their branch only',
+    permAllBranches: 'All branches',
+    permEmpty: 'No branches registered yet.',
+    councilTabDecrees: '📜 Decisions & Circulars',
+    councilTabMembers: '👥 Council Members & Committees',
+    councilTabSec: '🗝️ Council Secretaries',
+    councilCur: 'Current',
+    councilFormer: 'Former',
+    councilEndMem: 'End membership',
+    councilEndMemConfirm: 'End the membership of "{n}"? They will stay in the former list with their term and dates.',
+    councilRejoin: 'Return to membership',
+    councilTerm: 'Term',
+    councilStartDate: 'Membership start date',
+    councilEndDate: 'Membership end date',
+    councilAppointSec: 'Appoint secretary',
+    councilChangeSec: 'Change secretary',
+    councilVacant: 'Vacant — not appointed yet',
+    councilSecNote: 'The remaining secretary posts await Omar’s list — each new post is added here.',
+    councilFormerEmpty: 'No former members yet.',
+    councilCurrentEmpty: 'The council has not been formed yet — the owner or editor adds its members from the tree.',
+    rulesTitle: '⚖️ Family Charter & Rules',
+    rulesIntro: 'Proposed rules for organising the Al-Mutarid family councils and affairs.',
+    rulesBanner: '“The Al-Mutarid Family Honour & Solidarity Charter”',
+    rulesBannerSub: 'A proposed draft for discussion and approval by the family council — not yet an approved document.',
+    biosTitle: '🏅 Biographies of Al-Mutarid Notables',
+    biosIntro: 'Biographies of the family’s great ancestors and notables across generations',
+    biosAdd: '➕ Add a notable’s biography',
+    biosEmpty: 'No biographies yet — add the first one with the button above.',
+    biosHome: '📍 Home town:',
+    biosAch: '• Deeds & qualities:',
+    biosDesc: '• Descendants:',
+    biosLegacy: '• Lasting legacy:',
+    biosProfile: '👤 Notable’s profile',
+    shareWa: '📲 Share via WhatsApp',
+    copyText: '📋 Copy text',
+    toastCopied: '✅ Content copied!',
+    toastBioAdded: '✅ Notable’s biography added!',
+    toastVisOwnerOnly: 'Showing/hiding is for the owner only',
+    toastPinOwnerOnly: 'Pinning is for the owner only',
+    toastShown: 'Feature shown: ',
+    toastHidden: 'Feature hidden: ',
+    bioFMember: 'The notable (from the tree members)',
+    bioFMemberPick: '— Choose from the tree —',
+    bioFName: 'Name (if not in the tree)',
+    bioFTitle: 'Title or epithet (e.g.: branch elder / district judge)',
+    bioFTitleDef: 'A notable of the family',
+    bioFEra: 'Historical era',
+    bioFEraDef: 'Modern era',
+    bioFLocation: 'Home town',
+    bioFAch: 'Notable deeds & qualities',
+    bioFDesc: 'Descendants',
+    bioFLegacy: 'Lasting legacy',
+    bioErrNoName: 'Choose the notable from the tree or type their name',
   }
 };
+/* T و isEn معرَّفان مبكراً أعلى الملف (الجولة 10) — لا تُعاد كتابتهما هنا. */
+/* استبدال النص مع الحفاظ على العناصر الفرعية (كالشارات داخل الزر) — الجولة 10 */
+function setTextKeepSpans(el, text) {
+  if (!el) return;
+  let done = false;
+  [...el.childNodes].forEach(n => {
+    if (n.nodeType === 3) { if (!done) { n.textContent = text; done = true; } else n.textContent = ''; }
+  });
+  if (!done) el.insertBefore(document.createTextNode(text), el.firstChild);
+}
+
+/* نصوص عناصر قائمة الأقسام بالإنجليزية (حسب id) — الجولة 10 */
+MENU_EN = {
+  'm-features': '✨ Features Table (show / hide / pin)',
+  'm-export': '📦 Export Backup Copy',
+  'm-annpost': '📢 Post Public Announcement',
+  'm-inbox': '📥 Suggestions Inbox',
+  'm-branches': '👥 Branch Managers',
+  'm-branch-perms': '📋 Branch Manager Permissions',
+  'm-log': '📜 Change Log',
+  'm-snap': '📸 Database Snapshot',
+  'm-backups': '💾 Automatic Backup & Backup History',
+  'm-settings': '⚙️ Access Settings',
+  'm-genstep': '👁️ Generations Counter',
+  'm-stats': '👁️ Statistics',
+  'm-ctl': '👁️ Expand/Collapse Buttons',
+  'm-cities': '🗺️ Family Spread & Cities Map',
+  'm-fullstats': '📊 Full Family Statistics',
+  'm-names': '📋 All Names',
+  'm-events': '🔔 Family Reminders & Events',
+  'm-honor': '🏅 Honor Board',
+  'm-rules': '⚖️ Family Charter & Rules',
+  'm-biographies': '🏅 Biographies of Al-Mutarid Notables',
+  'm-council-decrees': '🏛️ Family Council (Members, Secretaries & Decisions)',
+  'm-family-fund': '🤝 Family Solidarity & Charity Fund',
+  'm-cards': '💌 Greeting & Condolence Cards',
+  'm-family-news': '📰 Family News Board & Relatives’ Posts',
+  'm-family-vote': '🗳️ Family Voting on Decisions',
+  'm-careers-dir': '💼 Family Members’ Professions & Businesses Directory',
+  'm-time-capsule': '⏳ Timed Messages from Family Elders',
+  'm-life-story': '📖 Family Members’ Life Stories & Milestones',
+  'm-member-stories': '📜 Written Stories & Narratives of Family Members',
+  'm-family': '👨‍👩‍👧 Family Editor',
+  'm-kin': '🧭 Kinship Explorer',
+  'm-ai-kin': '🤖 Smart Genealogy & Kinship Assistant',
+  'm-game': '🎮 “Know Your Relative” Game for Kids',
+  'm-timeline': '⏳ Family History Timeline',
+  'm-audio-stories': '🎙️ Audio Stories of Family Elders',
+  'm-3d-view': '🌌 3D Cinematic View',
+  'm-alt-charts': '📊 Alternative Charts (Ancestors Fan, Hourglass & Descendants)',
+  'm-network-graph': '🕸️ Full Relationship Network Chart (Parents, Spouses, Siblings)',
+  'm-anc-desc': '🎯 Tree Filter (Ancestors Only or Descendants Only)',
+  'm-this-is-me': '👤 “This Is Me” Button (Mark your place and center the tree on you)',
+  'm-member-directory': '📖 Full Members Directory (by Generation & Alphabet)',
+  'm-branch-trees': '🌿 Branch Trees (Show & Hide Family Branches)',
+  'm-reorder-tree': '↕️ Reorder Children by Drag & Drop',
+  'm-lang-toggle': '🌐 Switch Interface Language (Arabic / English)',
+  'm-adv-search': '🔍 Advanced Search & Filter (Branch, City, Generation, Status, Spelling Variants)',
+  'm-events-map': '🗺️ Family Events Map with Timeline',
+  'm-antique-map': '📜 Heritage Historical Map (Antique Layer over the Map)',
+  'm-branch-alerts': '🔔 Your Branch Alerts & New Relatives Added',
+  'm-web-push': '📲 Browser Notifications (Enable Alerts)',
+  'm-surname-origin': '📜 Origin of the “Al-Mutarid” Surname (Meaning, History & First Bearer)',
+  'm-help-requests': '🤝 Ask Relatives for Help (Document Photo or Information)',
+  'm-lcard': '📇 Digital Kinship Card for WhatsApp',
+  'm-qr-share': '📱 Share the Tree or a Member Card via QR with Code',
+  'm-invites': '💌 Meeting Invites with RSVP',
+  'm-personal-invites': '💌 Personal Invite Links with the Invitee’s Name',
+  'm-archive': '📜 Old Family Documents & Photos Archive',
+  'm-ai-photo-restore': '🎨 Restore & Colorize Old Photos with AI',
+  'm-photo-analysis': '🔍 Analyse Old Photos & Infer Their Date and Place',
+  'm-exif-map': '📍 Read Photo Data & Show Its Place on the Map',
+  'm-transcribe': '📜 Transcribe Handwritten Documents & Recordings into Searchable Text',
+  'm-cemeteries': '🌿 Family Graves & Burial Places (Locations Only)',
+  'm-voice-search': '🎙️ Voice Search in the Tree',
+  'm-kiosk': '📺 Automatic Display Mode for Screens & Gatherings',
+  'm-family-book': '📖 Family Book (Births · Deaths · Weddings)',
+  'm-dua-deceased': '🤲 Dua Reminder for a Deceased Family Member',
+  'm-calendar': '📅 Annual Family Calendar',
+  'm-kids-mode': '🧒 Simplified Kids Mode',
+  'm-wa-announcements': '📢 WhatsApp Family Announcements & Messages',
+  'm-women-portal': '🌸 Women’s Portal & Section',
+  'm-data-quality': '🛡️ Data Quality & Correction Dashboard',
+  'm-completion-hints': '💡 Tree Completion Hints & Suggestions',
+  'm-suggest': '📝 Suggest & Correct',
+  'm-pdf': '📄 Export Tree for Printing (PDF)',
+  'm-blank-tree': '🖨️ Blank Printable Tree (3–5 Generations)',
+  'm-ready-reports': '📑 Ready Reports (Full Branch Report, Generation List, Places Register)',
+  'm-export-tree-media': '🖼️ Export Tree as Image (PNG) or File (SVG)',
+  'm-csv': '📊 Excel Export',
+  'm-csv-import': '📥 Import Members from Excel/CSV',
+  'm-branch-perms': '📋 Branch Manager Permissions',
+  /* الجولة 10 — البند 15: عناوين مجموعات القائمة */
+  'ms-tree': '🌳 Tree & Views',
+  'ms-events': '🔔 Events & Meetings',
+  'ms-family': '👨‍👩‍👧 Family & Council',
+  'ms-media': '🖼️ Photos, Documents & Stories',
+  'ms-tools': '🔍 Search, Alerts & Tools',
+  'ms-export': '📦 Export & Import'
+};
+/* أسماء الميزات الـ66 بالإنجليزية (لجدول الميزات والشريط المثبّت) — الجولة 10 */
+FEATURES_EN = {
+  'daily-backup': ['💾 Daily Automatic Backup', 'Daily database backup with a notification to the owner'],
+  'snapshot-restore': ['📸 Restore from Snapshot', 'Restore the tree from a previous snapshot with double confirmation'],
+  'owner-2fa': ['🔐 Owner Two-Factor Authentication', 'A PIN code protecting sensitive settings'],
+  'living-privacy': ['🙈 Hide Living Members from Visitors', 'Living members’ data (city, nickname, bio, photo) hidden from visitors — on by default'],
+  'approx-dates': ['📅 Approximate Dates', '“Around 1320H” and “between two years” for old ancestors in the member form'],
+  'this-is-me': ['👤 “This Is Me” Button', 'Mark your place in the tree to view your relatives and center it on you'],
+  'photo-album': ['🖼️ Photo Album for Each Member', 'Each member’s photos grouped in their album (opens from the member profile)'],
+  'data-quality': ['✅ Data Quality Dashboard', 'Alerts about missing or conflicting data in the tree'],
+  'date-conflicts': ['⚠️ Date Conflict Detection', 'Alert on death before birth or impossible dates'],
+  'completion-hints': ['💡 Tree Completion Hints', 'Suggestions to fill the gaps in the tree'],
+  'branch-gaps': ['📋 Per-Branch Gaps Report', 'Members with no birth year, no death date, or no registered mother — per branch, to run a data-completion campaign (filling is the branch managers’ job; no data is ever filled automatically)'],
+  'csv-import': ['📥 Bulk Import from Excel/CSV', 'Add many members at once with a preview, no deletions'],
+  'alt-charts': ['📊 Alternative Charts', 'Ancestors fan, hourglass, and descendants charts'],
+  'network-graph': ['🕸️ Relationship Network Chart', 'The full kinship network in one chart'],
+  'anc-desc-filter': ['🎯 Ancestors-Only / Descendants-Only View', 'Filter the tree to one person’s ancestors or descendants'],
+  'member-directory': ['📖 Full Members Directory', 'List of all members sorted by generation and alphabet'],
+  'branch-trees': ['🌿 Separate Trees per Branch', 'Show one branch with show/hide for family branches'],
+  'reorder-tree': ['↕️ Drag-and-Drop Reordering', 'Reorder children by dragging (owner/editor/branch)'],
+  'antique-map': ['🗺️ Historical Map Overlay', 'Old maps over the current map'],
+  '3d-view': ['🌌 3D Cinematic View', 'The 3D cinematic family tree'],
+  'family-display': ['📺 Family Display Mode', 'Automatic display for screens and gatherings'],
+  'kin-quiz': ['🎮 “Know Your Relative” Game', 'A quiz game about your relatives'],
+  'kids-mode': ['🧒 Kids Mode', 'Simplified view for children'],
+  'lang-toggle': ['🌐 Arabic / English Interface', 'Switch the interface language'],
+  'adv-search': ['🔎 Advanced Search with Filters', 'Search by generation, city, and status with spelling variants'],
+  'voice-search': ['🎙️ Voice Search', 'Search by voice in the tree'],
+  'ai-kin': ['🤖 Genealogy Assistant', 'An AI assistant answering kinship questions'],
+  'events-map': ['📍 Family Events Map', 'Event places on the map with a timeline filter'],
+  'branch-alerts': ['🔔 Your Branch Alerts', 'Alert when your branch is edited or a new relative is added'],
+  'web-push': ['📲 Browser Notifications (Web Push)', 'Subscribe to be notified of events or new relatives — subscription capture only; sending needs an external server with the private VAPID key'],
+  'events-reminders': ['🎉 Event Reminders & Countdown', 'Upcoming events with a countdown'],
+  'annual-calendar': ['🗓️ Annual Calendar', 'Family calendar, Hijri and Gregorian'],
+  'dua-deceased': ['🤲 Dua Reminder for the Deceased', 'Reminder to pray for those who passed away'],
+  'map-spread': ['🗺️ Family Spread Map', 'Members’ spread across cities on a map'],
+  'surname-origin': ['🏺 Origin of the “Al-Mutarid” Surname', 'Page on the surname’s history and roots'],
+  'life-story': ['📖 “Life Story” Page', 'Each member’s life milestones from their recorded data'],
+  'member-stories': ['📜 Written Stories', 'Family members’ written stories linked to their owners'],
+  'family-rules': ['⚖️ Family Charter & Rules', 'The family charter and its internal rules'],
+  'notables-biographies': ['🏅 Biographies of Al-Mutarid Notables', 'Biographies written by family members about their notables'],
+  'timeline': ['⏳ Interactive Timeline', 'Family events on a timeline'],
+  'audio-stories': ['🎙️ Audio Stories Library', 'Family stories in audio'],
+  'doc-archive': ['🗄️ Documents Archive', 'The family’s old documents, preserved'],
+  'family-book': ['📒 Family Book', 'The family book: births and events'],
+  'cemeteries': ['🪦 Graves Section', 'Family members’ grave locations only'],
+  'ai-photo-restore': ['✨ AI Photo Restore & Colorize', 'Restore old photos with artificial intelligence'],
+  'photo-analysis': ['🔬 AI Photo Analysis', 'Analyse photos and extract their details'],
+  'exif-map': ['📷 EXIF Data & Location', 'Photo locations from their data on the map'],
+  'transcribe': ['✍️ Transcribe Documents & Recordings', 'Turn manuscripts and recordings into searchable text'],
+  'help-requests': ['🆘 Help Requests to Relatives', 'Ask relatives for help or offer it'],
+  'qr-share': ['📱 QR Sharing with Code', 'A QR code for entry with the family code'],
+  'personal-invites': ['💌 Personal Invite Links', 'An invite link carrying the invitee’s name'],
+  'family-news': ['📰 Family News Board', 'Family news and announcements in one board'],
+  'family-vote': ['🗳️ Family Voting', 'Polls and voting for family members'],
+  'careers-dir': ['💼 Professions & Businesses Directory', 'Family members’ professions and businesses'],
+  'time-capsule': ['⏳ Timed Messages', 'Messages from family elders opened at their time'],
+  'meeting-invites': ['📩 Meeting Invites with RSVP', 'Meeting invitations and attendance confirmation'],
+  'wa-announcements': ['💬 WhatsApp Notifications', 'Family announcements via WhatsApp'],
+  'women-portal': ['🚺 Women’s Portal', 'Women’s portal with individual codes'],
+  'digital-card': ['📇 Digital Kinship Card', 'Your digital card in the family'],
+  'council-decrees': ['🏛️ Family Council Page', 'Council members, secretaries, decisions and circulars'],
+  'family-fund': ['💰 Family Fund', 'Fund contributions and campaigns'],
+  'blank-tree': ['🖨️ Blank Printable Tree', 'A blank 3–5 generation tree for printing and hand-filling'],
+  'ready-reports': ['📑 Ready Reports', 'Ready reports about the tree and members'],
+  'export-tree-media': ['🖼️ Export Tree as PNG/SVG', 'Export the tree chart as an image or SVG file'],
+  'pdf-export': ['📄 PDF Export', 'Export the tree or reports as a PDF file'],
+  'fullstats': ['📊 Statistics', 'Tree statistics: generations, counts, and cities']
+};
+FEAT_CATS_EN = { backup: '💾 Backups & Security', privacy: '🔒 Privacy & Members', data: '📋 Data & Quality', charts: '📊 Charts & Display', search: '🔍 Search & Languages', events: '🎉 Events & Maps', heritage: '📜 Heritage & Stories', media: '🖼️ Photos & Documents', share: '🤝 Communication & Sharing', council: '🏛️ Council & Reports' };
+FEAT_EN = { cities: '🗺️ Cities Map', fullstats: '📊 Statistics', names: '📋 All Names', events: '🎉 Family Events', honor: '🏅 Honor Board', cards: '💌 Greeting & Condolence Cards', kin: '🧭 Kinship Explorer', suggest: '📝 Suggest & Correct', csv: '📊 Excel Export' };
+GENORD_EN = { 4: 'Fourth', 5: 'Fifth', 6: 'Sixth', 7: 'Seventh' };
+GENORD_AR = { 4: 'الرابع', 5: 'الخامس', 6: 'السادس', 7: 'السابع' };
+const fname = f => isEn() ? ((FEATURES_EN && FEATURES_EN[f.key]?.[0]) || f.name) : f.name;
+const fdesc = f => isEn() ? ((FEATURES_EN && FEATURES_EN[f.key]?.[1]) || f.desc) : f.desc;
+const fcatName = ck => isEn() ? ((FEAT_CATS_EN && FEAT_CATS_EN[ck]) || (FEAT_CATS.find(c => c[0] === ck) || [])[1] || ck) : ((FEAT_CATS.find(c => c[0] === ck) || [])[1] || ck);
+const genLabel = g => isEn() ? ('Gen ' + ((GENORD_EN && GENORD_EN[g]) || g)) : ('الجيل ' + ((GENORD_AR && GENORD_AR[g]) || g));
 
 function applyLanguage(lang) {
   S.lang = lang || (localStorage.getItem('almatarid_lang') === 'en' ? 'en' : 'ar');
   localStorage.setItem('almatarid_lang', S.lang);
 
-  const isEn = S.lang === 'en';
+  const isE = S.lang === 'en';
   const t = I18N[S.lang] || I18N.ar;
 
   document.documentElement.lang = S.lang;
-  document.documentElement.dir = isEn ? 'ltr' : 'rtl';
+  document.documentElement.dir = isE ? 'ltr' : 'rtl';
+  document.title = t.docTitle;
 
-  const titleEl = document.querySelector('header h1');
-  if (titleEl) titleEl.textContent = t.title;
-  const subEl = document.querySelector('header .sub');
-  if (subEl) subEl.textContent = t.sub;
+  const h1 = document.querySelector('header h1');
+  if (h1) {
+    const tn = [...h1.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+    if (tn) tn.textContent = t.title + ' ';
+    const hs = h1.querySelector('.h1sub'); if (hs) hs.textContent = t.sub;
+    const beta = h1.querySelector('.beta'); if (beta) beta.textContent = t.beta;
+  }
+  const tagline = document.querySelector('header .ttl p');
+  if (tagline) tagline.textContent = t.tagline;
+  const demoEl = $('#demo'); if (demoEl) demoEl.textContent = t.demoBanner;
+  const offEl = $('#offline'); if (offEl) offEl.textContent = t.offlineBanner;
 
   const qInput = $('#q');
   if (qInput) qInput.placeholder = t.searchPlaceholder;
@@ -8444,12 +9312,70 @@ function applyLanguage(lang) {
   if (zMe) zMe.innerHTML = `👤<br>${t.thisIsMe}`;
 
   const btnLang = $('#btn-lang');
-  if (btnLang) btnLang.textContent = isEn ? '🌐 عربي' : '🌐 EN';
+  if (btnLang) btnLang.textContent = t.langToggle;
 
-  if (S.role === 'visitor') {
-    const btnLogin = $('#btn-login');
-    if (btnLogin) btnLogin.textContent = t.login;
+  const btnLogin = $('#btn-login');
+  if (btnLogin) {
+    if (['visitor', 'family', 'reader'].includes(S.role)) btnLogin.textContent = t.login;
+    else btnLogin.textContent = roleLabel(S.role) + (S.role === 'branch' ? ' · ' + (S.byId.get(S.branch?.root_id)?.full_name || '') : '') + (CFG.DEMO ? ' (تجريبي)' : '');
   }
+  const btnFeatures = $('#btn-features');
+  if (btnFeatures) btnFeatures.textContent = t.btnFeatures;
+  const menuSummary = document.querySelector('.more summary');
+  if (menuSummary) setTextKeepSpans(menuSummary, t.menuSummary);
+  const tglH = document.querySelector('.tgl-h');
+  if (tglH) tglH.textContent = t.tglSec;
+  Object.entries(MENU_EN).forEach(([id, en]) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    if (!b.dataset.ar) b.dataset.ar = b.textContent.trim(); /* حفظ الأصل العربي قبل أي استبدال */
+    setTextKeepSpans(b, isE ? en : b.dataset.ar);
+  });
+
+  const emptyEl = $('#empty');
+  if (emptyEl && S.members && S.members.length) emptyEl.textContent = t.emptyMsg;
+
+  const dirCounter = $('#dir-counter');
+  if (dirCounter) {
+    const span = dirCounter.querySelector('span');
+    if (span) {
+      const n = parseInt(span.textContent, 10) || 0;
+      const tn = [...dirCounter.childNodes].find(x => x.nodeType === 3 && x.textContent.trim());
+      if (tn) tn.textContent = ' ' + (n === 1 ? t.dirMember : t.dirMembers);
+    }
+  }
+  const bbSearch = $('#bb-search span');
+  if (bbSearch) bbSearch.textContent = t.bbSearch;
+  const bbEvents = $('#bb-events span');
+  if (bbEvents) bbEvents.textContent = t.bbEvents;
+  if (typeof syncBbView === 'function') syncBbView();
+
+  const gateTitle = $('#gate-title');
+  if (gateTitle) gateTitle.textContent = t.gateTitle;
+  const gateHint = $('#gate-hint');
+  if (gateHint) gateHint.textContent = t.gateHint;
+  const codeInput = $('#code');
+  if (codeInput) codeInput.placeholder = t.gateCodePh;
+  const gateSubmit = document.querySelector('#gate-form button[type="submit"]');
+  if (gateSubmit) gateSubmit.textContent = t.gateSubmit;
+  const gateX = $('#gate-x');
+  if (gateX) gateX.textContent = t.cancelBtn;
+  const formSubmit = document.querySelector('#form-el button[type="submit"]');
+  if (formSubmit) formSubmit.textContent = t.saveBtn;
+  const formX = $('#form-x');
+  if (formX) formX.textContent = t.cancelBtn;
+  const profileX = $('#profile-x');
+  if (profileX) profileX.textContent = t.closeBtn;
+  const pickQ = $('#pick-q');
+  if (pickQ) pickQ.placeholder = t.pickSearchPh;
+  const pickOk = $('#pick-ok');
+  if (pickOk) pickOk.textContent = t.addSelected;
+  const pickX = $('#pick-x');
+  if (pickX) pickX.textContent = t.cancelBtn;
+  const dlgOk = $('#app-dlg-ok');
+  if (dlgOk) dlgOk.textContent = t.okBtn;
+  const dlgCancel = $('#app-dlg-cancel');
+  if (dlgCancel) dlgCancel.textContent = t.cancelBtn;
 
   const dirGen = document.querySelector('[data-dir-mode="gen"]');
   if (dirGen) dirGen.textContent = t.dirGen;
@@ -8462,13 +9388,21 @@ function applyLanguage(lang) {
   if (branchTitle) branchTitle.textContent = t.branchTrees;
   const branchVisAll = $('#branch-vis-all');
   if (branchVisAll) branchVisAll.textContent = t.showAll;
+
+  if (typeof stats === 'function' && S.members) stats();
+  if (typeof syncToggles === 'function') syncToggles();
+  if (typeof showEvent === 'function') showEvent();
+  if (typeof renderFeat === 'function') renderFeat();
+  if (typeof executeSearchAndFilter === 'function' && typeof hasActiveFilter === 'function' && hasActiveFilter()) executeSearchAndFilter();
+  /* إن كان جدول الميزات مفتوحاً أعد رسمه باللغة الجديدة */
+  if (document.querySelector('#profile')?.open && document.querySelector('#feat-search')) openFeaturesTable();
 }
 
 function toggleLanguage() {
   const nextLang = S.lang === 'en' ? 'ar' : 'en';
   applyLanguage(nextLang);
   render();
-  toast(nextLang === 'en' ? '🌐 Language switched to English' : '🌐 تم تغيير اللغة إلى العربية');
+  toast(nextLang === 'en' ? T('toastLangEn') : T('toastLangAr'));
 }
 
 const btnLang = $('#btn-lang');
@@ -9052,7 +9986,6 @@ function openBranchAlertsModal() {
           <input type="checkbox" id="alerts-browser-push" ${typeof Notification !== 'undefined' && Notification?.permission === 'granted' ? 'checked' : ''}>
           <span>تفعيل إشعارات المتصفح الفورية 🔔</span>
         </label>
-        <button type="button" data-m04="close-profile" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">إغلاق</button>
       </div>
     </div>
   `;
@@ -9608,9 +10541,6 @@ function openMemberPhotoAlbum(memberId, groupBy = 'event') {
         <button type="button" data-m04="profile" data-m04-id="${m.id}" class="fstats-btn" style="padding:6px 14px;font-size:.8rem">
           ← رجوع لملف العضو
         </button>
-        <button type="button" data-m04="close-profile" class="fstats-btn" style="background:transparent;border-color:var(--line);color:var(--mut)">
-          إغلاق
-        </button>
       </div>
     </div>
   `;
@@ -9682,7 +10612,6 @@ function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
         <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
           <span>🎨</span> ترميم وتلوين الصور القديمة بالذكاء الاصطناعي
         </h2>
-        <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
       </div>
 
       <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -9743,9 +10672,6 @@ function openAiPhotoRestoreModal(initialUrl = '', memberId = '') {
             🖼️ حفظ في ألبوم العضو
           </button>
         </div>
-        <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-          إغلاق
-        </button>
       </div>
     </div>
   `;
@@ -10092,7 +11018,6 @@ function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
         <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
           <span>🔍</span> تحليل الصور القديمة واستنتاج تاريخها ومكانها بالذكاء الاصطناعي
         </h2>
-        <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
       </div>
 
       <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -10159,9 +11084,6 @@ function openPhotoAnalysisModal(initialUrl = '', memberId = '') {
       <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
         <button type="button" class="fstats-btn" id="btn-copy-analysis" style="display:none;background:var(--gold);color:#0f172a;font-weight:700">
           📋 نسخ تقرير التحليل
-        </button>
-        <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-          إغلاق
         </button>
       </div>
     </div>
@@ -10469,7 +11391,6 @@ function openPhotoExifMapModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📍</span> قراءة بيانات الصور وعرض مكانها على الخريطة (GPS & EXIF)
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -10552,11 +11473,6 @@ function openPhotoExifMapModal() {
           ` : ''}
         </div>
 
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
       </div>
     `;
 
@@ -10668,7 +11584,6 @@ function openTranscribeModal(initialTab = 'docs') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📜</span> نسخ الوثائق الخطية والتسجيلات إلى نص قابل للبحث
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -10766,11 +11681,6 @@ function openTranscribeModal(initialTab = 'docs') {
           </div>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
       </div>
     `;
 
@@ -10928,7 +11838,6 @@ function openCemeteriesModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🌿</span> قبور ومدافن العائلة (المواقع فقط)
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <!-- Prophetic Visitation Supplication -->
@@ -11016,9 +11925,6 @@ function openCemeteriesModal() {
           <span style="font-size:.76rem;color:var(--mut)">
             * يُعرض فقط الموقع الجغرافي للمقبرة للتسهيل على الراغبين بالزيارة الشرعية والدعاء للأموات.
           </span>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -11256,7 +12162,6 @@ function openQrShareModal(targetMemberId = null) {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📱</span> مشاركة الشجرة أو بطاقة العضو برمز QR مع كود
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11342,9 +12247,6 @@ function openQrShareModal(targetMemberId = null) {
               📋 نسخ الرابط والكود
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -11523,7 +12425,6 @@ function openPersonalInvitesModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>💌</span> روابط دعوة شخصية تحمل اسم المدعو
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11606,9 +12507,6 @@ function openPersonalInvitesModal() {
               💾 حفظ في سجل الدعوات
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -11687,7 +12585,6 @@ function openFamilyNewsModal(filterCat = 'all') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📰</span> لوحة أخبار العائلة ومنشورات الأقارب
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11779,11 +12676,6 @@ function openFamilyNewsModal(filterCat = 'all') {
             </div>`}
         </div>
 
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
       </div>
     `;
 
@@ -11895,6 +12787,18 @@ function openFamilyNewsModal(filterCat = 'all') {
 function openFamilyVoteModal() {
   /* بلا استطلاعات افتراضية مختلقة — التصويت الحقيقي ينشئه أفراد العائلة فقط */
 
+  /* الجولة 10 — البند 11: أمين الأسرة — يستقبل آراء «أخرى» في التصويت عبر واتساب.
+     الاسم والجوال خادميان مشتركان (06_family_secretary.sql: get_family_secretary /
+     secure_set_family_secretary)؛ احتياط localStorage عند غياب SQL (كالإخفاء).
+     الرقم غير معيّن بعد = الخيار «أخرى» يُسجَّل محلياً فقط ويُعلَّم ذلك. */
+  const readSecretaryLocal = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_secretary') || 'null') || {}; } catch (e) { console.warn('[almatarid]', e); return {}; } };
+  async function getFamilySecretary() {
+    if (CFG.DEMO) return readSecretaryLocal();
+    try { const r = await rpc('get_family_secretary', {}); const o = r || {}; return { name: o.name || '', phone: o.phone || '' }; }
+    catch (e) { console.warn('[almatarid]', e); return readSecretaryLocal(); }
+  }
+  let secretary = {};
+
   const readPolls = () => { try { return JSON.parse(localStorage.getItem('almatarid_family_polls') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const readVotes = () => { try { return JSON.parse(localStorage.getItem('almatarid_user_votes') || '{}'); } catch (e) { console.warn('[almatarid]', e); return {}; } };
   const localPolls = readPolls();
@@ -11908,7 +12812,6 @@ function openFamilyVoteModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🗳️</span> تصويت واستطلاعات قرارات العائلة
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -11928,7 +12831,8 @@ function openFamilyVoteModal() {
         <!-- Polls List -->
         <div style="display:flex;flex-direction:column;gap:14px;max-height:500px;overflow-y:auto;padding-left:4px">
           ${allPolls.length ? allPolls.map(poll => {
-            const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
+            const otherVotes = poll.otherVotes || 0;
+            const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0) + otherVotes;
             const userChoice = userVotes[poll.id] || null;
 
             return `
@@ -11967,6 +12871,20 @@ function openFamilyVoteModal() {
                       </div>
                     `;
                   }).join('')}
+                  ${(() => { const pct = totalVotes > 0 ? Math.round(((otherVotes || 0) / totalVotes) * 100) : 0; const isVoted = userChoice === 'other'; return `
+                      <div class="fvote-option-row ${isVoted ? 'voted' : ''}" data-opt-other="${poll.id}">
+                        <div class="fvote-progress-fill" style="width:${pct}%"></div>
+
+                        <div style="position:relative;z-index:2;display:flex;align-items:center;gap:8px">
+                          <span style="font-size:.9rem">${isVoted ? '✅' : '🔘'}</span>
+                          <span style="font-size:.82rem;font-weight:${isVoted ? '700' : '400'};color:var(--txt)">أخرى — اقترح رأياً آخر (يُرسل إلى أمين الأسرة على واتساب)</span>
+                        </div>
+
+                        <div style="position:relative;z-index:2;font-size:.78rem;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:8px">
+                          <span>${pct}%</span>
+                          <span style="font-size:.7rem;color:var(--mut)">(${otherVotes || 0})</span>
+                        </div>
+                      </div>`; })()}
                 </div>
 
                 <!-- Footer & Share -->
@@ -11988,11 +12906,6 @@ function openFamilyVoteModal() {
             </div>`}
         </div>
 
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
       </div>
     `;
 
@@ -12031,6 +12944,40 @@ function openFamilyVoteModal() {
         localStorage.setItem('almatarid_family_polls', JSON.stringify(stored));
 
         toast('🗳️ تم تسجيل صوتك بنجاح، شكراً لمشاركتك!');
+        renderVoteModal();
+      };
+    });
+
+    // «أخرى» — رأي يُرسل لأمين الأسرة على واتساب (الجولة 10 — البند 11)
+    document.querySelectorAll('[data-opt-other]').forEach(row => {
+      row.onclick = async () => {
+        const pid = row.dataset.optOther;
+        const poll = allPolls.find(p => p.id === pid);
+        if (!poll) return;
+        const opinion = await promptDlg('رأيك الآخر في هذا الاستطلاع (يُرسل إلى أمين الأسرة على واتساب):');
+        if (!opinion || !opinion.trim()) return;
+        const prevChoice = userVotes[pid];
+        if (prevChoice === 'other') { toast('سُجّل رأيك الآخر بالفعل في هذا الاستطلاع!'); return; }
+        if (prevChoice) {
+          const oldOpt = poll.options.find(o => o.id === prevChoice);
+          if (oldOpt && oldOpt.votes > 0) oldOpt.votes--;
+        }
+        poll.otherVotes = (poll.otherVotes || 0) + 1;
+        const me = S.byId.get(localStorage.getItem('almatarid_me_id') || '');
+        (poll.otherTexts = poll.otherTexts || []).push({ text: opinion.trim(), name: me ? me.full_name : 'أحد أفراد الأسرة', time: new Date().toISOString() });
+        userVotes[pid] = 'other';
+        localStorage.setItem('almatarid_user_votes', JSON.stringify(userVotes));
+        const stored = readPolls();
+        const idx = stored.findIndex(s => s.id === pid);
+        if (idx >= 0) stored[idx] = poll; else stored.push(poll);
+        localStorage.setItem('almatarid_family_polls', JSON.stringify(stored));
+        if (secretary.phone) {
+          const msg = `🗳️ *رأي آخر في استطلاع عائلي:*\n*${poll.title}*\n\n👤 من: ${me ? me.full_name : 'أحد أفراد الأسرة'}\n💬 الرأي: ${opinion.trim()}`;
+          window.open(`https://api.whatsapp.com/send?phone=${secretary.phone}&text=${encodeURIComponent(msg)}`, '_blank');
+          toast('🗳️ تم تسجيل رأيك، وفتح واتساب لإرساله إلى أمين الأسرة' + (secretary.name ? ' (' + secretary.name + ')' : ''));
+        } else {
+          toast('🗳️ تم تسجيل رأيك محلياً. لم يُضبط رقم أمين الأسرة بعد — يضبطه المالك من الإعدادات ليصل الرأي واتساب.');
+        }
         renderVoteModal();
       };
     });
@@ -12085,7 +13032,7 @@ function openFamilyVoteModal() {
     }
   }
 
-  renderVoteModal();
+  getFamilySecretary().then(s => { secretary = s; renderVoteModal(); });
 }
 
 /* ---------- 90) دليل مهن وأعمال أفراد العائلة (فرع تجربة) ---------- */
@@ -12159,7 +13106,6 @@ function openCareersDirectoryModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>💼</span> دليل مهن وأعمال أفراد العائلة
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -12230,9 +13176,6 @@ function openCareersDirectoryModal() {
 
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
           <span style="font-size:.74rem;color:var(--mut)">إجمالي الكفاءات المسجلة: <b>${allCareers.length} فرد</b></span>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -12328,7 +13271,6 @@ function openTimeCapsuleModal(activeFilter = 'all') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>⏳</span> رسائل موقوتة من كبار العائلة (كبسولة الزمن)
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -12400,11 +13342,6 @@ function openTimeCapsuleModal(activeFilter = 'all') {
             </div>`}
         </div>
 
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
       </div>
     `;
 
@@ -12484,238 +13421,6 @@ function openTimeCapsuleModal(activeFilter = 'all') {
         renderModal();
       };
     }
-  }
-
-  renderModal();
-}
-
-/* ---------- 92) تذكير بذكرى الزواج للأزواج (فرع تجربة) ---------- */
-function openAnniversariesModal(filterMode = 'all') {
-  // Stored marriage dates (wifeId -> { date, year })
-  const customAnnivs = JSON.parse(localStorage.getItem('almatarid_anniversaries') || '{}');
-
-  // Build marriage list
-  const activeWives = (S.wives || []).filter(w => w.marriage_status !== 'divorced');
-  const now = new Date();
-  const currentYear = now.getFullYear();
-
-  const couples = [];
-
-  activeWives.forEach(w => {
-    const husband = S.byId.get(w.husband_id);
-    if (!husband) return;
-
-    // Check custom date or deduce from kids
-    let mDateStr = customAnnivs[w.id]?.date || null;
-    let mYear = customAnnivs[w.id]?.year || null;
-
-    if (!mYear) {
-      // Find oldest child
-      const kids = (S.kids.get(husband.id) || []).filter(k => k.wife_mother_id === w.id);
-      if (kids.length) {
-        const oldest = kids[0];
-        const by = oldest.birth_date ? new Date(oldest.birth_date).getFullYear() : (oldest.birth_year_text ? parseInt(oldest.birth_year_text) : null);
-        if (by) {
-          mYear = by - 1; // Approx 1 year before first child
-        }
-      }
-      if (!mYear && husband.birth_date) {
-        mYear = new Date(husband.birth_date).getFullYear() + 25;
-      }
-    }
-
-    if (!mYear) mYear = currentYear - 10;
-    if (!mDateStr) mDateStr = `${mYear}-05-15`;
-
-    const yearsMarried = Math.max(1, currentYear - mYear);
-
-    // Calculate days remaining in current year
-    const parts = mDateStr.split('-');
-    const mMonth = parseInt(parts[1] || '5') - 1;
-    const mDay = parseInt(parts[2] || '15');
-
-    const nextAnniv = new Date(currentYear, mMonth, mDay);
-    if (nextAnniv < now) {
-      nextAnniv.setFullYear(currentYear + 1);
-    }
-    const daysLeft = Math.ceil((nextAnniv - now) / (1000 * 60 * 60 * 24));
-
-    let milestoneTag = '';
-    if (yearsMarried >= 50) milestoneTag = '🏆 اليوبيل الذهبي (50 عاماً)';
-    else if (yearsMarried >= 40) milestoneTag = '💎 اليوبيل الياقوتي (40 عاماً)';
-    else if (yearsMarried >= 25) milestoneTag = '🥈 اليوبيل الفضي (25 عاماً)';
-    else if (yearsMarried >= 10) milestoneTag = '🌟 محطة الـ 10 أعوام';
-    else milestoneTag = `💍 ${yearsMarried} أعوام زواج`;
-
-    couples.push({
-      wifeId: w.id,
-      wifeName: w.full_name + (w.family_name ? ' (' + w.family_name + ')' : ''),
-      husbandId: husband.id,
-      husbandName: husband.full_name,
-      marriageYear: mYear,
-      marriageDateStr: mDateStr,
-      yearsMarried,
-      daysLeft,
-      milestoneTag,
-      city: husband.city || 'الأسرة'
-    });
-  });
-
-  // Sort by upcoming days
-  couples.sort((a, b) => a.daysLeft - b.daysLeft);
-
-  let currentTab = filterMode; // 'all', 'upcoming', 'jubilee'
-
-  function renderModal() {
-    const filtered = couples.filter(c => {
-      if (currentTab === 'upcoming') return c.daysLeft <= 60;
-      if (currentTab === 'jubilee') return c.yearsMarried >= 25;
-      return true;
-    });
-
-    const html = `
-      <div class="anniv-wrap" style="max-width:760px;text-align:right">
-        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
-          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
-            <span>💍</span> تذكير بذكرى الزواج للأزواج
-          </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
-        </div>
-
-        <!-- Prophetic Marriage Supplication -->
-        <div style="background:rgba(244,114,182,.1);border:1.5px solid rgba(244,114,182,.4);border-radius:10px;padding:10px 16px;text-align:center;color:#fbcfe8;font-size:.84rem;line-height:1.7">
-          «بَارَكَ اللَّهُ لَهُمَا وَبَارَكَ عَلَيْهِمَا وَجَمَعَ بَيْنَهُمَا فِي خَيْرٍ» 🤲
-          <div style="font-size:.76rem;color:var(--mut);margin-top:2px">نسأل الله أن يديم الألفة والمودة والسكينة في بيوت الأسرة المباركة.</div>
-        </div>
-
-        <!-- Toolbar -->
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button type="button" class="fstats-btn ${currentTab === 'all' ? 'active' : ''}" id="ann-all" style="padding:4px 10px;font-size:.76rem">الكل (${couples.length})</button>
-            <button type="button" class="fstats-btn ${currentTab === 'upcoming' ? 'active' : ''}" id="ann-upcoming" style="padding:4px 10px;font-size:.76rem">🔔 الأقرب موعداً</button>
-            <button type="button" class="fstats-btn ${currentTab === 'jubilee' ? 'active' : ''}" id="ann-jubilee" style="padding:4px 10px;font-size:.76rem">🏆 اليوبيل ومحطات العمر (25+ عاماً)</button>
-          </div>
-
-          <span style="font-size:.74rem;color:var(--mut)">خاص بالمتزوجين فقط</span>
-        </div>
-
-        <!-- Couples List -->
-        <div style="display:flex;flex-direction:column;gap:10px;max-height:480px;overflow-y:auto;padding-left:4px">
-          ${filtered.length ? filtered.map(c => `
-            <div class="anniv-card">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
-                <div>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <span style="font-size:1.1rem">💍</span>
-                    <h3 style="margin:0;font-size:.95rem;color:var(--gold)">
-                      ${esc(c.husbandName)} & ${esc(c.wifeName)}
-                    </h3>
-                  </div>
-                  <div style="font-size:.74rem;color:var(--mut);margin-top:3px">
-                    سنة الزواج: <b>${c.marriageYear}م</b> (مسيرة مباركة ممتدة <b>${c.yearsMarried}</b> عاماً) · 📍 ${esc(c.city)}
-                  </div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-                  <span class="anniv-badge">${esc(c.milestoneTag)}</span>
-                  <span style="font-size:.72rem;color:${c.daysLeft <= 30 ? '#22c55e' : 'var(--gold)'};font-weight:700">
-                    ${c.daysLeft === 0 ? '🎉 اليوم تحل الذكرى المباركة!' : `⏳ متبقي ${c.daysLeft} يوماً`}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;flex-wrap:wrap;gap:6px">
-                <div style="display:flex;gap:6px">
-                  <button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${c.husbandId}">
-                    👤 ملف الزوج
-                  </button>
-                  <button type="button" class="x" style="font-size:.74rem;color:var(--mut)" data-edit-mdate="${c.wifeId}">
-                    ✏️ تعديل تاريخ الزواج
-                  </button>
-                </div>
-
-                <div style="display:flex;gap:6px">
-                  <button type="button" class="fstats-btn" data-share-anniv="${c.wifeId}" style="padding:3px 10px;font-size:.74rem;background:#25d366;color:#0f172a;font-weight:700">
-                    📲 إرسال تهنئة بالواتساب
-                  </button>
-                  <button type="button" class="fstats-btn" data-card-anniv="${c.husbandId}" style="padding:3px 10px;font-size:.74rem">
-                    💌 بطاقة تهنئة
-                  </button>
-                </div>
-              </div>
-            </div>
-          `).join('') : `
-            <div style="text-align:center;padding:40px 10px;color:var(--mut)">
-              لا توجد مناسبات مطابقة في هذا التصنيف.
-            </div>
-          `}
-        </div>
-
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
-      </div>
-    `;
-
-    showInfo(html);
-
-    // Filter bindings
-    $('#ann-all').onclick = () => { currentTab = 'all'; renderModal(); };
-    $('#ann-upcoming').onclick = () => { currentTab = 'upcoming'; renderModal(); };
-    $('#ann-jubilee').onclick = () => { currentTab = 'jubilee'; renderModal(); };
-
-    // WhatsApp congratulations
-    document.querySelectorAll('[data-share-anniv]').forEach(btn => {
-      btn.onclick = () => {
-        const wid = btn.dataset.shareAnniv;
-        const c = couples.find(x => x.wifeId === wid);
-        if (c) {
-          const msg = `💍 *تهنئة وتبريك بمناسبة ذكرى الزواج المباركة:*\nإلى ابن العم الكريم: *${c.husbandName}* وحرمه المصون،\n\n«بَارَكَ اللَّهُ لَكُمَا وَبَارَكَ عَلَيْكُمَا وَجَمَعَ بَيْنَكُمَا فِي خَيْرٍ» 🤲\n\nأجمل التهاني بمناسبة مرور ${c.yearsMarried} عاماً من المودة والرحمة والوفاء، ونسأل الله أن يديم عليكم السعادة ويبارك في ذريتكم.\n\n— محبوكم من أسرة آل مطارد`;
-          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-        }
-      };
-    });
-
-    // Marriage Card
-    document.querySelectorAll('[data-card-anniv]').forEach(btn => {
-      btn.onclick = () => {
-        const hid = btn.dataset.cardAnniv;
-        const h = S.byId.get(hid);
-        if (h) {
-          openCard({
-            full_name: h.full_name,
-            gender: h.gender,
-            father_id: h.father_id,
-            phone: h.phone,
-            body: 'أجمل التهاني بمناسبة ذكرى الزواج المباركة، بارك الله لكما وبارك عليكما وجمع بينكما في خير.'
-          }, 'wedding');
-        }
-      };
-    });
-
-    // Edit marriage date
-    document.querySelectorAll('[data-edit-mdate]').forEach(btn => {
-      btn.onclick = async () => {
-        const wid = btn.dataset.editMdate;
-        const c = couples.find(x => x.wifeId === wid);
-        if (!c) return;
-        const newYrStr = await promptDlg(`سنة زواج (${c.husbandName}):`, c.marriageYear);
-        if (!newYrStr) return;
-        const newYr = parseInt(newYrStr);
-        if (isNaN(newYr) || newYr < 1920 || newYr > currentYear) {
-          toast('يرجى إدخال سنة ميلادية صحيحة');
-          return;
-        }
-        const newDate = await promptDlg('تاريخ الزواج (YYYY-MM-DD):', `${newYr}-05-15`) || `${newYr}-05-15`;
-        customAnnivs[wid] = { date: newDate, year: newYr };
-        localStorage.setItem('almatarid_anniversaries', JSON.stringify(customAnnivs));
-        toast('✅ تم تحديث تاريخ الزواج بنجاح!');
-        openAnniversariesModal(currentTab);
-      };
-    });
   }
 
   renderModal();
@@ -12823,7 +13528,6 @@ function openLifeStoryModal(targetMemberId = null) {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📖</span> صفحة «قصة حياة» ومحطات العمر لكل فرد
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -12903,9 +13607,6 @@ function openLifeStoryModal(targetMemberId = null) {
               📋 نسخ قصة الحياة
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -13015,7 +13716,6 @@ function openMemberStoriesModal(filterMemberId = null) {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📜</span> قصص ومأثورات أفراد العائلة المكتوبة
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -13096,9 +13796,6 @@ function openMemberStoriesModal(filterMemberId = null) {
 
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
           <span style="font-size:.74rem;color:var(--mut)">القصص المدوّنة: <b>${allStories.length} قصة</b></span>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -13191,186 +13888,200 @@ function openMemberStoriesModal(filterMemberId = null) {
 }
 
 /* ---------- 95) قواعد العائلة وتراجم أعلامها (فرع تجربة) ---------- */
-function openRulesAndBiographiesModal(initialTab = 'rules') {
-  const FAMILY_RULES = [
-    {
-      num: 1,
-      title: 'صلة الرحم والتراحم والمسؤولية المشتركة',
-      text: 'المحافظة التامة على صلة الرحم والتواصل المستمر بين عموم أفراد الأسرة في كافة المناطق، وتوقير كبير العائلة والعطف على صغيرها، والحرص على عيادة المرضى ومواساة المصابين ومشاركة الجميع في المسرات.'
-    },
-    {
-      num: 2,
-      title: 'تنظيم الاجتماعات السنوية والدورية',
-      text: 'يُعقد اجتماع الأسرة السنوي دورياً في عيدي الفطر والأضحى وخلال موسم الصيف في موطن الأسرة بالسراة (النماص) أو العاصمة الرياض، ويهدف لتجديد أواصر القربى والتعارف وتكريم الأجيال الشابة المتميزة.'
-    },
-    {
-      num: 3,
-      title: 'صندوق التكافل العائلي والأوقاف',
-      text: 'يُدار صندوق العائلة بإشراف لجنة مالية أمينة بهدف سد عوز المحتاجين من الأقارب، ودعم الشباب المقبلين على الزواج، وصيانة وإحياء أوقاف الأسرة ومصالحها الخيرية وفق الضوابط الشرعية.'
-    },
-    {
-      num: 4,
-      title: 'فض النزاعات وإصلاح ذات البين',
-      text: 'في حال نشوء أي خلاف مالي أو شخصي، يُرجع فيه إلى مجلس حكماء وأعيان العائلة للفصل فيه بالحكمة والعدل والتراضي، درءاً للقطيعة وحفظاً لهيبة الأسرة وتلاحمها.'
-    },
-    {
-      num: 5,
-      title: 'حفظ وتوثيق النسب والمشجرات التاريخية',
-      text: 'تعتبر شجرة العائلة وسجلاتها وثيقة جامعة معتمدة، ويُمنع أي تعديل أو إضافة دون الرجوع لمسؤول الفرع أو المالك وتوثيق البيانات بالأدلة الشرعية والشهادات المعتمدة.'
-    }
-  ];
+/* ---------- 39أ) ميثاق وقواعد العائلة — قسم مستقل (الجولة 10: فُصل عن التراجم بقرار عمر 2026-11-25) ---------- */
+/* نص الميثاق محتوى عائلي ثابت بالعربية (كبيانات الأعضاء — لا يُترجم) */
+const FAMILY_RULES = [
+  {
+    num: 1,
+    title: 'صلة الرحم والتراحم والمسؤولية المشتركة',
+    text: 'المحافظة التامة على صلة الرحم والتواصل المستمر بين عموم أفراد الأسرة في كافة المناطق، وتوقير كبير العائلة والعطف على صغيرها، والحرص على عيادة المرضى ومواساة المصابين ومشاركة الجميع في المسرات.'
+  },
+  {
+    num: 2,
+    title: 'تنظيم الاجتماعات السنوية والدورية',
+    text: 'يُعقد اجتماع الأسرة السنوي دورياً في عيدي الفطر والأضحى وخلال موسم الصيف في موطن الأسرة بالسراة (النماص) أو العاصمة الرياض، ويهدف لتجديد أواصر القربى والتعارف وتكريم الأجيال الشابة المتميزة.'
+  },
+  {
+    num: 3,
+    title: 'صندوق التكافل العائلي والأوقاف',
+    text: 'يُدار صندوق العائلة بإشراف لجنة مالية أمينة بهدف سد عوز المحتاجين من الأقارب، ودعم الشباب المقبلين على الزواج، وصيانة وإحياء أوقاف الأسرة ومصالحها الخيرية وفق الضوابط الشرعية.'
+  },
+  {
+    num: 4,
+    title: 'فض النزاعات وإصلاح ذات البين',
+    text: 'في حال نشوء أي خلاف مالي أو شخصي، يُرجع فيه إلى مجلس حكماء وأعيان العائلة للفصل فيه بالحكمة والعدل والتراضي، درءاً للقطيعة وحفظاً لهيبة الأسرة وتلاحمها.'
+  },
+  {
+    num: 5,
+    title: 'حفظ وتوثيق النسب والمشجرات التاريخية',
+    text: 'تعتبر شجرة العائلة وسجلاتها وثيقة جامعة معتمدة، ويُمنع أي تعديل أو إضافة دون الرجوع لمسؤول الفرع أو المالك وتوثيق البيانات بالأدلة الشرعية والشهادات المعتمدة.'
+  }
+];
 
-  /* تراجم المستخدم فقط — بلا تراجم افتراضية مختلقة لأسلاف مسمّين بتواريخ وإنجازات لم تُوثَّق */
-  const readBios = () => { try { return JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
+/* تراجم المستخدم فقط — بلا تراجم افتراضية مختلقة لأسلاف مسمّين بتواريخ وإنجازات لم تُوثَّق */
+const readBios = () => { try { return JSON.parse(localStorage.getItem('almatarid_luminary_bios') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
+
+function openFamilyRules() {
+  const html = `
+      <div class="frules-wrap" style="max-width:800px;text-align:right">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
+          <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
+            <span>⚖️</span> ${T('rulesTitle')}
+          </h2>
+        </div>
+
+        <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
+          ${T('rulesIntro')}
+        </p>
+
+        <div style="max-height:480px;overflow-y:auto;padding-left:4px">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
+              <b style="color:var(--gold);font-size:.95rem">${T('rulesBanner')}</b>
+              <div style="font-size:.78rem;color:var(--txt);margin-top:4px">${T('rulesBannerSub')}</div>
+            </div>
+
+            ${FAMILY_RULES.map(r => `
+              <div class="frules-rule-box">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="background:var(--gold);color:#0f172a;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.78rem">
+                    ${r.num}
+                  </span>
+                  <h3 style="margin:0;color:var(--gold);font-size:.92rem">${esc(r.title)}</h3>
+                </div>
+                <p style="margin:0;font-size:.84rem;color:var(--txt);line-height:1.65;padding-right:32px">
+                  ${esc(r.text)}
+                </p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:8px">
+            <button type="button" class="fstats-btn" id="btn-share-charter" style="background:#25d366;color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
+              ${T('shareWa')}
+            </button>
+            <button type="button" class="fstats-btn" id="btn-copy-charter" style="padding:5px 12px;font-size:.78rem">
+              ${T('copyText')}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+  showInfo(html);
+
+  const waBtn = $('#btn-share-charter');
+  if (waBtn) {
+    waBtn.onclick = () => {
+      let msg = `⚖️ *ميثاق وقواعد أسرة آل مطارد:*\n\n`;
+      FAMILY_RULES.forEach(r => { msg += `${r.num}. *${r.title}*:\n${r.text}\n\n`; });
+      msg += `— عبر موقع شجرة آل مطارد:\n${window.location.href}`;
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+  }
+
+  const copyBtn = $('#btn-copy-charter');
+  if (copyBtn) {
+    copyBtn.onclick = () => {
+      let text = `ميثاق وقواعد أسرة آل مطارد:\n\n`;
+      FAMILY_RULES.forEach(r => { text += `${r.num}. ${r.title}:\n${r.text}\n\n`; });
+      navigator.clipboard.writeText(text).then(() => { toast(T('toastCopied')); });
+    };
+  }
+}
+
+/* ---------- 39ب) تراجم أعلام ورجالات آل مطارد — قسم مستقل (الجولة 10: فُصل عن الميثاق بقرار عمر 2026-11-25) ---------- */
+function openNotablesBiographies() {
   const localBios = readBios();
   const allBios = [...localBios];
 
-  let currentTab = initialTab; // 'rules', 'bios'
-
-  function renderModal() {
+  function renderBios() {
     const html = `
       <div class="frules-wrap" style="max-width:800px;text-align:right">
         <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
-            <span>⚖️</span> قواعد وميثاق العائلة وتراجم أعلامها
+            <span>🏅</span> ${T('biosTitle')}
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          قواعد مقترحة لتنظيم مجالس وشؤون أسرة آل مطارد، مع تراجم يكتبها أفراد العائلة لأعلامهم.
+          ${T('biosIntro')}
         </p>
 
-        <!-- Navigation Tabs -->
-        <div class="transcribe-tabs">
-          <button type="button" class="transcribe-tab-btn ${currentTab === 'rules' ? 'active' : ''}" id="tab-btn-rules">
-            📜 ميثاق وقواعد العائلة الداخلية (5 بنود)
-          </button>
-          <button type="button" class="transcribe-tab-btn ${currentTab === 'bios' ? 'active' : ''}" id="tab-btn-bios">
-            🏅 تراجم أعلام ورجالات آل مطارد (${allBios.length} أعلام)
-          </button>
-        </div>
-
-        <!-- Tab Content -->
         <div style="max-height:480px;overflow-y:auto;padding-left:4px">
-          ${currentTab === 'rules' ? `
-            <div style="display:flex;flex-direction:column;gap:12px">
-              <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
-                <b style="color:var(--gold);font-size:.95rem">«ميثاق الشرف والتكاتف الأسري لآل مطارد»</b>
-                <div style="font-size:.78rem;color:var(--txt);margin-top:4px">مسودة مقترحة للمناقشة والاعتماد من مجلس العائلة — ليست وثيقة معتمدة بعد.</div>
-              </div>
-
-              ${FAMILY_RULES.map(r => `
-                <div class="frules-rule-box">
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <span style="background:var(--gold);color:#0f172a;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.78rem">
-                      ${r.num}
-                    </span>
-                    <h3 style="margin:0;color:var(--gold);font-size:.92rem">${esc(r.title)}</h3>
-                  </div>
-                  <p style="margin:0;font-size:.84rem;color:var(--txt);line-height:1.65;padding-right:32px">
-                    ${esc(r.text)}
-                  </p>
-                </div>
-              `).join('')}
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+              <span style="font-size:.78rem;color:var(--mut)">${T('biosIntro')}</span>
+              <button type="button" class="fstats-btn" id="btn-add-bio" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:4px 10px">
+                ${T('biosAdd')}
+              </button>
             </div>
-          ` : `
-            <div style="display:flex;flex-direction:column;gap:14px">
-              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.7);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
-                <span style="font-size:.78rem;color:var(--mut)">سير كبار الأجداد وأعيان الأسرة عبر الأجيال</span>
-                <button type="button" class="fstats-btn" id="btn-add-bio" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:4px 10px">
-                  ➕ إضافة ترجمة عَلَم
-                </button>
+
+            ${allBios.length ? allBios.map(b => `
+              <div class="frules-bio-card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                  <div>
+                    <h3 style="margin:0 0 2px 0;color:var(--gold);font-size:1.05rem;display:flex;align-items:center;gap:6px">
+                      <span>🏅</span> ${esc(b.name)}
+                    </h3>
+                    <div style="font-size:.8rem;font-weight:700;color:var(--txt)">${esc(b.title)}</div>
+                  </div>
+                  <span style="display:flex;gap:6px;align-items:center">
+                    <span class="mstory-badge">🕒 ${esc(b.era)}</span>
+                    ${b.memberId ? `<button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${b.memberId}">${T('biosProfile')}</button>` : ''}
+                  </span>
+                </div>
+
+                <div style="font-size:.76rem;color:var(--mut)">${T('biosHome')} <b>${esc(b.location)}</b></div>
+
+                <div style="font-size:.84rem;color:var(--txt);line-height:1.7;background:rgba(0,0,0,.25);padding:10px 14px;border-radius:8px">
+                  <div><b>${T('biosAch')}</b> ${esc(b.achievements)}</div>
+                  <div style="margin-top:4px"><b>${T('biosDesc')}</b> ${esc(b.descendants)}</div>
+                  <div style="margin-top:4px"><b>${T('biosLegacy')}</b> ${esc(b.legacy)}</div>
+                </div>
               </div>
-
-              ${allBios.length ? allBios.map(b => `
-                <div class="frules-bio-card">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-                    <div>
-                      <h3 style="margin:0 0 2px 0;color:var(--gold);font-size:1.05rem;display:flex;align-items:center;gap:6px">
-                        <span>🏅</span> ${esc(b.name)}
-                      </h3>
-                      <div style="font-size:.8rem;font-weight:700;color:var(--txt)">${esc(b.title)}</div>
-                    </div>
-                    <span style="display:flex;gap:6px;align-items:center">
-                      <span class="mstory-badge">🕒 ${esc(b.era)}</span>
-                      ${b.memberId ? `<button type="button" class="x" style="font-size:.74rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${b.memberId}">👤 ملف العَلَم</button>` : ''}
-                    </span>
-                  </div>
-
-                  <div style="font-size:.76rem;color:var(--mut)">📍 موطن الاستقرار: <b>${esc(b.location)}</b></div>
-
-                  <div style="font-size:.84rem;color:var(--txt);line-height:1.7;background:rgba(0,0,0,.25);padding:10px 14px;border-radius:8px">
-                    <div><b>• المآثر والخصال:</b> ${esc(b.achievements)}</div>
-                    <div style="margin-top:4px"><b>• الامتداد والذرية:</b> ${esc(b.descendants)}</div>
-                    <div style="margin-top:4px"><b>• الأثر الباقي:</b> ${esc(b.legacy)}</div>
-                  </div>
-                </div>
-              `).join('') : `
-                <div style="text-align:center;padding:32px 10px;color:var(--mut)">
-                  <div style="font-size:2rem;margin-bottom:8px">🏅</div>
-                  <div>لا توجد تراجم بعد — أضف أول ترجمة عبر الزر أعلاه.</div>
-                </div>
-              `}
-            </div>
-          `}
+            `).join('') : `
+              <div style="text-align:center;padding:32px 10px;color:var(--mut)">
+                <div style="font-size:2rem;margin-bottom:8px">🏅</div>
+                <div>${T('biosEmpty')}</div>
+              </div>
+            `}
+          </div>
         </div>
 
-        <!-- Footer Actions -->
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;gap:8px">
           <div style="display:flex;gap:8px">
             <button type="button" class="fstats-btn" id="btn-share-charter" style="background:#25d366;color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">
-              📲 مشاركة بالواتساب
+              ${T('shareWa')}
             </button>
             <button type="button" class="fstats-btn" id="btn-copy-charter" style="padding:5px 12px;font-size:.78rem">
-              📋 نسخ النص
+              ${T('copyText')}
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
 
     showInfo(html);
 
-    // Tab bindings
-    $('#tab-btn-rules').onclick = () => { currentTab = 'rules'; renderModal(); };
-    $('#tab-btn-bios').onclick = () => { currentTab = 'bios'; renderModal(); };
-
-    // WhatsApp share
     const waBtn = $('#btn-share-charter');
     if (waBtn) {
       waBtn.onclick = () => {
-        let msg = '';
-        if (currentTab === 'rules') {
-          msg = `⚖️ *ميثاق وقواعد أسرة آل مطارد:*\n\n`;
-          FAMILY_RULES.forEach(r => { msg += `${r.num}. *${r.title}*:\n${r.text}\n\n`; });
-        } else {
-          msg = `🏅 *من أعلام ورجالات أسرة آل مطارد:*\n\n`;
-          allBios.forEach(b => { msg += `• *${b.name}* (${b.era}):\n${b.title} - ${b.achievements}\n\n`; });
-        }
+        let msg = `🏅 *من أعلام ورجالات أسرة آل مطارد:*\n\n`;
+        allBios.forEach(b => { msg += `• *${b.name}* (${b.era}):\n${b.title} - ${b.achievements}\n\n`; });
         msg += `— عبر موقع شجرة آل مطارد:\n${window.location.href}`;
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
       };
     }
 
-    // Copy action
     const copyBtn = $('#btn-copy-charter');
     if (copyBtn) {
       copyBtn.onclick = () => {
-        let text = '';
-        if (currentTab === 'rules') {
-          text = `ميثاق وقواعد أسرة آل مطارد:\n\n`;
-          FAMILY_RULES.forEach(r => { text += `${r.num}. ${r.title}:\n${r.text}\n\n`; });
-        } else {
-          text = `تراجم أعلام ورجالات أسرة آل مطارد:\n\n`;
-          allBios.forEach(b => { text += `${b.name} (${b.era})\n${b.title}\n${b.achievements}\n\n`; });
-        }
-        navigator.clipboard.writeText(text).then(() => {
-          toast('✅ تم نسخ المحتوى بنجاح!');
-        });
+        let text = `تراجم أعلام ورجالات أسرة آل مطارد:\n\n`;
+        allBios.forEach(b => { text += `${b.name} (${b.era})\n${b.title}\n${b.achievements}\n\n`; });
+        navigator.clipboard.writeText(text).then(() => { toast(T('toastCopied')); });
       };
     }
 
@@ -13378,26 +14089,26 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
     const addBioBtn = $('#btn-add-bio');
     if (addBioBtn) {
       addBioBtn.onclick = () => {
-        const memOpts = [['', '— اختر من الشجرة —'], ...[...S.members].sort(byName).map(m => [m.id, cardLongName(m)])];
-        openForm('➕ إضافة ترجمة عَلَم', [
-          { k: 'memberId', label: 'العَلَم (من أفراد الشجرة)', type: 'select', opts: memOpts, val: '' },
-          { k: 'name', label: 'الاسم (إن لم يكن في الشجرة)', val: '' },
-          { k: 'title', label: 'اللقب أو الصفة (مثال: وجيه الفرع / قاضي الناحية)', val: 'عَلَم من أعلام الأسرة' },
-          { k: 'era', label: 'الحقبة التاريخية', val: 'العصر الحديث' },
-          { k: 'location', label: 'موطن الاستقرار', val: '' },
-          { k: 'achievements', label: 'أبرز المآثر والخصال', type: 'area', val: '' },
-          { k: 'descendants', label: 'الامتداد والذرية', val: '' },
-          { k: 'legacy', label: 'الأثر الباقي', val: '' }
+        const memOpts = [['', T('bioFMemberPick')], ...[...S.members].sort(byName).map(m => [m.id, cardLongName(m)])];
+        openForm(T('biosAdd'), [
+          { k: 'memberId', label: T('bioFMember'), type: 'select', opts: memOpts, val: '' },
+          { k: 'name', label: T('bioFName'), val: '' },
+          { k: 'title', label: T('bioFTitle'), val: T('bioFTitleDef') },
+          { k: 'era', label: T('bioFEra'), val: T('bioFEraDef') },
+          { k: 'location', label: T('bioFLocation'), val: '' },
+          { k: 'achievements', label: T('bioFAch'), type: 'area', val: '' },
+          { k: 'descendants', label: T('bioFDesc'), val: '' },
+          { k: 'legacy', label: T('bioFLegacy'), val: '' }
         ], async d => {
           const m = S.byId.get(d.memberId);
           const name = (m ? cardLongName(m) : (d.name || '').trim());
-          if (!name) throw new Error('اختر العَلَم من الشجرة أو اكتب اسمه');
+          if (!name) throw new Error(T('bioErrNoName'));
           const newBio = {
             id: 'bio_user_' + Date.now(),
             memberId: m ? m.id : '',
             name,
-            title: (d.title || '').trim() || 'عَلَم من أعلام الأسرة',
-            era: (d.era || '').trim() || 'العصر الحديث',
+            title: (d.title || '').trim() || T('bioFTitleDef'),
+            era: (d.era || '').trim() || T('bioFEraDef'),
             location: (d.location || '').trim(),
             achievements: (d.achievements || '').trim(),
             descendants: (d.descendants || '').trim(),
@@ -13407,28 +14118,70 @@ function openRulesAndBiographiesModal(initialTab = 'rules') {
           stored.push(newBio);
           localStorage.setItem('almatarid_luminary_bios', JSON.stringify(stored));
           allBios.push(newBio);
-          toast('✅ تمت إضافة ترجمة العَلَم بنجاح!');
-          renderModal();
+          toast(T('toastBioAdded'));
+          renderBios();
         });
       };
     }
   }
 
-  renderModal();
+  renderBios();
 }
 
-/* ---------- 96) مجلس العائلة - الأعضاء والقرارات (فرع تجربة) ---------- */
+/* ---------- 96) مجلس العائلة - الأعضاء والأمناء والقرارات (فرع تجربة) ---------- */
+/* الجولة 10 — البنود 7 و8 و9:
+   - عضوية متعاقبة: لكل عضو حالة (حالي/سابق) + دورة + تواريخ؛ «إنهاء العضوية» ينقله للسابقين مع التاريخ بدل حذفه،
+     و«إعادة للعضوية» تنشئ سجل دورة جديدة ويبقى القديم. السجلات القديمة بلا حالة تُهاجَر كحالية.
+   - الأمناء: سجل مناصب عام COUNCIL_OFFICES (أمين المجلس فقط الآن — بقية القائمة بانتظار عمر)؛
+     لكل منصب حامل حالي أو «شاغر» + حاملون سابقون بدوراتهم؛ تغيير الأمين ينقل السابق للسابقين بدل حذفه.
+   - أقسام مستقلة: تبويبات منفصلة (القرارات والتعاميم / الأعضاء / الأمناء) — لا خلط.
+   التخزين محلي (localStorage) كما كان — لا جدول خادم للمجلس بعد؛ موثّق في تقرير الجولة 10. */
+const COUNCIL_OFFICES = ['أمين المجلس'];
 function openCouncilDecreesModal(initialTab = 'decrees') {
   /* قرارات وأعضاء المجلس من إدخال المستخدم فقط — بلا قرارات ولا تشكيل افتراضيين مختلقين */
   const readDecrees = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_decrees') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const localDecrees = readDecrees();
   const allDecrees = [...localDecrees];
-  const readMembers = () => { try { return JSON.parse(localStorage.getItem('almatarid_council_members') || '[]'); } catch (e) { console.warn('[almatarid]', e); return []; } };
+  const normMember = r => ({ ...r, status: r.status || 'current', term: r.term || '', startDate: r.startDate || '', endDate: r.endDate || '' });
+  const readMembers = () => { try { return (JSON.parse(localStorage.getItem('almatarid_council_members') || '[]') || []).map(normMember); } catch (e) { console.warn('[almatarid]', e); return []; } };
   const allMembers = readMembers();
+  const normOffice = r => ({ ...r, status: r.status || 'current', term: r.term || '', startDate: r.startDate || '', endDate: r.endDate || '' });
+  const readOffices = () => { try { return (JSON.parse(localStorage.getItem('almatarid_council_offices') || '[]') || []).map(normOffice); } catch (e) { console.warn('[almatarid]', e); return []; } };
+  const allOffices = readOffices();
+  const saveMembers = () => { try { localStorage.setItem('almatarid_council_members', JSON.stringify(allMembers)); } catch (e) { console.warn('[almatarid]', e); } };
+  const saveOffices = () => { try { localStorage.setItem('almatarid_council_offices', JSON.stringify(allOffices)); } catch (e) { console.warn('[almatarid]', e); } };
 
-  let currentTab = initialTab; // 'decrees', 'members'
+  let currentTab = initialTab; // 'decrees', 'members', 'secretaries'
+  let memberSubTab = 'current'; // 'current' | 'former'
   let searchQuery = '';
   let refocusSearch = false; /* إعادة التركيز لحقل البحث بعد إعادة الرسم عند الكتابة */
+  const todayStr = () => new Date().toLocaleDateString('ar-SA');
+  const curMembers = () => allMembers.filter(m => (m.status || 'current') === 'current');
+  const formerMembers = () => allMembers.filter(m => m.status === 'former');
+  const officeHolder = office => allOffices.find(o => o.office === office && o.status === 'current');
+  const officeFormers = office => allOffices.filter(o => o.office === office && o.status === 'former');
+  const termLine = r => [r.term, r.startDate ? (T('councilStartDate') + ': ' + r.startDate) : '', r.endDate ? (T('councilEndDate') + ': ' + r.endDate) : ''].filter(Boolean).join(' · ');
+
+  function memberCard(m, opts) {
+    const former = m.status === 'former';
+    const noManage = opts && opts.noManage; /* بطاقات الأمناء: إدارتهم من التعيين/التغيير لا من أزرار العضوية */
+    return `
+      <div class="council-member-card">
+        <div style="font-size:1.6rem">${esc(m.icon || '👤')}</div>
+        <div style="min-width:0;flex:1">
+          <b style="color:var(--gold);font-size:.88rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</b>
+          <div style="font-size:.76rem;color:var(--txt);font-weight:700">${esc(m.role)}</div>
+          <div style="font-size:.7rem;color:var(--mut)">${esc(m.branch)}</div>
+          ${termLine(m) ? `<div style="font-size:.7rem;color:var(--mut)">${esc(termLine(m))}</div>` : ''}
+          ${former ? `<span class="fnews-tag" style="background:rgba(148,163,184,.15);color:#94a3b8;border:1px solid #94a3b8">${T('councilFormer')}</span>` : ''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+            ${m.memberId ? `<button type="button" class="x" style="font-size:.72rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${m.memberId}">👤 ملفه بالشجرة</button>` : ''}
+            ${canEdit() && !former && !noManage ? `<button type="button" class="x" style="font-size:.72rem;color:#f87171;font-weight:700" data-end-mem="${m.memberId}">${T('councilEndMem')}</button>` : ''}
+            ${canEdit() && former && !noManage ? `<button type="button" class="x" style="font-size:.72rem;color:#34d399;font-weight:700" data-rejoin-mem="${m.memberId}">${T('councilRejoin')}</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
 
   function renderModal() {
     const filteredDecrees = allDecrees.filter(d => {
@@ -13437,27 +14190,30 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
       const hay = x => stripKin(normAr([x.title, x.number, x.summary, x.category].join(' ')));
       return hay(d).includes(q);
     });
+    const shownMembers = memberSubTab === 'former' ? formerMembers() : curMembers();
 
     const html = `
       <div class="council-wrap" style="max-width:820px;text-align:right">
         <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
-            <span>🏛️</span> مجلس عائلة آل مطارد (الأعضاء والقرارات)
+            <span>🏛️</span> مجلس عائلة آل مطارد (الأعضاء والأمناء والقرارات)
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          صفحة مجلس عائلة آل مطارد: تشكيل الهيئة وسجل القرارات والتعاميم — يُضاف التشكيل والقرارات من المالك أو المحرر.
+          صفحة مجلس عائلة آل مطارد: تشكيل الهيئة والأمناء وسجل القرارات والتعاميم — يُضاف التشكيل والقرارات من المالك أو المحرر.
         </p>
 
-        <!-- Navigation Tabs -->
+        <!-- Navigation Tabs — أقسام مستقلة (الجولة 10 — البند 9) -->
         <div class="transcribe-tabs">
           <button type="button" class="transcribe-tab-btn ${currentTab === 'decrees' ? 'active' : ''}" id="tab-btn-decrees">
-            📜 سجل القرارات والتعاميم (${allDecrees.length})
+            📜 ${T('councilTabDecrees')} (${allDecrees.length})
           </button>
           <button type="button" class="transcribe-tab-btn ${currentTab === 'members' ? 'active' : ''}" id="tab-btn-members">
-            👥 أعضاء وهيئة المجلس واللجان (${allMembers.length})
+            👥 ${T('councilTabMembers')} (${curMembers().length})
+          </button>
+          <button type="button" class="transcribe-tab-btn ${currentTab === 'secretaries' ? 'active' : ''}" id="tab-btn-secretaries">
+            🗝️ ${T('councilTabSec')} (${COUNCIL_OFFICES.length})
           </button>
         </div>
 
@@ -13516,48 +14272,66 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
                 </div>
               `}
             </div>
-          ` : `
+          ` : currentTab === 'members' ? `
             <div style="display:flex;flex-direction:column;gap:12px">
               <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
                 <b style="color:var(--gold);font-size:.95rem">هيئة مجلس أسرة آل مطارد لدورته الحالية</b>
                 <div style="font-size:.78rem;color:var(--txt);margin-top:3px">يُشكَّل المجلس من المالك أو المحرر، ويظهر هنا بعد إضافته — كل عضو مربوط بملفه في الشجرة.</div>
               </div>
 
-              ${canEdit() ? `
-                <div style="display:flex;justify-content:flex-end">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                <div class="transcribe-tabs" style="margin:0">
+                  <button type="button" class="transcribe-tab-btn ${memberSubTab === 'current' ? 'active' : ''}" id="tab-btn-cur">${T('councilCur')} (${curMembers().length})</button>
+                  <button type="button" class="transcribe-tab-btn ${memberSubTab === 'former' ? 'active' : ''}" id="tab-btn-former">${T('councilFormer')} (${formerMembers().length})</button>
+                </div>
+                ${canEdit() ? `
                   <button type="button" class="fstats-btn" id="btn-add-council-member" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:5px 12px">
                     ➕ إضافة عضو مجلس
                   </button>
-                </div>
-              ` : ''}
+                ` : ''}
+              </div>
 
               <div class="council-grid">
-                ${allMembers.length ? allMembers.map(m => `
-                  <div class="council-member-card">
-                    <div style="font-size:1.6rem">${esc(m.icon || '👤')}</div>
-                    <div style="min-width:0;flex:1">
-                      <b style="color:var(--gold);font-size:.88rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</b>
-                      <div style="font-size:.76rem;color:var(--txt);font-weight:700">${esc(m.role)}</div>
-                      <div style="font-size:.7rem;color:var(--mut)">${esc(m.branch)}</div>
-                      ${m.memberId ? `<button type="button" class="x" style="font-size:.72rem;color:var(--gold);font-weight:700" data-m04="profile" data-m04-id="${m.memberId}">👤 ملفه بالشجرة</button>` : ''}
-                    </div>
-                  </div>
-                `).join('') : `
+                ${shownMembers.length ? shownMembers.map(m => memberCard(m)).join('') : `
                   <div style="text-align:center;padding:32px 10px;color:var(--mut);grid-column:1/-1">
                     <div style="font-size:2rem;margin-bottom:8px">👥</div>
-                    <div>لم يُشكَّل المجلس بعد — يضيف المالك أو المحرر أعضاءه من أفراد الشجرة.</div>
+                    <div>${memberSubTab === 'former' ? T('councilFormerEmpty') : T('councilCurrentEmpty')}</div>
                   </div>
                 `}
               </div>
             </div>
+          ` : `
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="background:rgba(245,158,11,.1);border:1.5px solid var(--gold);border-radius:10px;padding:12px 16px;text-align:center">
+                <b style="color:var(--gold);font-size:.95rem">${T('councilTabSec')}</b>
+                <div style="font-size:.78rem;color:var(--txt);margin-top:3px">${T('councilSecNote')}</div>
+              </div>
+              ${COUNCIL_OFFICES.map(office => {
+                const holder = officeHolder(office);
+                const formers = officeFormers(office);
+                return `
+                <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                    <b style="color:var(--gold);font-size:.95rem">🗝️ ${esc(office)}</b>
+                    ${canEdit() ? `<button type="button" class="fstats-btn" data-appoint-sec="${esc(office)}" style="background:var(--gold);color:#0f172a;font-weight:700;font-size:.76rem;padding:5px 12px">${holder ? T('councilChangeSec') : T('councilAppointSec')}</button>` : ''}
+                  </div>
+                  ${holder ? `
+                    <div class="council-grid" style="margin-top:10px">${memberCard({ ...holder, name: holder.holderName, memberId: holder.holderMemberId, role: holder.office, branch: '' }, { noManage: true })}</div>
+                  ` : `
+                    <div style="text-align:center;padding:18px 10px;color:var(--mut)">${T('councilVacant')}</div>
+                  `}
+                  ${formers.length ? `
+                    <div style="margin-top:10px">
+                      <div style="font-size:.8rem;color:var(--mut);font-weight:700;margin-bottom:6px">${T('councilFormer')} (${formers.length})</div>
+                      <div class="council-grid">${formers.map(f => memberCard({ ...f, name: f.holderName, memberId: f.holderMemberId, role: f.office, branch: '' }, { noManage: true })).join('')}</div>
+                    </div>
+                  ` : ''}
+                </div>`;
+              }).join('')}
+            </div>
           `}
         </div>
 
-        <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px">
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
-        </div>
       </div>
     `;
 
@@ -13566,6 +14340,9 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
     // Tab bindings
     $('#tab-btn-decrees').onclick = () => { currentTab = 'decrees'; renderModal(); };
     $('#tab-btn-members').onclick = () => { currentTab = 'members'; renderModal(); };
+    $('#tab-btn-secretaries').onclick = () => { currentTab = 'secretaries'; renderModal(); };
+    const bCur = $('#tab-btn-cur'); if (bCur) bCur.onclick = () => { memberSubTab = 'current'; renderModal(); };
+    const bFormer = $('#tab-btn-former'); if (bFormer) bFormer.onclick = () => { memberSubTab = 'former'; renderModal(); };
 
     // Search binding
     const sInp = $('#decree-search-inp');
@@ -13575,7 +14352,7 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
         refocusSearch = true;
         renderModal();
       };
-      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (e) { console.warn('[almatarid]', e);} }
+      if (refocusSearch) { refocusSearch = false; sInp.focus(); try { sInp.setSelectionRange(sInp.value.length, sInp.value.length); } catch (e) { console.warn('[almatarid]', e); } }
     }
 
     // WhatsApp share
@@ -13640,26 +14417,74 @@ function openCouncilDecreesModal(initialTab = 'decrees') {
     // Add council member action — عضو مربوط بملفه في الشجرة (المالك/المحرر فقط)
     const addMemBtn = $('#btn-add-council-member');
     if (addMemBtn) {
-      addMemBtn.onclick = () => {
-        const memOpts = [...S.members].sort(byName).map(m => [m.id, cardLongName(m)]);
-        openForm('➕ إضافة عضو مجلس', [
-          { k: 'memberId', label: 'العضو (من أفراد الشجرة)', type: 'select', opts: memOpts, val: '' },
-          { k: 'role', label: 'المنصب في المجلس', req: true, val: '' },
-          { k: 'branch', label: 'الفرع أو اللجنة', val: '' }
+      addMemBtn.onclick = () => addMemberForm(null);
+    }
+
+    // End membership — ينقل للسابقين مع التاريخ بدل الحذف (الجولة 10 — البند 7)
+    document.querySelectorAll('[data-end-mem]').forEach(btn => {
+      btn.onclick = async () => {
+        const m = allMembers.find(x => x.memberId === btn.dataset.endMem && (x.status || 'current') === 'current');
+        if (!m) return;
+        if (!await confirmDlg(T('councilEndMemConfirm').replace('{n}', m.name))) return;
+        m.status = 'former';
+        m.endDate = todayStr();
+        saveMembers();
+        toast('✅ تم إنهاء عضوية «' + m.name + '» — بقي في قائمة السابقين.');
+        renderModal();
+      };
+    });
+
+    // Rejoin — دورة جديدة بسجل جديد ويبقى القديم (الجولة 10 — البند 7)
+    document.querySelectorAll('[data-rejoin-mem]').forEach(btn => {
+      btn.onclick = () => {
+        const old = allMembers.find(x => x.memberId === btn.dataset.rejoinMem && x.status === 'former');
+        if (!old) return;
+        memberSubTab = 'current';
+        addMemberForm(old);
+      };
+    });
+
+    // Appoint / change secretary — السابق ينقل للسابقين بدل حذفه (الجولة 10 — البند 8)
+    document.querySelectorAll('[data-appoint-sec]').forEach(btn => {
+      btn.onclick = () => {
+        const office = btn.dataset.appointSec;
+        const memOpts = [['', '— اختر من أفراد الشجرة —'], ...[...S.members].sort(byName).map(m => [m.id, cardLongName(m)])];
+        openForm((officeHolder(office) ? T('councilChangeSec') : T('councilAppointSec')) + ' — ' + office, [
+          { k: 'memberId', label: 'الأمين (من أفراد الشجرة)', type: 'select', opts: memOpts, val: '' },
+          { k: 'term', label: T('councilTerm'), val: '' },
+          { k: 'startDate', label: T('councilStartDate'), val: '' }
         ], async d => {
           const m = S.byId.get(d.memberId);
-          if (!m) throw new Error('اختر العضو من الشجرة');
-          if (allMembers.some(x => x.memberId === m.id)) throw new Error('هذا العضو في المجلس بالفعل');
-          const nm = { memberId: m.id, name: cardLongName(m), role: (d.role || '').trim(), branch: (d.branch || '').trim(), icon: '👤' };
-          const stored = readMembers();
-          stored.push(nm);
-          localStorage.setItem('almatarid_council_members', JSON.stringify(stored));
-          allMembers.push(nm);
-          toast('✅ تمت إضافة عضو المجلس بنجاح!');
+          if (!m) throw new Error('اختر الأمين من الشجرة');
+          const cur = officeHolder(office);
+          if (cur) { cur.status = 'former'; cur.endDate = todayStr(); }
+          allOffices.push({ id: 'off_' + Date.now(), office, holderMemberId: m.id, holderName: cardLongName(m), status: 'current', term: (d.term || '').trim(), startDate: (d.startDate || '').trim(), endDate: '' });
+          saveOffices();
+          toast('✅ تم تعيين أمين المجلس: ' + cardLongName(m));
           renderModal();
         });
       };
-    }
+    });
+  }
+
+  function addMemberForm(prefill) {
+    const memOpts = [...S.members].sort(byName).map(m => [m.id, cardLongName(m)]);
+    openForm('➕ إضافة عضو مجلس', [
+      { k: 'memberId', label: 'العضو (من أفراد الشجرة)', type: 'select', opts: memOpts, val: prefill ? prefill.memberId : '' },
+      { k: 'role', label: 'المنصب في المجلس', req: true, val: prefill ? prefill.role : '' },
+      { k: 'branch', label: 'الفرع أو اللجنة', val: prefill ? prefill.branch : '' },
+      { k: 'term', label: T('councilTerm'), val: '' },
+      { k: 'startDate', label: T('councilStartDate'), val: '' }
+    ], async d => {
+      const m = S.byId.get(d.memberId);
+      if (!m) throw new Error('اختر العضو من الشجرة');
+      if (curMembers().some(x => x.memberId === m.id)) throw new Error('هذا العضو في المجلس بالفعل');
+      const nm = { memberId: m.id, name: cardLongName(m), role: (d.role || '').trim(), branch: (d.branch || '').trim(), icon: '👤', status: 'current', term: (d.term || '').trim(), startDate: (d.startDate || '').trim(), endDate: '' };
+      allMembers.push(nm);
+      saveMembers();
+      toast('✅ تمت إضافة عضو المجلس بنجاح!');
+      renderModal();
+    });
   }
 
   renderModal();
@@ -13674,25 +14499,47 @@ function openFamilyFundModal() {
   const readAccount = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_account') || 'null'); } catch (e) { console.warn('[almatarid]', e); return null; } };
   let fundAccount = readAccount();
 
+  /* الجولة 10 — البند 10: خصوصية الصندوق — التفاصيل (المبالغ والآيبان) للمالك وأمين الصندوق ومن يعيّنهم المالك (حتى 3 أشخاص مع الأمين)؛ والعموم يرون النسبة فقط.
+     التعيين محلي (localStorage) كسائر الصندوق. المالك/المحرر يديران الصندوق (تحديد الحساب وإضافة المبادرات) فيريان البطاقة البنكية بحكم الإدارة؛
+     أما الاطلاع على المبالغ فمقصور على المالك والأمين والمطلعين المعيّنين. */
+  const readFundViewers = () => { try { return JSON.parse(localStorage.getItem('almatarid_fund_viewers') || 'null') || {}; } catch (e) { console.warn('[almatarid]', e); return {}; } };
+  const isFundPrivileged = () => {
+    if (S.role === 'owner') return true;
+    const v = readFundViewers();
+    const me = localStorage.getItem('almatarid_me_id') || '';
+    if (!me) return false;
+    return v.treasurerId === me || (v.extraIds || []).includes(me);
+  };
+  const fundViewerNames = () => {
+    const v = readFundViewers();
+    const nm = id => S.byId.get(id)?.full_name || '؟';
+    const parts = [];
+    if (v.treasurerId) parts.push('أمين الصندوق: ' + nm(v.treasurerId));
+    (v.extraIds || []).forEach(id => parts.push(nm(id)));
+    return parts.length ? parts.join(' · ') : 'لم يُعيَّن أحد بعد (المالك فقط يرى التفاصيل)';
+  };
+
   function renderModal() {
     /* الإحصاءات تُحسب عند كل رسم — حتى تتحدث بعد تسجيل مساهمة أو إضافة مبادرة دون إعادة فتح النافذة */
     const totalRaised = allCampaigns.reduce((sum, c) => sum + (c.raisedAmount || 0), 0);
     const totalTarget = allCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
     const completedCount = allCampaigns.filter(c => (c.targetAmount > 0 ? Math.min(100, Math.round(((c.raisedAmount || 0) / c.targetAmount) * 100)) : 100) >= 100).length;
+    const priv = isFundPrivileged();
+    const overallPct = totalTarget > 0 ? Math.min(100, Math.round((totalRaised / totalTarget) * 100)) : (allCampaigns.length ? 100 : 0);
     const html = `
       <div class="fund-wrap" style="max-width:800px;text-align:right">
         <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🤝</span> صندوق عائلة آل مطارد التكافلي والخيري
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
           صندوق تكافلي غير ربحي قائم على التراحم والتعاون بين أفراد أسرة آل مطارد، لسد حاجة المحتاج، وإعانة المقبلين على الزواج، ورعاية أوقاف الأسرة ومصالحها العامة وفق أعلى معايير الأمانة والشفافية.
         </p>
 
-        <!-- Stats Overview -->
+        <!-- Stats Overview — العموم يرون النسبة فقط (البند 10) -->
+        ${priv ? `
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:10px">
           <div class="fund-stat-box">
             <div style="font-size:1.2rem;font-weight:700;color:var(--gold)">${totalRaised.toLocaleString('ar-SA')} ر.س</div>
@@ -13708,10 +14555,19 @@ function openFamilyFundModal() {
             <div style="font-size:1.2rem;font-weight:700;color:var(--txt)">${allCampaigns.length} مبادرات</div>
             <div style="font-size:.74rem;color:var(--mut);margin-top:2px">حملات تكافلية نشطة</div>
           </div>
+        </div>` : `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:10px">
+          <div class="fund-stat-box">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--gold)">${overallPct}%</div>
+            <div style="font-size:.74rem;color:var(--mut);margin-top:2px">النسبة المحصلة إجمالاً من أهداف المبادرات</div>
+          </div>
         </div>
+        <p style="font-size:.74rem;color:var(--mut);margin:2px 0 0">تفاصيل الصندوق (المبالغ والحساب) خاصة بالمالك وأمين الصندوق والمطلعين المعيّنين.</p>`}
 
-        <!-- Bank Account Card — يظهر فقط بعد أن يحدد المالك/المحرر الحساب البنكي الحقيقي للصندوق -->
-        ${fundAccount ? `
+        ${S.role === 'owner' ? `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:4px"><span style="font-size:.78rem;color:var(--mut)">👁️ المطلعون على التفاصيل: ${esc(fundViewerNames())}</span><button type="button" class="fstats-btn" id="btn-fund-viewers" style="padding:4px 10px;font-size:.74rem">👁️ إدارة المطلعين على التفاصيل</button></div>` : ''}
+
+        <!-- Bank Account Card — يظهر فقط بعد أن يحدد المالك/المحرر الحساب البنكي الحقيقي للصندوق (ولا يظهر للعموم أصلاً) -->
+        ${(priv || canEdit()) ? (fundAccount ? `
         <div class="fund-bank-card">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div>
@@ -13732,7 +14588,7 @@ function openFamilyFundModal() {
           لم يُحدَّد حساب الصندوق البنكي بعد — يحدده المالك أو المحرر من هنا.
           ${canEdit() ? `<button type="button" class="fstats-btn" id="btn-set-account" style="background:var(--gold);color:#0f172a;font-weight:700;padding:5px 12px;font-size:.78rem">🏛️ تحديد حساب الصندوق</button>` : ''}
         </div>
-        `}
+        `) : ''}
         ${canEdit() && fundAccount ? `<div style="display:flex;justify-content:flex-end"><button type="button" class="fstats-btn" id="btn-set-account" style="padding:4px 10px;font-size:.74rem">تعديل حساب الصندوق</button></div>` : ''}
 
         <!-- Active Initiatives -->
@@ -13763,8 +14619,8 @@ function openFamilyFundModal() {
                   <!-- Progress Bar -->
                   <div style="margin-top:4px">
                     <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--mut);margin-bottom:4px">
-                      <span>المحصل: <b>${camp.raisedAmount.toLocaleString('ar-SA')} ر.س</b></span>
-                      <span>الهدف: <b>${camp.targetAmount.toLocaleString('ar-SA')} ر.س</b> (${pct}%)</span>
+                      ${priv ? `<span>المحصل: <b>${camp.raisedAmount.toLocaleString('ar-SA')} ر.س</b></span>
+                      <span>الهدف: <b>${camp.targetAmount.toLocaleString('ar-SA')} ر.س</b> (${pct}%)</span>` : `<span>نسبة الإنجاز: <b>${pct}%</b></span><span></span>`}
                     </div>
                     <div style="height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden">
                       <div style="height:100%;width:${pct}%;background:${isComp ? '#22c55e' : 'linear-gradient(90deg, #f59e0b, #22c55e)'};border-radius:4px;transition:width .4s ease"></div>
@@ -13793,9 +14649,6 @@ function openFamilyFundModal() {
         <!-- Footer Actions -->
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px">
           <span style="font-size:.74rem;color:var(--mut)">* تصرف التبرعات والمساهمات بإشراف مجلس الأسرة وأمين الصندوق بعد تعيينه.</span>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -13808,6 +14661,25 @@ function openFamilyFundModal() {
       ibanBtn.onclick = () => {
         navigator.clipboard.writeText(fundAccount.iban).then(() => {
           toast('✅ تم نسخ رقم الآيبان (IBAN) بنجاح!');
+        });
+      };
+    }
+
+    // Manage fund viewers — المالك فقط: أمين الصندوق + حتى مطلعين إضافيين (المجموع 3 مع الأمين)
+    const viewersBtn = $('#btn-fund-viewers');
+    if (viewersBtn) {
+      viewersBtn.onclick = () => {
+        const v = readFundViewers();
+        const memOpts = [['', '— اختر من أفراد الشجرة —'], ...[...S.members].sort(byName).map(m => [m.id, cardLongName(m)])];
+        openForm('👁️ إدارة المطلعين على تفاصيل الصندوق', [
+          { k: 'treasurerId', label: 'أمين الصندوق (يرى التفاصيل)', type: 'select', opts: memOpts, val: v.treasurerId || '' },
+          { k: 'viewer2', label: 'مطّلع إضافي (اختياري)', type: 'select', opts: memOpts, val: (v.extraIds || [])[0] || '' },
+          { k: 'viewer3', label: 'مطّلع إضافي ثانٍ (اختياري)', type: 'select', opts: memOpts, val: (v.extraIds || [])[1] || '' }
+        ], async d => {
+          const extraIds = [d.viewer2, d.viewer3].filter(x => x && x !== d.treasurerId);
+          localStorage.setItem('almatarid_fund_viewers', JSON.stringify({ treasurerId: d.treasurerId || '', extraIds }));
+          toast('✅ تم حفظ المطلعين على تفاصيل الصندوق');
+          renderModal();
         });
       };
     }
@@ -14073,7 +14945,6 @@ function openBlankTreeModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🖨️</span> شجرة فارغة قابلة للطباعة والتعبئة يدوياً (3–5 أجيال)
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -14114,9 +14985,6 @@ function openBlankTreeModal() {
               💾 تنزيل صورة عالية الدقة (PNG)
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -14230,7 +15098,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
                   <td>${idx + 1}</td>
                   <td><b>${esc(m.full_name)}</b></td>
                   <td>${f ? esc(f.full_name) : '—'}</td>
-                  <td>الجيل ${gen(m)}</td>
+                  <td>${T('genWord')} ${gen(m)}</td>
                   <td>${repAlive(m) ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
                   <td>${esc(repBirth(m))}</td>
                   <td>${esc(repCity(m))}</td>
@@ -14368,7 +15236,7 @@ function openReadyReportsModal(initialReportType = 'branch') {
                   <td>${idx + 1}</td>
                   <td><b>${esc(m.full_name)}</b></td>
                   <td>${f ? esc(f.full_name) : '—'}</td>
-                  <td>الجيل ${gen(m)}</td>
+                  <td>${T('genWord')} ${gen(m)}</td>
                   <td>${repAlive(m) ? '<span style="color:#22c55e">حي</span>' : '<span style="color:#f87171">متوفى</span>'}</td>
                   <td>${gapOf(m).map(g => `<span style="display:inline-block;background:rgba(245,158,11,.14);border:1px solid var(--gold);border-radius:6px;padding:1px 7px;margin:1px;font-size:.72rem">${esc(g)}</span>`).join('')}</td>
                   <td>${esc(repCity(m))}</td>
@@ -14464,7 +15332,6 @@ function openReadyReportsModal(initialReportType = 'branch') {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>📑</span> مركز التقارير الجاهزة والتعداد
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <!-- Report Tabs -->
@@ -14541,9 +15408,6 @@ function openReadyReportsModal(initialReportType = 'branch') {
               📋 نسخ الملخص
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -14847,7 +15711,6 @@ function openExportTreeMediaModal() {
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
             <span>🖼️</span> تصدير الشجرة كصورة (PNG) أو ملف رسومي (SVG)
           </h2>
-          <button type="button" class="x" data-m04="close-profile" style="font-size:1.2rem;color:var(--mut)">✕</button>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
@@ -14902,9 +15765,6 @@ function openExportTreeMediaModal() {
               📲 مشاركة بالواتساب
             </button>
           </div>
-          <button type="button" class="fstats-btn" data-m04="close-profile" style="background:transparent;border-color:var(--line);color:var(--mut)">
-            إغلاق
-          </button>
         </div>
       </div>
     `;
@@ -14989,6 +15849,8 @@ function openExportTreeMediaModal() {
 
   renderModal();
 }
+
+
 
 
 
