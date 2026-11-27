@@ -24,7 +24,9 @@ self.addEventListener('push', e => {
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || './';
+  /* الجولة 11 (ن-5): لا تفتح إلا روابط من المصدر نفسه — حمل الإشعار لا يُوثق به */
+  let url = './';
+  try { const u = new URL((e.notification.data && e.notification.data.url) || './', self.location.href); if (u.origin === self.location.origin) url = u.href; } catch (_) { /* رابط غير صالح — الصفحة الرئيسية */ }
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
     for (const c of list) { if ('focus' in c) return c.focus(); }
     if (clients.openWindow) return clients.openWindow(url);

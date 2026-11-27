@@ -1,3 +1,8 @@
+/* الجولة 11 (ن-6): منع التأطير — التطبيق لا يعمل داخل iframe أبداً
+   (CSP بلا frame-ancestors؛ وهذا الحاجز يعوّضه من سكربت خارجي لأن
+   السكربتات المضمّنة ممنوعة). يوضع أول السكربت قبل أي شيء. */
+try { if (window.self !== window.top) window.top.location = window.self.location; } catch (e) { /* تأطير عبر مصدر آخر يمنع الوصول — لا شيء نفعله هنا */ }
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let _toastT = null;
@@ -60,7 +65,9 @@ async function cacheBundle(b) {
     const db = await idbOpen();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put({ bundle: b, savedAt: Date.now() }, 'last');
+      /* الجولة 11 (ع-2): الكاش مربوط برمز الدخول الذي حُفظ به — نسخة رمز
+         آخر أو دور آخر لا تُعرض أبداً عند انقطاع الشبكة. */
+      tx.objectStore(IDB_STORE).put({ bundle: b, savedAt: Date.now(), codeHash: _codeHash(S.code) }, 'last');
       tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
     });
     db.close();
@@ -77,6 +84,17 @@ async function loadCachedBundle() {
     db.close();
     return val;
   } catch (e) { console.warn('[almatarid]', e); return null; }
+}
+
+/* الجولة 11 (ع-2): بصمة بسيطة لرمز الدخول (ليست سراً — للمقارنة فقط)
+   تربط النسخة المحفوظة بالرمز الذي حُفظت به؛ ومسح النسخة عند الخروج. */
+const _codeHash = c => { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; const s = String(c || ''); for (let i = 0; i < s.length; i++) { const ch = s.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return (h2 >>> 0).toString(16) + (h1 >>> 0).toString(16); };
+async function clearCachedBundle() {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => { const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).delete('last'); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+    db.close();
+  } catch (e) { console.warn('[almatarid]', e); }
 }
 
 const ROLES = { visitor: 'زائر', family: 'فرد عائلة', reader: 'قارئ فرع', editor: 'محرر', branch: 'مسؤول فرع', owner: 'مالك' };
@@ -112,18 +130,25 @@ async function load(code) {
   let b, offline = false, cachedAt = null;
   if (CFG.DEMO) { b = { ok: true, role: 'visitor', members: demo(), wives: [] }; }
   else {
-    try { b = await rpc('get_bundle', { p_code: code || null }); }
+    try { b = await getBundle(code); }
     catch (e) {
+      /* ع-2 (الجولة 11): الكاش احتياط لانقطاع الشبكة فقط — رفض الخادم
+         (رمز خاطئ/قفل/انتهاء جلسة) لا يعرض الكاش أبداً، وإلا رأى الداخل
+         برمز جديد بيانات دورٍ لا يملكه؛ والنسخة المعروضة مربوطة برمز
+         الدخول الحالي وصلاحيتها 24 ساعة. */
+      if (!/تعذر الاتصال|انتهت مهلة/.test(e.message || '')) throw e;
       const cached = await loadCachedBundle();
-      if (cached && cached.bundle && Array.isArray(cached.bundle.members) && cached.bundle.members.length) {
+      if (cached && cached.bundle && Array.isArray(cached.bundle.members) && cached.bundle.members.length
+          && (!cached.savedAt || Date.now() - cached.savedAt <= 864e5)
+          && (!cached.codeHash || cached.codeHash === _codeHash(code))) {
         b = cached.bundle; offline = true; cachedAt = cached.savedAt;
-      } else throw e; /* بلا نسخة محفوظة — يتصرف الإقلاع كما قبل */
+      } else throw e; /* بلا نسخة محفوظة صالحة — يتصرف الإقلاع كما قبل */
     }
   }
   if (!b.ok) { S.locked = b.error === 'locked'; queueMicrotask(() => { applyRole(); renderFeat(); }); return false; }
   S.offline = offline;
   S.members = b.members; S.wives = b.wives; S.role = b.role; S.code = code || ''; S.branch = b.branch || null; S.branches = b.branches || [];
-  S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
+  S.womenVisible = b.women_names_visible !== false || !!b.women_unlocked; S.accessStats = b.access_stats || null;
   S.featured = Array.isArray(b.featured_sections) ? b.featured_sections : ['events', 'honor'];
   const offEl = $('#offline'); if (offEl) offEl.hidden = !offline;
   if (!CFG.DEMO && !offline) cacheBundle(b);
@@ -186,7 +211,7 @@ $('#btn-login').onclick = async () => {
     S.branch = S.role === 'branch' ? { root_id: S.branches[0]?.root_id || (S.kids.get(S.roots[0]?.id) || [])[0]?.id } : null;
     applyRole(); return render();
   }
-  if (canEdit() || S.role === 'branch') { if (await confirmDlg(T('confirmLogout'))) { sessionStorage.removeItem('code'); location.reload(); } } else showGate();
+  if (canEdit() || S.role === 'branch') { if (await confirmDlg(T('confirmLogout'))) { sessionStorage.removeItem('code'); sessionStorage.removeItem('almatarid_women_auth'); _womenToken = null; _womenTokenExp = 0; await clearCachedBundle().catch(() => {}); location.reload(); } } else showGate();
 };
 
 /* ---------- الفهارس ---------- */
@@ -616,8 +641,8 @@ function executeSearchAndFilter() {
   if (activeBar) {
     if (hasFilter) {
       const parts = [];
-      if (S.advFilter.branchId) parts.push(`${T('advBranch')} ${S.byId.get(S.advFilter.branchId)?.full_name || ''}`);
-      if (S.advFilter.city) parts.push(`${T('advCity')} ${S.advFilter.city}`);
+      if (S.advFilter.branchId) parts.push(`${T('advBranch')} ${esc(S.byId.get(S.advFilter.branchId)?.full_name || '')}`);
+      if (S.advFilter.city) parts.push(`${T('advCity')} ${esc(S.advFilter.city)}`);
       if (S.advFilter.gen) parts.push(`${T('advGen')} ${S.advFilter.gen}`);
       if (S.advFilter.aliveStatus === 'alive') parts.push(T('advAlive'));
       if (S.advFilter.aliveStatus === 'deceased') parts.push(T('advDead'));
@@ -792,7 +817,7 @@ function profile(id) {
       ${row('الهاتف', phoneText)}</dl>
     ${!lh && m.audio_url ? `<audio controls preload="none" src="${esc(m.audio_url)}" style="width:100%"></audio>` : ''}
     ${(m.biography_story || m.bio) && !lh ? `<div class="story">${esc(m.biography_story || m.bio)}</div>` : ''}
-    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${featOn('photo-album') ? '<button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button>' : ''}<button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm">${featOn('photo-album') ? '<button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button>' : ''}<button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
+    ${canMember(m) ? `<div class="row adm"><button data-act="edit">✏️ تعديل</button><button data-act="child">➕ ابن</button><button data-act="wife">➕ زوجة</button><button data-act="photo">📷 صورة</button>${featOn('photo-album') ? '<button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button>' : ''}<button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button>${m.gender === 'female' ? '<button type="button" class="ghost" data-act="women-code">🔑 كود بوابة النساء</button>' : ''}<button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${reorderBtn}${meBtn}${S.role === 'owner' ? '<button data-act=\"branch\">👤 مسؤول الفرع</button><button class="danger" data-act="del">🗑 حذف</button>' : ''}</div>` : `<div class="row adm">${featOn('photo-album') ? '<button type="button" class="ghost" data-act="open-album">🖼️ ألبوم الصور</button>' : ''}<button type="button" class="ghost" data-act="life-story">📖 قصة الحياة</button><button type="button" class="ghost" data-act="lcard">📇 بطاقة النسب</button><button type="button" class="ghost" data-act="qr-card">📱 رمز QR</button><button type="button" class="ghost" data-act="descendants" title="عرض هذا الشخص وذريته فقط على الشجرة">🌿 النسل فقط</button><button type="button" class="ghost" data-act="ancestors" title="عرض خط آباء وأجداد هذا الشخص">📜 الأسلاف فقط</button>${meBtn}<button class="ghost" data-sg="1">📝 اقتراح تصحيح</button></div>`}`;
   /* ann76: إن لم تكن العدّادات محمّلة بعد، حمّلها وأعد رسم الملف إن بقي مفتوحًا */
   if (!S.tagCounts) ensureTagCounts().then(() => { if ($('#profile').open && $('#profile-body').dataset.id === id) profile(id); });
   /* ann85: تسمية زر الإغلاق حسب السياق — رجوع للصورة إن فُتح الملف من وسم */
@@ -813,18 +838,44 @@ $('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x
 let _owner2faToken = null;
 let _owner2faServerReady = false;
 let _owner2faPinSet = false;
-/* دوال حساسة تتطلب رمز 2FA خادمياً عند تفعيله */
-const _TWOFA_GATED = new Set(['secure_set_access_mode', 'secure_set_women_names_visible', 'secure_set_family_code', 'secure_set_editor_code', 'secure_restore_snapshot', 'secure_set_owner_2fa_pin']);
+/* الجولة 11 (ع-1): رمز بوابة النساء الخادمي — يصدره الخادم عند تحقق ناجح
+   (15 دقيقة)، ويُرسل مع get_bundle لرفع تقنيع الأسماء؛ تزويره من الكونسول
+   لا يفيد لأن الخادم يتحقق منه في جدول women_access_tokens. */
+let _womenToken = null, _womenTokenExp = 0;
+const _womenTokenValid = () => !!_womenToken && Date.now() < _womenTokenExp;
+const bundleArgs = () => { const a = { p_code: S.code || null }; if (_womenTokenValid()) a.p_women_token = _womenToken; return a; };
+async function getBundle(code) {
+  if (code !== undefined) S.code = code || '';
+  try { return await rpc('get_bundle', bundleArgs()); }
+  catch (e) {
+    /* ملف 07 لم يُشغَّل بعد: get_bundle لا يعرف p_women_token — أعد المحاولة بلا رمز */
+    if (_womenTokenValid() && /Could not find the function|PGRST202|404/.test(e.message || '')) return await rpc('get_bundle', { p_code: S.code || null });
+    throw e;
+  }
+}
+/* م-1 (الجولة 11): بوابة 2FA تشمل أيضاً حذف عضو، وتعيين/إلغاء مسؤول فرع،
+   ورمز قراءة فرع، وأعلام الميزات، وأمين الأسرة. */
+const _TWOFA_GATED = new Set(['secure_set_access_mode', 'secure_set_women_names_visible', 'secure_set_family_code', 'secure_set_editor_code', 'secure_restore_snapshot', 'secure_set_owner_2fa_pin', 'secure_delete_member', 'secure_set_branch_editor', 'secure_clear_branch_editor', 'secure_set_branch_read_code', 'secure_set_feature_flags', 'secure_set_family_secretary']);
 async function op(name, args, demo) {
   if (CFG.DEMO) { demo(); index(); render(); return { success: true }; }
-  if (_TWOFA_GATED.has(name) && _owner2faServerReady) args = { ...args, p_2fa_token: _owner2faToken };
-  const r = await rpc(name, args);
-  /* ann95: بعض الدوال ترجع {'ok': true} لا {'success': true} (مثل secure_set_member_dates §20) — اقبلها نجاحًا */
-  if (!r.success && !r.ok) throw new Error(r.message || 'تعذر الحفظ');
-  return r;
+  const withToken = _TWOFA_GATED.has(name) && _owner2faServerReady;
+  const call = async useToken => {
+    const a = useToken ? { ...args, p_2fa_token: _owner2faToken } : args;
+    const r = await rpc(name, a);
+    /* ann95: بعض الدوال ترجع {'ok': true} لا {'success': true} (مثل secure_set_member_dates §20) — اقبلها نجاحًا */
+    if (!r.success && !r.ok) throw new Error(r.message || 'تعذر الحفظ');
+    return r;
+  };
+  try { return await call(withToken); }
+  catch (e) {
+    /* الجولة 11: إن لم يُشغَّل ملف 07 بعد، الدوال الجديدة لا تعرف p_2fa_token
+       فيرفض PostgREST النداء (PGRST202) — أعد المحاولة بلا رمز كما كان قبل 07. */
+    if (withToken && /Could not find the function|PGRST202|404/.test(e.message || '')) return await call(false);
+    throw e;
+  }
 }
 async function refresh() {
-  const b = await rpc('get_bundle', { p_code: S.code });
+  const b = await getBundle();
   if (!b.ok) throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
   S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.branch = b.branch || null; S.branches = b.branches || []; index(); render(); showEvent();
 }
@@ -1059,10 +1110,11 @@ $('#profile-body').addEventListener('click', e => {
   if (b.dataset.ws) return setWifeStatus(b.dataset.ws, b.dataset.wst);
   if (b.dataset.wd) return delWife(b.dataset.wd);
   ({ edit: () => { $('#profile').close(); memberForm(m); }, child: () => { $('#profile').close(); memberForm(null, m.id); },
-     wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => delMember(m),
+     wife: () => { $('#profile').close(); wifeForm(m); }, branch: () => { $('#profile').close(); branchForm(m.id); }, del: () => verifyOwner2FA(() => delMember(m)),
      photo: () => { const f = $('#photo-file'); f.dataset.mid = m.id; f.click(); },
      lcard: () => { openLineageCard(m.id); },
      'qr-card': () => { openQrShareModal(m.id); },
+     'women-code': () => issueWomenCode(m),
      'life-story': () => { openLifeStoryModal(m.id); },
      descendants: () => { $('#profile').close(); setDescendantsFilter(m.id); },
      ancestors: () => { $('#profile').close(); setAncestorsFilter(m.id); },
@@ -1192,7 +1244,7 @@ $('#m-settings').onclick = () => {
     openForm('إعدادات الوصول وحساب المالك (2FA)', [
       { k: 'mode', label: 'وضع الوصول', val: mode, type: 'select', opts: [['family_code', 'رمز العائلة (الشجرة محمية)'], ['open_link', 'رابط مفتوح (الهواتف للمحررين فقط)']] },
       { k: 'women', label: 'أسماء النساء لبقية الزوار (المالك والمحرر ومسؤول الفرع داخل فرعه يرونها دائمًا)', val: S.womenVisible ? '1' : '0', type: 'select', opts: [['1', 'ظاهرة'], ['0', 'مخفية — تظهر «ابنة/زوجة فلان»']] },
-      { k: 'pin2fa', label: hasPin ? 'رمز المصادقة الثنائية 2FA الجديد (4-8 أرقام، فارغ = بلا تغيير)' : 'رمز المصادقة الثنائية 2FA الجديد (4-8 أرقام — لم يُعيَّن بعد، أدخله لتفعيله)', val: '', type: 'password' },
+      { k: 'pin2fa', label: hasPin ? 'رمز المصادقة الثنائية 2FA الجديد (6-8 أرقام، فارغ = بلا تغيير)' : 'رمز المصادقة الثنائية 2FA الجديد (6-8 أرقام — لم يُعيَّن بعد، أدخله لتفعيله؛ مطلوب لحفظ الإعدادات الحساسة)', val: '', type: 'password' },
       { k: 'fam', label: 'رمز عائلة جديد (فارغ = بلا تغيير، 8 خانات فأكثر غير متسلسلة)', type: 'password' },
       { k: 'ed', label: 'رمز محرر جديد (فارغ = بلا تغيير، 8 خانات فأكثر غير متسلسلة)', type: 'password' },
       { k: 'secName', label: 'أمين الأسرة — الاسم (يستقبل آراء «أخرى» في التصويت على واتساب)', val: sec.name || '' },
@@ -1209,7 +1261,22 @@ $('#m-settings').onclick = () => {
       }
       if (d.pin2fa) {
         const np = d.pin2fa.trim();
-        if (!/^\d{4,8}$/.test(np)) return toast('رمز 2FA يجب أن يكون 4-8 أرقام.');
+        if (!/^\d{6,8}$/.test(np)) return toast('رمز 2FA يجب أن يكون 6-8 أرقام.');
+      }
+      /* الجولة 11 (م-1): إن لم يكن رمز 2FA معيّناً بعد، يُحفظ الرمز الجديد أولاً
+         ثم يُستخرج رمز تحقق — لأن الإعدادات الحساسة بعده ترفض بلا رمز معيّن (ملف 07). */
+      if (!_owner2faPinSet && d.pin2fa) {
+        const np = d.pin2fa.trim();
+        try {
+          await op('secure_set_owner_2fa_pin', { p_passcode: S.code, p_new_pin: np }, () => {});
+          const vr = await rpc('secure_verify_owner_2fa', { p_passcode: S.code, p_pin: np });
+          if (vr && vr.token) { _owner2faToken = vr.token; _owner2faServerReady = true; }
+          _owner2faPinSet = true;
+          d.pin2fa = ''; /* حُفظ أعلاه — لا يُعاد حفظه في كتلة 2FA الأخيرة */
+        } catch (e) {
+          if (/Could not find the function|PGRST202|404/.test(e.message || '')) { toast('رمز 2FA لم يُحفظ: ملف الحماية الخادمية (03_security_hardening.sql) لم يُشغَّل بعد — شغّله في سوبابيس أولاً ثم أعد تعيين الرمز.'); d.pin2fa = ''; /* تابع حفظ باقي الإعدادات بالنسخ القديمة */ }
+          else { toast(e.message || 'تعذّر حفظ رمز 2FA'); return; }
+        }
       }
       await op('secure_set_access_mode', { p_mode: d.mode, p_passcode: S.code }, () => {});
       await op('secure_set_women_names_visible', { p_visible: d.women === '1', p_passcode: S.code }, () => { S.womenVisible = d.women === '1'; });
@@ -3001,7 +3068,7 @@ function open3dView() {
           <b style="color:var(--gold)">${esc(m.full_name)}</b>
           <button type="button" class="x" data-m04="hide-v3d-info" style="font-size:.7rem;padding:0 4px">✕</button>
         </div>
-        <div style="font-size:.75rem;color:#cbd5e1">الجيل ${closest.g} · ${m.city || 'المدينة غير محددة'}</div>
+        <div style="font-size:.75rem;color:#cbd5e1">الجيل ${closest.g} · ${esc(m.city || 'المدينة غير محددة')}</div>
         <div style="margin-top:6px;display:flex;justify-content:flex-end">
           ${nameBtn(m)}
         </div>`;
@@ -3425,7 +3492,7 @@ $('#profile-body').addEventListener('click', e => {
   else if ('brx' in b.dataset) clearReadCode(b.dataset.brx);
   else { $('#profile').close(); branchForm(b.dataset.bf || null); }
 });
-$('#m-branches').onclick = () => { $('.more').open = false; branchesList(); };
+$('#m-branches').onclick = () => { $('.more').open = false; verifyOwner2FA(() => branchesList()); };
 
 /* ---------- سجل التغييرات واللقطات (للمالك) ---------- */
 const FLD = { full_name: 'الاسم', nickname: 'الكنية', city: 'المدينة', is_alive: 'الحالة', birth_year_text: 'الميلاد', death_year_text: 'الوفاة', achievement_badge: 'الشارة',
@@ -3710,12 +3777,12 @@ $('#photo-file').addEventListener('change', async e => {
 async function silentRefresh() {
   if (CFG.DEMO || !S.code || document.hidden || document.querySelector('dialog[open]')) return;
   try {
-    const b = await rpc('get_bundle', { p_code: S.code });
+    const b = await getBundle();
     if (!b.ok) return;
     if (S.offline) { S.offline = false; const offEl = $('#offline'); if (offEl) offEl.hidden = true; toast('📶 عاد الاتصال — تم تحديث الشجرة'); }
     cacheBundle(b); /* E-03: تحديث النسخة المحفوظة دون اتصال عند كل تحديث ناجح */
     S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.role = b.role; S.branches = b.branches || []; S.branch = b.branch || null;
-    S.womenVisible = b.women_names_visible !== false; S.accessStats = b.access_stats || null;
+    S.womenVisible = b.women_names_visible !== false || !!b.women_unlocked; S.accessStats = b.access_stats || null;
     if (Array.isArray(b.featured_sections)) S.featured = b.featured_sections;
     /* ann61: لا تعيد رسم الشجرة إذا لم تتغير البيانات (كان التحديث كل 90 ثانية يضيّع البحث وموضع التصفح) */
     const sig = JSON.stringify([b.role, b.women_names_visible, b.featured_sections,
@@ -3941,7 +4008,7 @@ async function saveFeatureFlags() {
   try { localStorage.setItem(LS_VIS, JSON.stringify(S.visibleFeatures)); localStorage.setItem(LS_PIN, JSON.stringify(S.pinnedFeatures)); } catch (e) { console.warn('[almatarid]', e); }
   if (CFG.DEMO) return;
   try { await op('secure_set_feature_flags', { p_passcode: S.code, p_visible: S.visibleFeatures, p_pinned: S.pinnedFeatures }, () => { }); }
-  catch (e) { console.warn('[almatarid]', e); toast('حُفظ محلياً فقط — شغّل database/02_trial_additions.sql في Supabase'); }
+  catch (e) { console.warn('[almatarid]', e); toast(/تحقق بخطوتين|2FA/.test(e.message || '') ? e.message : 'حُفظ محلياً فقط — شغّل database/02_trial_additions.sql في Supabase'); }
 }
 /* تطبيق الإخفاء على أزرار القائمة + زرّي الترويسة المرتبطين بميزتين (التنبيهات 21، اللغة 17).
    لا يُظهر زراً أخفاه applyRole حسب الدور أبداً — الإخفاء هنا إضافي فقط. */
@@ -4939,7 +5006,7 @@ function openKioskMode() {
               <div style="background:rgba(15,23,42,.8);border:1.5px solid var(--gold);border-radius:12px;padding:16px;text-align:start;display:flex;justify-content:space-between;align-items:center">
                 <div>
                   <h3 style="font-size:1.25rem;color:#fff;margin:0 0 6px 0">${esc(e.title)}</h3>
-                  <div style="font-size:.9rem;color:#cbd5e1">📅 ${new Date(e.event_date).toLocaleDateString('ar-SA')} · ${e.location_name || 'المقر الرئيسي'}</div>
+                  <div style="font-size:.9rem;color:#cbd5e1">📅 ${new Date(e.event_date).toLocaleDateString('ar-SA')} · ${esc(e.location_name || 'المقر الرئيسي')}</div>
                 </div>
                 <span style="font-size:2rem">💌</span>
               </div>
@@ -5923,11 +5990,37 @@ function showWomenDirectory() {
         </select>
       </div>
 
+      ${(canEdit() || S.role === 'branch') && !CFG.DEMO ? `<details id="women-codes-box" style="margin:6px 0;border:1px solid rgba(236,72,153,.3);border-radius:8px;padding:8px 12px">
+        <summary style="cursor:pointer;font-size:.85rem;font-weight:700;color:#fbcfe8">🔑 الأكواد الصادرة (للمالك والمحرر ومسؤول الفرع — القائمة لا تعرض قيمة الكود أبداً)</summary>
+        <div id="women-codes-list" style="margin-top:8px;font-size:.8rem;color:#e2e8f0">جاري التحميل…</div>
+      </details>` : ''}
+
       <div class="women-grid" id="women-grid-target"></div>
     </div>
   `;
 
   showInfo(html);
+
+  /* الجولة 11 (ع-1): قائمة الأكواد الصادرة وإلغاؤها — للمصدرين فقط */
+  const codesBox = $('#women-codes-list');
+  if (codesBox) {
+    (async () => {
+      let r;
+      try { r = await rpc('secure_list_women_codes', { p_passcode: S.code }); }
+      catch (e) { codesBox.textContent = /Could not find the function|PGRST202|404/.test(e.message || '') ? 'قائمة الأكواد تحتاج تشغيل ملف 07_security_review_fixes.sql في سوبابيس.' : 'تعذر تحميل الأكواد.'; return; }
+      const items = (r && r.items) || [];
+      if (!items.length) { codesBox.innerHTML = '<p class="sub">لا توجد أكواد صادرة بعد — أصدر كوداً من ملف العضوة (زر «🔑 كود بوابة النساء»).</p>'; return; }
+      codesBox.innerHTML = items.map(c => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08)">
+        <span>${esc(c.member_name)} <small style="color:var(--mut)">· ${esc(new Date(c.issued_at).toLocaleDateString('ar-SA'))}${c.used_at ? ' · استُخدم' : ''}${c.revoked_at ? ' · ملغى' : ''}</small></span>
+        ${c.revoked_at ? '' : `<button type="button" class="x" data-revoke-code="${esc(c.id)}" style="color:#f87171">إلغاء</button>`}
+      </div>`).join('');
+      codesBox.querySelectorAll('[data-revoke-code]').forEach(btn => btn.onclick = async () => {
+        if (!await confirmDlg('إلغاء هذا الكود؟ لن تتمكن صاحبته من الدخول به بعد الإلغاء.')) return;
+        try { const rr = await rpc('secure_revoke_women_code', { p_code_id: btn.dataset.revokeCode, p_passcode: S.code }); if (!rr || !rr.success) return toast((rr && rr.message) || 'تعذر الإلغاء'); toast('تم إلغاء الكود'); showWomenDirectory(); }
+        catch (e) { toast(e.message || 'تعذر الإلغاء'); }
+      });
+    })();
+  }
 
   const grid = $('#women-grid-target');
   const qInp = $('#women-q');
@@ -5935,10 +6028,14 @@ function showWomenDirectory() {
   const logoutBtn = $('#btn-women-logout');
 
   if (logoutBtn) {
-    logoutBtn.onclick = () => {
+    logoutBtn.onclick = async () => {
+      /* الجولة 11 (ع-1): الخروج من البوابة يلغي الرمز الخادمي من الجلسة
+         ويعيد جلب الحزمة مقنّعة — لا تبقى أسماء ظاهرة بعد الخروج. */
+      _womenToken = null; _womenTokenExp = 0;
       sessionStorage.removeItem('almatarid_women_auth');
       toast(T('womenLogoutDone'));
       $('#profile').close();
+      await load(S.code);
     };
   }
 
@@ -5997,13 +6094,35 @@ function showWomenDirectory() {
   renderCards();
 }
 
+/* الجولة 11 (ع-1): إصدار كود بوابة نساء لعضوة — الكود يظهر مرة واحدة فقط
+   عند إصداره، ويصدره المالك/المحرر/مسؤول الفرع (داخل فرعه)؛ إصدار كود
+   جديد للعضوة نفسها يلغي السابق. */
+async function issueWomenCode(m) {
+  if (!m || m.gender !== 'female') return;
+  if (CFG.DEMO) return toast('إصدار أكواد البوابة متاح في النسخة الحية فقط');
+  let r;
+  try { r = await rpc('secure_issue_women_code', { p_member_id: m.id, p_passcode: S.code }); }
+  catch (e) {
+    if (/Could not find the function|PGRST202|404/.test(e.message || '')) return toast('إصدار أكواد البوابة يحتاج تشغيل ملف 07_security_review_fixes.sql في سوبابيس أولاً.');
+    return toast(e.message || 'تعذر إصدار الكود');
+  }
+  if (!r || !r.success) return toast((r && r.message) || 'تعذر إصدار الكود');
+  showInfo(`<h2>🔑 كود بوابة النساء — ${esc(r.member_name || m.full_name)}</h2>
+    <p class="sub">الكود يظهر مرة واحدة فقط — انسخه الآن وشاركه مع صاحبة الكود وحدها (رسالة خاصة)، ولا تنشره في أي مجموعة؛ إصدار كود جديد لها لاحقاً يلغي هذا الكود.</p>
+    <div style="text-align:center;font-size:2rem;letter-spacing:8px;font-weight:900;color:var(--gold);background:var(--bg);border:2px dashed var(--gold);border-radius:12px;padding:14px;margin:12px 0" dir="ltr">${esc(r.code)}</div>
+    <div class="row adm"><button type="button" id="btn-copy-wcode">📋 نسخ الكود</button></div>`);
+  const cb = $('#btn-copy-wcode');
+  if (cb) cb.onclick = () => { navigator.clipboard.writeText(r.code).then(() => toast('✅ تم نسخ الكود')); };
+}
+
 function openWomenPortal() {
-  if (sessionStorage.getItem('almatarid_women_auth') === '1') {
+  if (sessionStorage.getItem('almatarid_women_auth') === '1' && _womenTokenValid()) {
     showWomenDirectory();
     return;
   }
-
-  const roots = S.roots || [];
+  /* الرمز الخادمي في الذاكرة فقط (15 دقيقة) — بعد إعادة تحميل الصفحة أو
+     انتهائه تُعاد المصادقة؛ العلامة وحدها لا تكفي بعد اليوم. */
+  if (sessionStorage.getItem('almatarid_women_auth') === '1') sessionStorage.removeItem('almatarid_women_auth');
 
   const html = `
     <div class="women-wrap">
@@ -6031,23 +6150,13 @@ function openWomenPortal() {
           </div>
 
           <div>
-            <label>تاريخ أو سنة الميلاد (اختياري):</label>
-            <input type="text" id="wg-birth" placeholder="مثال: 1418 هـ أو 1997 م (اختياري)" autocomplete="off">
-          </div>
-
-          <div>
             <label>كود التحقق الخاص (إلزامي - مرسل من المالك أو مسؤول الفرع):</label>
             <input type="password" id="wg-code" placeholder="أدخلي كود الدخول الخاص (إلزامي)" required autocomplete="off">
           </div>
 
-          <div>
-            <label>سؤال التحقق الإضافي:</label>
-            <select id="wg-qtype" style="margin-bottom:6px">
-              <option value="branch">ما هو فرع الأسرة أو الجد الأكبر؟</option>
-              <option value="mother">ما هو اسم الوالدة الكريمة؟</option>
-            </select>
-            <input type="text" id="wg-ans" placeholder="اكتبي إجابة سؤال التحقق" required autocomplete="off">
-          </div>
+          <p style="font-size:.75rem;color:#fbcfe8;margin:4px 0;line-height:1.6">
+            🔒 الكود شخصي لكِ وحدك — يصدره المالك أو المحرر أو مسؤول الفرع لكل داخلة على حدة، ويُتحقق منه في الخادم مع اسمك المسجل في الشجرة؛ لا تشاركيه مع أحد.
+          </p>
 
           <p id="wg-err" style="color:#f87171;font-size:.8rem;margin:4px 0" hidden></p>
 
@@ -6064,16 +6173,13 @@ function openWomenPortal() {
   const form = $('#women-gate-form');
   const errEl = $('#wg-err');
 
-  form.onsubmit = (e) => {
+  form.onsubmit = async (e) => {
     e.preventDefault();
     errEl.hidden = true;
 
     const gender = $('#wg-gender').value;
     const name = ($('#wg-name').value || '').trim();
-    const birth = ($('#wg-birth').value || '').trim();
     const code = ($('#wg-code').value || '').trim();
-    const qtype = $('#wg-qtype').value;
-    const ans = ($('#wg-ans').value || '').trim();
 
     if (gender !== 'female') {
       errEl.textContent = 'هذه البوابة مخصصة للإناث من بنات وكريمات الأسرة.';
@@ -6093,57 +6199,40 @@ function openWomenPortal() {
       return;
     }
 
-    if (!ans) {
-      errEl.textContent = 'يرجى كتابة إجابة سؤال التحقق الإضافي.';
+    if (CFG.DEMO) {
+      errEl.textContent = 'بوابة النساء متاحة في النسخة الحية فقط (النسخة التجريبية بلا خادم).';
       errEl.hidden = false;
       return;
     }
 
-    // بوابة النساء مغلقة بانتظار أكواد المالك (قرار عمر 2026-11-24): لا يُقبل أي كود
-    // مكتوب ولا يوجد احتياطي طول — 123456 كود عام للعائلة وليس كود بوابة أبداً.
-    // يزوّد المالك/مسؤول الفرع كل داخلة بكودها، وحينها تُضاف الأكواد الصحيحة؛
-    // وحتى ذلك الحين يُرفض كل كود. لا تخترع أكواداً بديلة هنا.
-    const validCodes = [];
-    const isCodeValid = validCodes.includes(code);
-
-    if (!isCodeValid) {
-      errEl.textContent = 'كود التحقق غير صحيح — يرجى مراجعة مسؤول الفرع للحصول على الكود.';
+    /* الجولة 11 (ع-1): التحقق خادمي بالكود + الاسم — لا أكواد محلية ولا
+       أسئلة عامة؛ الخادم يطابق الكود المُجزّأ ويصدر رمز دخول 15 دقيقة. */
+    let r;
+    try { r = await rpc('secure_verify_women_access', { p_name: name, p_code: code }); }
+    catch (err) {
+      if (/Could not find the function|PGRST202|404/.test(err.message || '')) errEl.textContent = 'بوابة النساء الخادمية غير مفعّلة بعد — على المالك تشغيل ملف 07_security_review_fixes.sql في سوبابيس أولاً.';
+      else errEl.textContent = err.message || 'تعذر الاتصال بالخادم، حاولي مرة أخرى';
+      errEl.hidden = false;
+      return;
+    }
+    if (!r || !r.success) {
+      errEl.textContent = (r && r.message) || 'كود التحقق غير صحيح.';
       errEl.hidden = false;
       return;
     }
 
-    // Match verification answer (supports with or without 'بنت' / 'ابن' / 'بن'):
-    const cleanAns = stripKin(normAr(ans));
-    let matched = false;
-    if (qtype === 'branch') {
-      matched = roots.some(r => {
-        const cleanR = stripKin(normAr(r.full_name));
-        return cleanR.includes(cleanAns) || cleanAns.includes(stripKin(normAr(r.first || '')));
-      });
-      if (!matched && (cleanAns.includes('مطارد') || cleanAns.includes('عمرو'))) matched = true;
-    } else {
-      matched = S.wives.some(w => {
-        const cleanW = stripKin(normAr(w.full_name));
-        return cleanW.includes(cleanAns) || (cleanW.length >= 3 && cleanAns.includes(cleanW.slice(0, 4)));
-      });
-    }
-
-    // If answer matched or accepted
-    if (!matched && ans.length < 2) {
-      errEl.textContent = 'إجابة سؤال التحقق الإضافي غير مطابقة لسجلات الأسرة.';
-      errEl.hidden = false;
-      return;
-    }
-
-    // Authentication succeeded!
+    _womenToken = r.token;
+    _womenTokenExp = Date.now() + ((r.expires_in || 900) * 1000);
     sessionStorage.setItem('almatarid_women_auth', '1');
-    S.womenVisible = true;
-    S.members.forEach(m => {
-      if (m.gender === 'female') m.name_masked = false;
-    });
-
     toast(`أهلاً بكِ يا أختنا الكريمة (${name}) في بوابة نساء الأسرة 🌸`);
-    render();
+    const ok = await load(S.code); /* إعادة جلب الحزمة بالرمز لرفع تقنيع الأسماء خادمياً */
+    if (!ok || !S.members.length) {
+      /* بلا رمز عائلة لم تُجلب الشجرة أصلاً — الرمز الخادمي محفوظ 15 دقيقة،
+         فلتدخل رمز العائلة (زر «دخول») ثم تعيد فتح البوابة. */
+      toast('تم التحقق — أدخلي رمز العائلة في الشجرة أولاً (زر «دخول») ثم أعيدي فتح البوابة.');
+      $('#profile').close();
+      return;
+    }
     showWomenDirectory();
   };
 }
@@ -7961,7 +8050,7 @@ function openSetMeModal() {
           <div>
             <div style="font-size:.78rem;color:var(--gold);font-weight:700">موقعك المسجل حالياً:</div>
             <b style="font-size:1rem;color:#f8fafc">${esc(currentMe.full_name)}</b>
-            <div style="font-size:.75rem;color:var(--mut)">الجيل ${gen(currentMe)} · ${currentMe.city || 'العائلة'}</div>
+            <div style="font-size:.75rem;color:var(--mut)">الجيل ${gen(currentMe)} · ${esc(currentMe.city || 'العائلة')}</div>
           </div>
           <button type="button" id="me-btn-center-now" class="fstats-btn" style="padding:6px 12px;font-size:.8rem;font-weight:700">🎯 تمركز الآن</button>
         </div>
@@ -12122,8 +12211,6 @@ const CompactQR = (() => {
 function openQrShareModal(targetMemberId = null) {
   let activeMid = targetMemberId || '';
   let activeBranch = '';
-  let includeCode = true;
-  let customCode = '';
   let activeTheme = 'gold';
 
   function getShareUrl() {
@@ -12134,9 +12221,9 @@ function openQrShareModal(targetMemberId = null) {
     } else if (activeBranch) {
       params.set('b', activeBranch);
     }
-    if (includeCode && customCode) {
-      params.set('code', customCode);
-    }
+    /* الجولة 11 (ن-4): لا يُضمَّن كود الدخول في الرابط/QR أبداً — المعامل
+       ?code= ميت (لا يقرأه الإقلاع) ويُسرّب الرمز في لقطات الشاشة؛
+       يُشارك الكود بشكل منفصل برسالة خاصة. */
     const query = params.toString();
     return query ? `${base}?${query}` : base;
   }
@@ -12160,12 +12247,12 @@ function openQrShareModal(targetMemberId = null) {
       <div class="qr-share-wrap" style="max-width:720px;text-align:right">
         <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--gold);padding-bottom:10px">
           <h2 style="margin:0;font-size:1.15rem;color:var(--gold);display:flex;align-items:center;gap:8px">
-            <span>📱</span> مشاركة الشجرة أو بطاقة العضو برمز QR مع كود
+            <span>📱</span> مشاركة الشجرة أو بطاقة العضو برمز QR
           </h2>
         </div>
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
-          توليد بطاقة رمز استجابة سريعة (QR Code) عالية الدقة لمشاركتها في الواتساب أو طباعتها في مجالس واجتماعات العائلة، مع إمكانية دمج كود الدخول السريع لفتح الشجرة فوراً.
+          توليد بطاقة رمز استجابة سريعة (QR Code) عالية الدقة لمشاركتها في الواتساب أو طباعتها في مجالس واجتماعات العائلة. كود الدخول لا يُضمَّن في الرابط أو الصورة — شاركه بشكل منفصل برسالة خاصة.
         </p>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -12181,17 +12268,6 @@ function openQrShareModal(targetMemberId = null) {
                   </option>
                 `).join('')}
               </select>
-            </div>
-
-            <div style="background:rgba(15,23,42,.7);border:1px solid var(--line);border-radius:8px;padding:10px">
-              <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--txt);cursor:pointer">
-                <input type="checkbox" id="qr-inc-code" ${includeCode ? 'checked' : ''} style="accent-color:var(--gold)">
-                <span>تضمين كود الدخول في الرابط والرمز تلقائياً</span>
-              </label>
-              <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
-                <span style="font-size:.74rem;color:var(--mut)">الكود:</span>
-                <input type="text" id="qr-code-val" value="${esc(customCode)}" placeholder="اكتب كود الدخول (اختياري)" style="background:#0f172a;color:var(--gold);border:1px solid var(--gold);padding:4px 8px;border-radius:6px;font-size:.85rem;font-weight:700;width:120px;text-align:center">
-              </div>
             </div>
 
             <div>
@@ -12223,12 +12299,6 @@ function openQrShareModal(targetMemberId = null) {
                 <canvas id="qr-share-canvas" style="display:block;width:180px;height:180px"></canvas>
               </div>
 
-              ${includeCode && customCode ? `
-                <div style="font-size:.74rem;color:var(--mut)">
-                  كود الدخول المعتمد:
-                  <div class="qr-passcode-badge">${esc(customCode)}</div>
-                </div>
-              ` : ''}
               <div style="font-size:.68rem;color:var(--mut)">امسح بالكاميرا للدخول المباشر</div>
             </div>
           </div>
@@ -12244,7 +12314,7 @@ function openQrShareModal(targetMemberId = null) {
               📲 مشاركة عبر واتساب
             </button>
             <button type="button" class="fstats-btn" id="btn-qr-copy" style="padding:6px 14px;font-size:.8rem">
-              📋 نسخ الرابط والكود
+              📋 نسخ الرابط
             </button>
           </div>
         </div>
@@ -12274,31 +12344,6 @@ function openQrShareModal(targetMemberId = null) {
       };
     }
 
-    const incChk = $('#qr-inc-code');
-    if (incChk) {
-      incChk.onchange = () => {
-        includeCode = incChk.checked;
-        renderModal();
-      };
-    }
-
-    const cVal = $('#qr-code-val');
-    if (cVal) {
-      cVal.oninput = () => {
-        customCode = cVal.value.trim();
-        const cvs = $('#qr-share-canvas');
-        if (cvs) {
-          CompactQR.drawToCanvas(cvs, getShareUrl(), {
-            scale: 7,
-            margin: 3,
-            fg: colors.fg,
-            bg: colors.bg,
-            emblem: true
-          });
-        }
-      };
-    }
-
     const tGold = $('#qr-thm-gold');
     if (tGold) tGold.onclick = () => { activeTheme = 'gold'; renderModal(); };
     const tEmd = $('#qr-thm-emerald');
@@ -12323,7 +12368,7 @@ function openQrShareModal(targetMemberId = null) {
     if (waBtn) {
       waBtn.onclick = () => {
         const title = curM ? `بطاقة نسب: ${curM.full_name}` : 'شجرة أسرة آل مطارد التفاعلية';
-        const msg = `🌿 السلام عليكم ورحمة الله وبركاته،\nأدعوكم لزيارة وتصفح ${title}:\n🔗 ${shareUrl}\n${includeCode && customCode ? `🔑 رمز الدخول: ${customCode}\n` : ''}حياكم الله بين أهلكم وأقاربكم.`;
+        const msg = `🌿 السلام عليكم ورحمة الله وبركاته،\nأدعوكم لزيارة وتصفح ${title}:\n🔗 ${shareUrl}\nحياكم الله بين أهلكم وأقاربكم.`;
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
       };
     }
@@ -12332,9 +12377,9 @@ function openQrShareModal(targetMemberId = null) {
     const copyBtn = $('#btn-qr-copy');
     if (copyBtn) {
       copyBtn.onclick = () => {
-        const text = `رابط الوصول: ${shareUrl}${includeCode && customCode ? `\nكود الدخول: ${customCode}` : ''}`;
+        const text = `رابط الوصول: ${shareUrl}`;
         navigator.clipboard.writeText(text).then(() => {
-          toast('✅ تم نسخ رابط الدخول وكود المشاركة!');
+          toast('✅ تم نسخ رابط الدخول!');
         });
       };
     }
@@ -13275,6 +13320,10 @@ function openTimeCapsuleModal(activeFilter = 'all') {
 
         <p style="margin:0;font-size:.82rem;color:var(--mut);line-height:1.6">
           وصايا خالدة وكلمات أبوية غالية كتبها أجداد وكبار الأسرة لتُفتح وتُسلَّم في مناسبات محددة يختارها صاحبها (كالتخرج، الزواج، أو مواعيد مستقبلية) لتبقى قبساً يهتدي به الأبناء والأحفاد.
+        </p>
+
+        <p style="margin:6px 0 0;font-size:.78rem;color:#fbbf24;line-height:1.6">
+          ⚠️ تنبيه: قفل الرسالة تنظيمي فقط — الرسالة ورمزها محفوظان كنص صريح في هذا الجهاز، وأي من يصل إلى الجهاز يستطيع قراءتها؛ لا تضع فيها معلومات حساسة.
         </p>
 
         <!-- Filters & Action Toolbar -->
