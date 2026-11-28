@@ -836,6 +836,9 @@ $('#profile').addEventListener('close', () => { S.zoomBack = null; $('#profile-x
    تزويره من الكونسول لا يفيد لأن الخادم يتحقق منه في جدوله؛ _owner2faServerReady
    تعني أن دوال الهجرة موجودة في الخادم (بعد تشغيل 03_security_hardening.sql). */
 let _owner2faToken = null;
+let _owner2faTokenAt = null; /* الجولة 12 (م-1): زمن إصدار الرمز — الرمز الخادمي صالح 15 دقيقة فقط */
+/* الرمز سارٍ ما دام صادراً قبل أقل من 15 دقيقة؛ بعدها يُطلب التحقق من جديد بدل الفشل بصمت. */
+const _owner2faTokenFresh = () => !!_owner2faToken && !!_owner2faTokenAt && (Date.now() - _owner2faTokenAt < 15 * 60 * 1000);
 let _owner2faServerReady = false;
 let _owner2faPinSet = false;
 /* الجولة 11 (ع-1): رمز بوابة النساء الخادمي — يصدره الخادم عند تحقق ناجح
@@ -859,6 +862,12 @@ const _TWOFA_GATED = new Set(['secure_set_access_mode', 'secure_set_women_names_
 async function op(name, args, demo) {
   if (CFG.DEMO) { demo(); index(); render(); return { success: true }; }
   const withToken = _TWOFA_GATED.has(name) && _owner2faServerReady;
+  /* الجولة 12 (م-1): لا تحفظ برمز منتهٍ — الرمز الخادمي صالح 15 دقيقة فقط؛
+     أبطله وارفض بوضوح ليعيد المستخدم التحقق، بدل فشل الحفظ برسالة عامة. */
+  if (withToken && _owner2faToken && !_owner2faTokenFresh()) {
+    _owner2faToken = null; _owner2faTokenAt = null;
+    throw new Error('انتهت صلاحية رمز التحقق 2FA — أعد التحقق ثم حاول مجدداً');
+  }
   const call = async useToken => {
     const a = useToken ? { ...args, p_2fa_token: _owner2faToken } : args;
     const r = await rpc(name, a);
@@ -1137,7 +1146,11 @@ $('#m-export').onclick = () => {
    قبل تشغيل 03_security_hardening.sql يتحقق العميل من صفة المالك خادمياً عبر get_bundle. */
 async function verifyOwner2FA(onSuccess) {
   if (CFG.DEMO) { onSuccess(); return; } /* التجربة: بيانات وهمية أصلاً */
-  if (_owner2faToken) { onSuccess(); return; } /* رمز سارٍ من تحقق سابق في الجلسة */
+  if (_owner2faTokenFresh()) { onSuccess(); return; } /* رمز سارٍ من تحقق سابق في الجلسة */
+  if (_owner2faToken) { /* الجولة 12: الرمز منتهٍ (15 دقيقة) — أبطله وأعد طلب التحقق بدل الفشل بصمت */
+    _owner2faToken = null; _owner2faTokenAt = null;
+    toast('⏱️ انتهت صلاحية رمز التحقق (15 دقيقة) — أدخل الرمز من جديد');
+  }
 
   let r;
   try {
@@ -1153,7 +1166,7 @@ async function verifyOwner2FA(onSuccess) {
     _owner2faServerReady = true;
     _owner2faPinSet = !!r.pin_set;
     if (!r.pin_set) { onSuccess(); toast('⚠️ فعّل رمز التحقق 2FA من الإعدادات لحماية حساب المالك'); return; }
-    if (r.token) { _owner2faToken = r.token; onSuccess(); return; }
+    if (r.token) { _owner2faToken = r.token; _owner2faTokenAt = Date.now(); onSuccess(); return; }
   }
   if (r && r.pin_set) { show2faPrompt(onSuccess); return; } /* رمز 2FA معيّن — اعرض نافذة إدخال الرمز */
   toast((r && r.message) || 'تعذّر التحقق');
@@ -1213,7 +1226,7 @@ function show2faPrompt(onSuccess) {
     try { r = await rpc('secure_verify_owner_2fa', { p_passcode: S.code, p_pin: val }); }
     catch (e) { errEl.textContent = 'تعذّر الاتصال بالخادم، حاول مجدداً.'; errEl.hidden = false; return; }
     if (r && (r.success || r.ok) && r.token) {
-      _owner2faToken = r.token;
+      _owner2faToken = r.token; _owner2faTokenAt = Date.now();
       _owner2faServerReady = true;
       _owner2faPinSet = true;
       $('#profile').close();
@@ -1270,7 +1283,7 @@ $('#m-settings').onclick = () => {
         try {
           await op('secure_set_owner_2fa_pin', { p_passcode: S.code, p_new_pin: np }, () => {});
           const vr = await rpc('secure_verify_owner_2fa', { p_passcode: S.code, p_pin: np });
-          if (vr && vr.token) { _owner2faToken = vr.token; _owner2faServerReady = true; }
+          if (vr && vr.token) { _owner2faToken = vr.token; _owner2faTokenAt = Date.now(); _owner2faServerReady = true; }
           _owner2faPinSet = true;
           d.pin2fa = ''; /* حُفظ أعلاه — لا يُعاد حفظه في كتلة 2FA الأخيرة */
         } catch (e) {
@@ -1305,7 +1318,7 @@ $('#m-settings').onclick = () => {
         try {
           await op('secure_set_owner_2fa_pin', { p_passcode: S.code, p_new_pin: d.pin2fa.trim() }, () => {});
           _owner2faPinSet = true;
-          _owner2faToken = null;
+          _owner2faToken = null; _owner2faTokenAt = null; /* تغيير الرمز يبطل كل الرموز السابقة */
         } catch (e) {
           if (/Could not find the function|PGRST202|404/.test(e.message || '')) return toast('تم حفظ باقي الإعدادات، لكن رمز 2FA لم يُحفظ: ملف الحماية الخادمية (03_security_hardening.sql) لم يُشغَّل بعد — شغّله في سوبابيس أولاً ثم أعد تعيين الرمز.');
           toast(e.message || 'تعذّر حفظ رمز 2FA'); return;
@@ -3781,14 +3794,17 @@ async function silentRefresh() {
     if (!b.ok) return;
     if (S.offline) { S.offline = false; const offEl = $('#offline'); if (offEl) offEl.hidden = true; toast('📶 عاد الاتصال — تم تحديث الشجرة'); }
     cacheBundle(b); /* E-03: تحديث النسخة المحفوظة دون اتصال عند كل تحديث ناجح */
+    /* الجولة 12: احسب التوقيع من الحزمة الجديدة قبل الاستبدال، ووسّعه ليشمل
+       الجنس وترتيب الميلاد والأم والتواريخ والهاتف والنبذة — التوقيع القديم
+       كان يغفلها فتبقى الشجرة قديمة رغم تغيرها خادمياً. */
+    /* ann61: لا تعيد رسم الشجرة إذا لم تتغير البيانات (كان التحديث كل 90 ثانية يضيّع البحث وموضع التصفح) */
+    const sig = JSON.stringify([b.role, b.women_names_visible, b.featured_sections,
+      (b.members || []).map(m => [m.id, m.full_name, m.nickname, m.gender, m.is_alive, m.father_id, m.wife_mother_id, m.birth_order, m.birth_date, m.death_date, m.birth_year_text, m.death_year_text, m.phone, m.city, m.bio, m.biography_story, m.achievement_badge, m.badge_is_job]),
+      (b.wives || []).map(w => [w.id, w.full_name, w.family_name, w.marriage_status, w.member_id]),
+      (b.events || []).map(e => [e.id, e.title, e.event_date])]);
     S.members = b.members; S.wives = b.wives; S.events = b.events || []; S.role = b.role; S.branches = b.branches || []; S.branch = b.branch || null;
     S.womenVisible = b.women_names_visible !== false || !!b.women_unlocked; S.accessStats = b.access_stats || null;
     if (Array.isArray(b.featured_sections)) S.featured = b.featured_sections;
-    /* ann61: لا تعيد رسم الشجرة إذا لم تتغير البيانات (كان التحديث كل 90 ثانية يضيّع البحث وموضع التصفح) */
-    const sig = JSON.stringify([b.role, b.women_names_visible, b.featured_sections,
-      (b.members || []).map(m => [m.id, m.full_name, m.nickname, m.is_alive, m.father_id, m.city, m.achievement_badge, m.badge_is_job]),
-      (b.wives || []).map(w => [w.id, w.full_name, w.family_name, w.marriage_status, w.member_id]),
-      (b.events || []).map(e => [e.id, e.title, e.event_date])]);
     if (sig !== S._sig) { S._sig = sig; index(); render(); showEvent(); applyRole(); renderFeat(); inboxBadge(); }
     checkAnnouncements(true);
     fetchPhotos();
@@ -4136,7 +4152,7 @@ document.addEventListener('click', e => {
   const d = el.dataset, k = d.m04;
   if (k === 'close-profile') $('#profile').close();
   else if (k === 'close-profile-login') { $('#profile').close(); $('#btn-login').click(); }
-  else if (k === 'close-profile-focus') { $('#profile').close(); focusMember(d.m04Id); }
+  else if (k === 'close-profile-focus') { $('#profile').close(); centerOnMember(d.m04Id); }
   else if (k === 'alt-charts') openAlternativeCharts(d.m04Id, d.m04Kind);
   else if (k === 'profile') profile(d.m04Id);
   else if (k === 'photo-album') openMemberPhotoAlbum(d.m04Id, d.m04Group);
@@ -4315,7 +4331,7 @@ function openLineageCard(targetId = null) {
   if (btnView) {
     btnView.onclick = () => {
       $('#profile').close();
-      focusMember(target.id);
+      centerOnMember(target.id);
     };
   }
 }
@@ -4862,7 +4878,7 @@ function initVoiceSearch() {
           const norm = stripKin(normAr(cleaned));
           const found = S.members.find(m => stripKin(normAr(m.full_name)).includes(norm) || stripKin(normAr(m.first)).includes(norm));
           if (found) {
-            focusMember(found.id);
+            centerOnMember(found.id);
           }
         }
       };
@@ -8637,20 +8653,24 @@ function openSiblingReorderModal(selectedParentId) {
       render(true);
 
       $('#profile').close();
-      toast(`✅ تم حفظ ترتيب أبناء «${parent.full_name}» وتحديث الشجرة بنجاح!`);
 
+      /* الجولة 12: أرسل الحقول كاملة عبر saveMemberData (كما في حفظ العضو) —
+         النداء الجزئي السابق (p_id/p_birth_order فقط) كان يرفضه الخادم
+         (الاسم مطلوب) فيفشل الحفظ بصمت رغم رسالة النجاح؛ secure_save_member
+         إسناد مباشر بلا COALESCE (01_setup.sql:425) فلا يُرسل إليه إلا سجل كامل.
+         ورسالة النجاح الآن بعد نجاح المزامنة فقط، لا قبلها. */
       if (!CFG.DEMO && canEdit()) {
         try {
           for (const child of currentSiblings) {
-            await rpc('secure_save_member', {
-              p_passcode: S.code,
-              p_id: child.id,
-              p_birth_order: child.birth_order
-            });
+            await saveMemberData(S.byId.get(child.id) || child);
           }
+          toast(`✅ تم حفظ ترتيب أبناء «${parent.full_name}» وتحديث الشجرة بنجاح!`);
         } catch (e) {
           console.warn('Server sync error:', e);
+          toast('⚠️ تعذّرت مزامنة الترتيب الجديد مع الخادم — الترتيب محفوظ محلياً فقط، أعد المحاولة');
         }
+      } else {
+        toast(`✅ تم حفظ ترتيب أبناء «${parent.full_name}» وتحديث الشجرة بنجاح!`);
       }
     };
   }
